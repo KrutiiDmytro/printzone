@@ -14,7 +14,6 @@ class OAuthControllerTest extends WebTestCase
 
         $client->request('GET', '/auth/google');
 
-        // Google OAuth должен редиректить на accounts.google.com
         $this->assertResponseRedirects();
         $this->assertStringContainsString(
             'accounts.google.com',
@@ -30,7 +29,6 @@ class OAuthControllerTest extends WebTestCase
 
         $client->request('GET', '/auth/github');
 
-        // GitHub OAuth должен редиректить на github.com
         $this->assertResponseRedirects();
         $this->assertStringContainsString(
             'github.com',
@@ -60,6 +58,17 @@ class OAuthControllerTest extends WebTestCase
         $this->assertResponseRedirects('/login');
     }
 
+    public function testGitHubCallbackWithInvalidCodeRedirectsToLogin(): void
+    {
+        $client = static::createClient();
+        $this->createSchema();
+        $this->loadFixtures();
+
+        $client->request('GET', '/auth/github/callback?code=invalid_code');
+
+        $this->assertResponseRedirects('/login');
+    }
+
     public function testGoogleOAuthRouteIsPubliclyAccessible(): void
     {
         $client = static::createClient();
@@ -68,7 +77,6 @@ class OAuthControllerTest extends WebTestCase
 
         $client->request('GET', '/auth/google');
 
-        // Маршрут доступний без авторизації (не 403)
         $this->assertNotEquals(403, $client->getResponse()->getStatusCode());
     }
 
@@ -80,7 +88,6 @@ class OAuthControllerTest extends WebTestCase
 
         $client->request('GET', '/auth/github');
 
-        // Маршрут доступний без авторизації (не 403)
         $this->assertNotEquals(403, $client->getResponse()->getStatusCode());
     }
 }

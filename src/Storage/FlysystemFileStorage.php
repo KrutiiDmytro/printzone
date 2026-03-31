@@ -7,6 +7,7 @@ namespace App\Storage;
 use Aws\S3\S3Client;
 use League\Flysystem\FilesystemException;
 use League\Flysystem\FilesystemOperator;
+use League\Flysystem\FilesystemReader;
 use League\Flysystem\UnableToReadFile;
 
 final class FlysystemFileStorage implements FileStorageInterface
@@ -53,6 +54,31 @@ final class FlysystemFileStorage implements FileStorageInterface
         return $this->filesystem->fileExists($key);
     }
 
+    public function listKeys(string $prefix = '', bool $deep = false): array
+    {
+        $prefix = $this->sanitizePrefix($prefix);
+        $location = '' === $prefix ? '' : $prefix;
+
+        try {
+            $listing = $this->filesystem->listContents(
+                $location,
+                $deep ? FilesystemReader::LIST_DEEP : FilesystemReader::LIST_SHALLOW
+            );
+        } catch (FilesystemException $e) {
+            throw new \RuntimeException($e->getMessage(), 0, $e);
+        }
+
+        $keys = [];
+        foreach ($listing->toArray() as $attr) {
+            if ($attr->isFile()) {
+                $keys[] = $attr->path();
+            }
+        }
+        sort($keys);
+
+        return array_values($keys);
+    }
+
     public function publicUrl(string $key): ?string
     {
         $key = $this->sanitizeKey($key);
@@ -71,5 +97,15 @@ final class FlysystemFileStorage implements FileStorageInterface
         }
 
         return ltrim($key, '/');
+    }
+
+    private function sanitizePrefix(string $prefix): string
+    {
+        $prefix = str_replace('\\', '/', trim($prefix));
+        if (str_contains($prefix, '..')) {
+            throw new \InvalidArgumentException('Invalid storage key.');
+        }
+
+        return ltrim($prefix, '/');
     }
 }
