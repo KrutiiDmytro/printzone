@@ -1,0 +1,132 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Checkout - Electro{% endblock %}
+
+{% block body %}
+    <!-- Single Page Header start -->
+    <div class="container-fluid page-header py-5">
+        <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Checkout</h1>
+        <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
+            <li class="breadcrumb-item"><a href="{{ path('app_home') }}">Home</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('app_cart') }}">Cart</a></li>
+            <li class="breadcrumb-item active text-white">Checkout</li>
+        </ol>
+    </div>
+    <!-- Single Page Header End -->
+
+    <!-- Checkout Page Start -->
+    <div class="container-fluid bg-light overflow-hidden py-5">
+        <div class="container py-5">
+            {% for message in app.flashes('error') %}
+                <div class="alert alert-danger">{{ message }}</div>
+            {% endfor %}
+
+            <h1 class="mb-4 wow fadeInUp" data-wow-delay="0.1s">Billing details</h1>
+            <form action="{{ path('app_checkout_place_order') }}" method="POST">
+                <div class="row g-5">
+                    <div class="col-md-12 col-lg-6 col-xl-6 wow fadeInUp" data-wow-delay="0.1s">
+                        <div class="row">
+                            <div class="col-md-12 col-lg-6">
+                                <div class="form-item w-100">
+                                    <label class="form-label my-3">First Name<sup>*</sup></label>
+                                    <input type="text" name="firstName" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="col-md-12 col-lg-6">
+                                <div class="form-item w-100">
+                                    <label class="form-label my-3">Last Name<sup>*</sup></label>
+                                    <input type="text" name="lastName" class="form-control" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label my-3">Address <sup>*</sup></label>
+                            <input type="text" name="address" class="form-control" placeholder="House Number Street Name" required>
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label my-3">Town/City<sup>*</sup></label>
+                            <input type="text" name="city" class="form-control" required>
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label my-3">Country<sup>*</sup></label>
+                            <input type="text" name="country" class="form-control" required>
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label my-3">Postcode/Zip<sup>*</sup></label>
+                            <input type="text" name="postcode" class="form-control" required>
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label my-3">Mobile<sup>*</sup></label>
+                            <input type="tel" name="phone" class="form-control" required>
+                        </div>
+                        <div class="form-item">
+                            <label class="form-label my-3">Email Address<sup>*</sup></label>
+                            <input type="email" name="email" class="form-control" value="{{ app.user.email }}" required>
+                        </div>
+                        <div class="form-item">
+                            <textarea name="notes" class="form-control" spellcheck="false" cols="30" rows="11"
+                                placeholder="Order Notes (Optional)"></textarea>
+                        </div>
+                    </div>
+                    <div class="col-md-12 col-lg-6 col-xl-6 wow fadeInUp" data-wow-delay="0.3s">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr class="text-center">
+                                        <th scope="col" class="text-start">Name</th>
+                                        <th scope="col">Price</th>
+                                        <th scope="col">Quantity</th>
+                                        <th scope="col">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in cart.items %}
+                                        <tr class="text-center">
+                                            <th scope="row" class="text-start py-4">
+                                                {{ item.product.name }}
+                                            </th>
+                                            <td class="py-4">{{ (item.product.price / 100)|number_format(2, '.', ',') }} €</td>
+                                            <td class="py-4 text-center">{{ item.quantity }}</td>
+                                            <td class="py-4">{{ (item.total / 100)|number_format(2, '.', ',') }} €</td>
+                                        </tr>
+                                    {% endfor %}
+                                    <tr>
+                                        <th scope="row"></th>
+                                        <td class="py-4"></td>
+                                        <td class="py-4">
+                                            <p class="mb-0 text-dark py-2">Subtotal</p>
+                                        </td>
+                                        <td class="py-4">
+                                            <div class="py-2 text-center border-bottom border-top">
+                                                <p class="mb-0 text-dark">{{ (cart.total / 100)|number_format(2, '.', ',') }} €</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row"></th>
+                                        <td class="py-4">
+                                            <p class="mb-0 text-dark text-uppercase py-2">TOTAL</p>
+                                        </td>
+                                        <td class="py-4"></td>
+                                        <td class="py-4">
+                                            <div class="py-2 text-center border-bottom border-top">
+                                                <p class="mb-0 text-dark">{{ (cart.total / 100)|number_format(2, '.', ',') }} €</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="row g-4 text-center align-items-center justify-content-center pt-4">
+                            <button type="submit"
+                                class="btn btn-primary border-secondary py-3 px-4 text-uppercase w-100 text-primary">
+                                Place Order
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Checkout Page End -->
+{% endblock %}

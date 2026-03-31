@@ -1,0 +1,48 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Register{% endblock %}
+
+{% block body %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <h2 class="text-center mb-4">Register</h2>
+
+                    {% if error %}
+                        <div class="alert alert-danger">{{ error }}</div>
+                    {% endif %}
+
+                    <form method="post" action="{{ path('app_register') }}">
+                        <div class="mb-3">
+                            <label for="inputFullName" class="form-label">Full Name</label>
+                            <input type="text" name="fullName" id="inputFullName" class="form-control" 
+                                   value="{{ app.request.get('fullName') }}" required autofocus>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="inputEmail" class="form-label">Email</label>
+                            <input type="email" name="email" id="inputEmail" class="form-control" 
+                                   value="{{ app.request.get('email') }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="inputPassword" class="form-label">Password</label>
+                            <input type="password" name="password" id="inputPassword" class="form-control" 
+                                   minlength="6" required>
+                            <small class="form-text text-muted">Minimum 6 characters</small>
+                        </div>
+
+                        <button class="btn btn-primary w-100" type="submit">Register</button>
+                        
+                        <div class="text-center mt-3">
+                            <a href="{{ path('app_login') }}">Already have an account? Sign In</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

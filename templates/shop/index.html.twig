@@ -1,0 +1,60 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Shop - Electro{% endblock %}
+
+{% block body %}
+    <!-- Single Page Header start -->
+    <div class="container-fluid page-header py-5">
+        <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Shop</h1>
+        <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
+            <li class="breadcrumb-item"><a href="{{ path('app_home') }}">Home</a></li>
+            <li class="breadcrumb-item"><a href="#">Pages</a></li>
+            <li class="breadcrumb-item active text-white">Shop</li>
+        </ol>
+    </div>
+    <!-- Single Page Header End -->
+
+    <!-- Shop Start -->
+    <div class="container-fluid products pt-5">
+        <div class="container py-5">
+            {% if currentCategory is defined %}
+                <h2 class="text-center mb-4">{{ currentCategory.name }}</h2>
+            {% endif %}
+            
+            <div class="row g-4">
+                {% for product in products %}
+                    <div class="col-md-6 col-lg-4 col-xl-3">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <img src="{{ asset('img/product-' ~ (loop.index % 8 + 1) ~ '.png') }}" 
+                                class="card-img-top" alt="{{ product.name }}">
+                            <div class="card-body">
+                                <p class="text-muted small mb-1">{{ product.category.name }}</p>
+                                <h5 class="card-title">
+                                    <a href="{{ path('app_product_show', {id: product.id}) }}" 
+                                    class="text-dark text-decoration-none">
+                                        {{ product.name }}
+                                    </a>
+                                </h5>
+                                <p class="text-primary fw-bold mb-3">
+                                    ${{ (product.price / 100)|number_format(2) }}
+                                </p>
+                                <form method="post" action="{{ path('app_cart_add', {id: product.id}) }}">
+                                    <input type="hidden" name="quantity" value="1">
+                                    <button type="submit" class="btn btn-primary border-secondary rounded-pill py-2 px-4">
+                                        <i class="fas fa-shopping-cart me-2"></i> Add To Cart
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="col-12 text-center py-5">
+                        <p class="text-muted">No products found in this category.</p>
+                        <a href="{{ path('app_home') }}" class="btn btn-primary">Back to Home</a>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <!-- Shop End -->
+{% endblock %}

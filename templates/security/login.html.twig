@@ -1,0 +1,81 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Sign In{% endblock %}
+
+{% block body %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <h2 class="text-center mb-4">Sign In</h2>
+
+                    {% if error %}
+                        <div class="alert alert-danger">
+                            {{ error.messageKey|trans(error.messageData, 'security') }}
+                        </div>
+                    {% endif %}
+
+                    {% if app.user %}
+                        <div class="mb-3">
+                            You are logged in as {{ app.user.userIdentifier }}, 
+                            <a href="{{ path('app_logout') }}">Logout</a>
+                        </div>
+                    {% endif %}
+
+                    <form method="post">
+                        <div class="mb-3">
+                            <label for="inputEmail" class="form-label">Email</label>
+                            <input 
+                                type="email" 
+                                value="{{ last_username }}" 
+                                name="_username" 
+                                id="inputEmail" 
+                                class="form-control" 
+                                autocomplete="email" 
+                                required 
+                                autofocus
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="inputPassword" class="form-label">Password</label>
+                            <input 
+                                type="password" 
+                                name="_password" 
+                                id="inputPassword" 
+                                class="form-control" 
+                                autocomplete="current-password" 
+                                required
+                            >
+                        </div>
+
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" name="_remember_me" class="form-check-input" id="remember_me">
+                            <label class="form-check-label" for="remember_me">Remember me</label>
+                        </div>
+
+                        <button class="btn btn-primary w-100" type="submit">Sign In</button>
+                    </form>
+                    
+                    <hr class="my-4">
+
+                    <a href="{{ path('auth_google') }}" class="btn btn-danger w-100">
+                        <i class="fab fa-google"></i> Sign in with Google
+                    </a>
+
+                    <a href="{{ path('auth_github') }}" class="btn btn-dark w-100 mt-2">
+                        <i class="fab fa-github"></i> Sign in with GitHub
+                    </a>
+
+                    <div class="text-center mt-3">
+                        <a href="{{ path('app_register') }}">Don't have an account? Register</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

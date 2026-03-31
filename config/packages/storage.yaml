@@ -1,0 +1,13 @@
+parameters:
+    local_storage_root: '%kernel.project_dir%/var/storage'
+
+services:
+    App\Storage\FileStorageFactory:
+        arguments:
+            $localRoot: '%local_storage_root%'
+            $s3Client: '@Aws\S3\S3Client'
+            $s3Bucket: '%aws.s3.bucket%'
+            $storageType: '%env(FILE_STORAGE)%'
+
+    App\Storage\FileStorageInterface:
+        factory: ['@App\Storage\FileStorageFactory', 'create']

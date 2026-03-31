@@ -1,0 +1,29 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Categories - Electro{% endblock %}
+
+{% block body %}
+    <div class="container-fluid page-header py-5">
+        <h1 class="text-center text-white display-6">Categories</h1>
+    </div>
+
+    <div class="container py-5">
+        <div class="row g-4">
+            {% for category in categories %}
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-folder fa-3x text-primary mb-3"></i>
+                            <h5 class="card-title">{{ category.name }}</h5>
+                            <p class="text-muted">{{ category.products|length }} products</p>
+                            <a href="{{ path('app_category_show', {slug: category.slug}) }}" 
+                               class="btn btn-primary">
+                                View Category
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}

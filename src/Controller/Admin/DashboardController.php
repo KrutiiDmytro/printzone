@@ -1,0 +1,96 @@
+<?php
+
+namespace App\Controller\Admin;
+
+use App\Catalog\Domain\Entity\Category;
+use App\Catalog\Domain\Entity\Product;
+use App\Order\Domain\Entity\Order;
+use App\User\Domain\Entity\User;
+use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
+use EasyCorp\Bundle\EasyAdminBundle\Config\MenuItem;
+use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractDashboardController;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\UX\Chartjs\Builder\ChartBuilderInterface;
+use Symfony\UX\Chartjs\Model\Chart;
+
+#[AdminDashboard(routePath: '/admin', routeName: 'admin_dashboard')]
+class DashboardController extends AbstractDashboardController
+{
+    public function __construct(
+        private ChartBuilderInterface $chartBuilder
+    ) {
+    }
+    public function index(): Response
+    {
+        $chart = $this->chartBuilder->createChart(Chart::TYPE_LINE);
+
+        $months = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+
+        $chart->setData([
+            'labels' => $months,
+            'datasets' => [
+                [
+                    'label' => 'Sales',
+                    'backgroundColor' => 'rgb(255, 99, 132)',
+                    'borderColor' => 'rgb(255, 99, 132)',
+                    'data' => [0, 10, 5, 2, 20, 30, 45, 35, 40, 50, 45, 60],
+                ],
+            ],
+        ]);
+
+        // Форматирование валюты (EUR) через PHP
+        $chart->setOptions([
+            'scales' => [
+                'y' => [
+                    'suggestedMin' => 0,
+                    'suggestedMax' => 100,
+                    'ticks' => [
+                        'callback' => 'function(value) {
+                            return new Intl.NumberFormat("de-DE", {
+                                style: "currency",
+                                currency: "EUR"
+                            }).format(value);
+                        }',
+                    ],
+                ],
+            ],
+            'plugins' => [
+                'zoom' => [
+                    'zoom' => [
+                        'wheel' => ['enabled' => true],
+                        'pinch' => ['enabled' => true],
+                        'mode' => 'xy',
+                    ],
+                ],
+            ],
+        ]);
+
+        return $this->render('admin/dashboard.html.twig', [
+            'chart' => $chart,
+        ]);
+    }
+
+    public function configureDashboard(): Dashboard
+    {
+        return Dashboard::new()
+            ->setTitle('Админ-панель')
+            ->setFaviconPath('favicon.ico')
+            ->setTranslationDomain('admin');
+    }
+
+    public function configureMenuItems(): iterable
+    {
+        yield MenuItem::linkToDashboard('Главная', 'fa fa-home');
+        yield MenuItem::section('Каталог');
+        yield MenuItem::linkToCrud('Товары', 'fa fa-box', Product::class);
+        yield MenuItem::linkToCrud('Категории', 'fa fa-folder', Category::class);
+        yield MenuItem::section('Заказы');
+        yield MenuItem::linkToCrud('Заказы', 'fa fa-shopping-cart', Order::class);
+        yield MenuItem::section('Пользователи');
+        yield MenuItem::linkToCrud('Пользователи', 'fa fa-users', User::class);
+    }
+}

@@ -1,0 +1,10 @@
+{% extends '@EasyAdmin/page/content.html.twig' %}
+
+{% block content %}
+    <h1>Панель управления</h1>
+    
+    <div 
+        style="position: relative; height: 400px; width: 100%; margin: 20px 0;">
+        {{ render_chart(chart) }}
+    </div>
+{% endblock %}

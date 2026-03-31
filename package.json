@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "chartjs-plugin-zoom": "^2.2.0"
+  }
+}
