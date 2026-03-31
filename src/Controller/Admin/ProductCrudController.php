@@ -2,6 +2,8 @@
 
 namespace App\Controller\Admin;
 
+use App\Service\ProductImageService;
+use Doctrine\ORM\EntityManagerInterface;
 use App\Catalog\Domain\Entity\Product;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminCrud;
@@ -24,9 +26,46 @@ use EasyCorp\Bundle\EasyAdminBundle\Filter\NumericFilter;
 
 class ProductCrudController extends AbstractCrudController
 {
+    public function __construct(
+        private readonly ProductImageService $productImageService,
+    ) {
+    }
+
     public static function getEntityFqcn(): string
     {
         return Product::class;
+    }
+
+    public function persistEntity(EntityManagerInterface $entityManager, $entityInstance): void
+    {
+        parent::persistEntity($entityManager, $entityInstance);
+        if ($entityInstance instanceof Product) {
+            $this->productImageService->syncAfterWrite($entityInstance, null);
+            $entityManager->flush();
+        }
+    }
+
+    public function updateEntity(EntityManagerInterface $entityManager, $entityInstance): void
+    {
+        $previous = null;
+        if ($entityInstance instanceof Product && $entityInstance->getId() !== null) {
+            $old = $entityManager->find(Product::class, $entityInstance->getId());
+            $previous = $old?->getImage();
+        }
+
+        parent::updateEntity($entityManager, $entityInstance);
+        if ($entityInstance instanceof Product) {
+            $this->productImageService->syncAfterWrite($entityInstance, $previous);
+            $entityManager->flush();
+        }
+    }
+
+    public function deleteEntity(EntityManagerInterface $entityManager, $entityInstance): void
+    {
+        if ($entityInstance instanceof Product) {
+            $this->productImageService->deleteStoredImageIfAny($entityInstance->getImage());
+        }
+        parent::deleteEntity($entityManager, $entityInstance);
     }
 
     public function configureCrud(Crud $crud): Crud
@@ -96,10 +135,13 @@ class ProductCrudController extends AbstractCrudController
                 ->setBasePath('/img/')
                 ->setUploadDir('public/img/')
                 ->setUploadedFileNamePattern('[slug]-[timestamp].[extension]')
+                ->formatValue(function ($value, $entity) {
+                    return $this->productImageService->getUrlForDisplay($value);
+                })
                 ->setColumns(12),
             CollectionField::new('attributes', 'Атрибуты')
                 ->hideOnIndex()
-                ->hideOnForm(), // Убрать setTemplatePath, использовать стандартное отображение
+                ->hideOnForm(),
         ];
     }
 }

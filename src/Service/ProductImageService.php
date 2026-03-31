@@ -1,0 +1,94 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service;
+
+use App\Catalog\Domain\Entity\Product;
+use App\Storage\FileStorageInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+
+final class ProductImageService
+{
+    private const PREFIX = 'products/';
+
+    public function __construct(
+        private readonly FileStorageInterface $storage,
+        private readonly UrlGeneratorInterface $urlGenerator,
+        #[Autowire('%kernel.project_dir%')]
+        private readonly string $projectDir,
+    ) {
+    }
+
+    public function syncAfterWrite(Product $product, ?string $previousImage): void
+    {
+        $current = $product->getImage();
+
+        if ($previousImage !== null
+            && $previousImage !== $current
+            && str_starts_with($previousImage, self::PREFIX)) {
+            $this->safeDelete($previousImage);
+        }
+
+        if ($current === null || $current === '') {
+            return;
+        }
+
+        if (str_starts_with($current, self::PREFIX)) {
+            return;
+        }
+
+        $localPath = $this->projectDir.'/public/img/'.$current;
+        if (!is_file($localPath)) {
+            return;
+        }
+
+        $contents = file_get_contents($localPath);
+        if (false === $contents) {
+            return;
+        }
+
+        $mime = mime_content_type($localPath) ?: 'application/octet-stream';
+        $key = sprintf('%s%d-%s', self::PREFIX, $product->getId(), basename($current));
+
+        $this->storage->write($key, $contents, $mime);
+        unlink($localPath);
+        $product->setImage($key);
+    }
+
+    public function deleteStoredImageIfAny(?string $imageKey): void
+    {
+        if ($imageKey !== null && str_starts_with($imageKey, self::PREFIX)) {
+            $this->safeDelete($imageKey);
+        }
+    }
+
+    public function getUrlForDisplay(?string $image): string
+    {
+        if ($image === null || $image === '') {
+            return '/img/product-1.png';
+        }
+
+        if (str_starts_with($image, self::PREFIX)) {
+            $public = $this->storage->publicUrl($image);
+            if ($public !== null) {
+                return $public;
+            }
+
+            return $this->urlGenerator->generate('app_media', ['key' => $image]);
+        }
+
+        return '/img/'.$image;
+    }
+
+    private function safeDelete(string $key): void
+    {
+        try {
+            if ($this->storage->exists($key)) {
+                $this->storage->delete($key);
+            }
+        } catch (\Throwable) {
+        }
+    }
+}
