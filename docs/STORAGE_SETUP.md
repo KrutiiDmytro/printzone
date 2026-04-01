@@ -75,6 +75,8 @@
 
 ### 3.3. Docker
 
+Сервіс **`php`** збирається з **`Dockerfile.php`**: установка пакетів Alpine, розширень PHP (`pdo_pgsql`, `intl`, `zip`, `sodium`, `opcache`) та **Composer** виконуються на етапі **`docker compose build`**, а не при кожному `up`. Після змін у `Dockerfile.php` перезберіть образ: `docker compose build php` (або `docker compose build --no-cache php`).
+
 Якщо застосунок у контейнері:
 
 - Для **`local`**: змонтуйте том або використовуйте іменований volume для `var/storage`, щоб дані не губилися при пересозданні контейнера.
