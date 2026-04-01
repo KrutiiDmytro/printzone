@@ -1,11 +1,70 @@
-# Інтернет-магазин електроніки (Task-21)
+# Інтернет-магазин електроніки (Task-22)
 
 Symfony-додаток електронної комерції з чистою архітектурою, принципами SOLID та сучасними найкращими практиками.
 Включає **REST API** на базі API Platform із захистом через **JWT-токени**, а також **OAuth 2.0 аутентифікацію** через Google та GitHub.
 
+**Task 22** додає **абстракцію файлового сховища** (локальна ФС або **Amazon S3**) через **AWS SDK для PHP** та **Flysystem** — детальний опис нижче та у [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md).
+
+## 📦 Task 22: інтеграція AWS S3 та абстракція файлової системи
+
+Цей блок відповідає вимогам завдання: інтеграція SDK, конфігурація, єдиний API для local/S3, перемикання, тести та документація.
+
+### Інтеграція AWS SDK (Composer)
+
+- Пакети: **`aws/aws-sdk-php`**, **`league/flysystem`**, **`league/flysystem-aws-s3-v3`** (див. `composer.json`).
+- Клієнт AWS налаштовується у `config/packages/aws.yaml` — регіон, версія API, облікові дані з **змінних середовища** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_S3_BUCKET`, `AWS_S3_VERSION`).
+
+### Облікові дані та параметри S3 у Symfony
+
+- Значення задаються в **`.env`** / **`.env.local`** (секрети — лише в `.env.local`).
+- Для S3 потрібні змінні `AWS_*` та **`FILE_STORAGE=s3`** (див. наступний підрозділ).
+- Повний перелік змінних і операційних кроків — у **[`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)**.
+
+### Абстракція файлової системи (Flysystem)
+
+- Інтерфейс **`App\Storage\FileStorageInterface`**: завантаження (`write`), читання (`read`), видалення (`delete`), перевірка наявності (`exists`), перелік **файлів** за префіксом (`listKeys`), публічний URL (`publicUrl`).
+- Реалізація **`App\Storage\FlysystemFileStorage`** працює поверх **League Flysystem** (локальний адаптер або **AwsS3V3Adapter**).
+- Фабрика **`App\Storage\FileStorageFactory`** створює потрібний екземпляр залежно від конфігурації; сервіс у контейнері: `config/packages/storage.yaml`.
+
+### Операції та узгодженість local / S3
+
+- Один і той самий контракт **для обох** бекендів: ті самі ключі (наприклад `products/{id}-...`).
+- У режимі **local** зображення для вітрини можуть віддаватися через маршрут **`GET /media?key=...`** (`MediaController`).
+- У режимі **S3** для відображення використовується **пряме посилання** на об’єкт (`publicUrl`), коли налаштовано клієнт і бакет.
+
+### Інтеграція з додатком (зображення товарів)
+
+- **`App\Service\ProductImageService`**: синхронізація зображень після збереження товару в EasyAdmin, видалення старих зображень у сховищі, формування URL для Twig (`ProductImageExtension`).
+
+### Перемикання між файловими системами
+
+- Параметр **`FILE_STORAGE`**: `local` (за замовчуванням — локальний каталог `var/storage`) або **`s3`**.
+- Перемикання без зміни коду бізнес-логіки — лише через **змінні середовища** та `cache:clear` після зміни.
+- Додаткові пояснення: **перемикання**, **Docker**, **типові помилки** — у [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md).
+
+### Тестування та TDD
+
+- Юніт-тести сховища: **`tests/Unit/Storage/`** — локальний адаптер, фабрика, сценарії для S3 через **`Aws\MockHandler`** (повний цикл без реального бакета).
+- Рекомендований підхід завдання: **TDD** — спочатку тести для контракту сховища (завантаження, вилучення/читання, перелік, видалення) для **local** і **S3**, потім/паралельно реалізація.
+- Запуск усіх тестів:
+  ```bash
+  php bin/phpunit
+  ```
+  або в Docker:
+  ```bash
+  docker compose exec php php bin/phpunit
+  ```
+
+### Документація
+
+- Операційні процедури, налаштування, перемикання — **[`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)**.
+
+---
+
 ## 🚀 Функціонал
 
 - **Каталог товарів**: Перегляд електроніки за категоріями з атрибутами
+- **Файлове сховище**: локальне або S3 для зображень товарів (Task 22)
 - **Аутентифікація**: JWT-токени для захисту API, реєстрація та вхід для веб-інтерфейсу
 - **OAuth 2.0**: Вхід через Google та GitHub акаунти
 - **REST API**: Повноцінний CRUD для товарів, категорій, замовлень, користувачів
@@ -25,7 +84,7 @@ Symfony-додаток електронної комерції з чистою �
 ### 1. Клонувати репозиторій
 ```bash
 git clone <repository-url>
-cd Task-21
+cd Task-22
 ```
 
 ### 2. Налаштувати змінні середовища
@@ -47,17 +106,30 @@ GITHUB_CLIENT_SECRET=ваш_github_client_secret
 GITHUB_REDIRECT_URI=http://localhost:8080/auth/github/callback
 ```
 
-### 3. Запустити Docker контейнери
-```bash
-docker compose up -d
+Для **S3** (Task 22) додайте, наприклад:
+
+```env
+FILE_STORAGE=s3
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_DEFAULT_REGION=eu-central-1
+AWS_S3_BUCKET=your-bucket-name
+AWS_S3_VERSION=latest
 ```
 
-### 4. Встановити залежності
+Для **локального** сховища: `FILE_STORAGE=local` (деталі в [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)).
+
+### 3. Зібрати образ PHP, запустити контейнери та встановити залежності
+
+Перший запуск або після змін у `Dockerfile.php`:
+
 ```bash
+docker compose build php
+docker compose up -d
 docker compose exec php composer install
 ```
 
-### 5. Налаштувати базу даних та ключі JWT
+### 4. Налаштувати базу даних та ключі JWT
 ```bash
 # Виконати міграції
 docker compose exec php php bin/console doctrine:migrations:migrate --no-interaction
@@ -190,11 +262,12 @@ src/
 ├── Catalog/Domain/Entity/       # Товари, категорії, атрибути
 ├── Order/Domain/Entity/         # Замовлення та елементи замовлень
 ├── User/Domain/Entity/          # Користувачі
+├── Storage/                     # Абстракція файлового сховища (Flysystem, S3/local)
 ├── Controller/                  # Контролери (веб + API)
 │   ├── GoogleAuthController.php # OAuth контролер для Google
 │   └── GitHubAuthController.php # OAuth контролер для GitHub
 ├── Repository/                  # Репозиторії Doctrine
-├── Service/                     # Бізнес-логіка (CartService)
+├── Service/                     # Бізнес-логіка (CartService, ProductImageService)
 ├── EventListener/               # Слухачі подій (LoginListener)
 └── DataFixtures/                # Тестові дані
 ```
@@ -218,10 +291,16 @@ docker compose exec php php bin/phpunit tests/Functional/Controller/OAuthControl
 docker compose exec php php bin/phpunit tests/Unit/
 ```
 
-### Результат тестування:
+### Тести сховища (Task 22):
+```bash
+docker compose exec php php bin/phpunit tests/Unit/Storage/
 ```
-OK (51 tests, 122 assertions)
+
+### Приклад успішного прогону:
 ```
+OK (72 tests, 168 assertions)
+```
+*(фактичні числа залежать від версії тестів)*
 
 ---
 
@@ -256,6 +335,9 @@ docker-compose exec php php bin/console doctrine:migrations:migrate --no-interac
 
 | Пакет | Версія | Призначення |
 |-------|--------|-------------|
+| `aws/aws-sdk-php` | ^3.0 | AWS SDK (S3-клієнт) |
+| `league/flysystem` | 3.x | Абстракція файлової системи |
+| `league/flysystem-aws-s3-v3` | 3.x | Адаптер Flysystem для S3 |
 | `league/oauth2-google` | ^4.1 | Google OAuth 2.0 |
 | `league/oauth2-github` | ^3.1 | GitHub OAuth 2.0 |
 | `lexik/jwt-authentication-bundle` | * | JWT аутентифікація |
