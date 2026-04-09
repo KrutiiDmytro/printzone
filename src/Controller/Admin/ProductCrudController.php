@@ -5,8 +5,8 @@ namespace App\Controller\Admin;
 use App\Service\ProductImageService;
 use Doctrine\ORM\EntityManagerInterface;
 use App\Catalog\Domain\Entity\Product;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Assets;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
-use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminCrud;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
@@ -23,17 +23,36 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\EntityFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\BooleanFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\NumericFilter;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 class ProductCrudController extends AbstractCrudController
 {
     public function __construct(
         private readonly ProductImageService $productImageService,
+        #[Autowire('%env(STORAGE_TYPE)%')]
+        private readonly string $storageType,
+        private readonly CsrfTokenManagerInterface $csrfTokenManager,
     ) {
+    }
+
+    private function isS3Storage(): bool
+    {
+        return 's3' === strtolower(trim($this->storageType));
     }
 
     public static function getEntityFqcn(): string
     {
         return Product::class;
+    }
+
+    public function configureAssets(Assets $assets): Assets
+    {
+        if ($this->isS3Storage()) {
+            $assets->addJsFile('js/admin-product-image-s3.js');
+        }
+
+        return $assets;
     }
 
     public function persistEntity(EntityManagerInterface $entityManager, $entityInstance): void
@@ -108,7 +127,7 @@ class ProductCrudController extends AbstractCrudController
 
     public function configureFields(string $pageName): iterable
     {
-        return [
+        $fields = [
             IdField::new('id', 'ID')
                 ->hideOnForm()
                 ->hideOnIndex(),
@@ -131,17 +150,54 @@ class ProductCrudController extends AbstractCrudController
                 ->setColumns(4),
             BooleanField::new('isFeatured', 'Рекомендуемый')
                 ->setColumns(4),
-            ImageField::new('image', 'Изображение')
-                ->setBasePath('/img/')
-                ->setUploadDir('public/img/')
+        ];
+
+        if ($this->isS3Storage()) {
+            $mediaPath = parse_url(
+                $this->generateUrl('app_media', ['key' => 'products/preview']),
+                PHP_URL_PATH
+            ) ?? '/media';
+
+            $fields[] = TextField::new('image', 'Изображение')
+                ->setHelp('Файл загружается напрямую в S3 (presigned URL). После выбора дождитесь сообщения об успехе, затем нажмите «Сохранить».')
+                ->setFormTypeOption('attr', [
+                    'class' => 'ea-product-image-s3-key d-none',
+                    'tabindex' => '-1',
+                    'data-presign-url' => $this->generateUrl('admin_product_image_presign'),
+                    'data-csrf-token' => $this->csrfTokenManager->getToken('submit')->getValue(),
+                    'data-preview-base' => $mediaPath,
+                    'autocomplete' => 'off',
+                ])
+                ->formatValue(function ($value, $entity) {
+                    if ($value === null || $value === '') {
+                        return '—';
+                    }
+                    $url = htmlspecialchars(
+                        $this->productImageService->getUrlForDisplay($value),
+                        ENT_QUOTES | ENT_SUBSTITUTE,
+                        'UTF-8'
+                    );
+
+                    return '<img src="'.$url.'" alt="" class="img-thumbnail" style="max-height:48px" loading="lazy" />';
+                })
+                ->renderAsHtml()
+                ->setColumns(12);
+        } else {
+            $fields[] = ImageField::new('image', 'Изображение')
+                ->setUploadDir('var/tmp/ea-product-uploads/')
                 ->setUploadedFileNamePattern('[slug]-[timestamp].[extension]')
                 ->formatValue(function ($value, $entity) {
                     return $this->productImageService->getUrlForDisplay($value);
                 })
-                ->setColumns(12),
-            CollectionField::new('attributes', 'Атрибуты')
-                ->hideOnIndex()
-                ->hideOnForm(),
-        ];
+                ->setColumns(12);
+        }
+
+        $fields[] = CollectionField::new('attributes', 'Атрибуты')
+            ->hideOnIndex()
+            ->hideOnForm();
+
+        foreach ($fields as $field) {
+            yield $field;
+        }
     }
 }

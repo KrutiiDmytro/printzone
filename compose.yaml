@@ -28,6 +28,9 @@ services:
       context: .
       dockerfile: Dockerfile.php
     image: task22-php:8.2-fpm
+    env_file:
+      - path: .env.local
+        required: false
     volumes:
       - .:/var/www/html
     working_dir: /var/www/html

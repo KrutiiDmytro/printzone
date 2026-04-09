@@ -6,17 +6,30 @@
 
 - **Інтерфейс:** `App\Storage\FileStorageInterface` — операції `write`, `read`, `delete`, `exists`, `listKeys`, `publicUrl`.
 - **Реалізація:** `App\Storage\FlysystemFileStorage` (League Flysystem).
-- **Вибір бекенду:** `App\Storage\FileStorageFactory::create()` залежить від значення **`FILE_STORAGE`** (`local` або `s3`, порівняння без урахування регістру та з обрізанням пробілів).
+- **Вибір бекенду:** `App\Storage\FileStorageFactory::create()` залежить від значення **`STORAGE_TYPE`** (`local` або `s3`, порівняння без урахування регістру та з обрізанням пробілів).
 - **Підключення в контейнері:** сервіс `App\Storage\FileStorageInterface` створюється через фабрику (`config/packages/storage.yaml`). Клас `FileStorageFactory` виключений з автоконфігурації в `config/services.yaml`, щоб уникнути конфлікту з явним описом у `storage.yaml`.
 
 ### Поведінка за режимом
 
-| Режим `FILE_STORAGE` | Адаптер Flysystem | Корінь / бакет | Публічні URL |
+| Режим `STORAGE_TYPE` | Адаптер Flysystem | Корінь / бакет | Публічні URL |
 |----------------------|-------------------|----------------|--------------|
 | `local` (не `s3`)  | `LocalFilesystemAdapter` | Каталог `local_storage_root` (за замовчуванням `var/storage` у проєкті) | `publicUrl()` повертає `null`; для ключів `products/...` зображення віддаються через маршрут `GET /media?key=...` (`app_media`) |
-| `s3`               | `AwsS3V3Adapter`       | Бакет `AWS_S3_BUCKET` | `publicUrl()` формується через `S3Client::getObjectUrl` (пряме посилання на об’єкт у S3) |
+| `s3`               | `AwsS3V3Adapter`       | Бакет `AWS_S3_BUCKET` | Для прев’ю в UI використовується **`GET /media?key=...`** (приватний бакет); `publicUrl()` лишається для інших сценаріїв |
 
 Файли зображень товарів у сховищі зберігаються під префіксом ключів **`products/`** (див. `App\Service\ProductImageService`).
+
+### EasyAdmin і завантаження зображень
+
+**`STORAGE_TYPE=s3` (пряме завантаження в S3):**
+
+- Ендпоінт **`POST /admin/product-image/presign`** (`ProductImagePresignController`) для користувачів з **`ROLE_ADMIN`**: приймає JSON `{"filename":"...","contentType":"image/..."}`, перевіряє **CSRF** (`X-CSRF-TOKEN` з id `submit`), повертає presigned **PUT** URL і ключ **`products/{uuid}-{filename}`** (`ProductImagePresignService`).
+- У формі товару поле зображення — текстовий ключ S3 + вибір файлу; скрипт **`public/js/admin-product-image-s3.js`** виконує presign → PUT у бакет → підставляє ключ у поле перед збереженням.
+- На бакеті потрібні **CORS** для PUT з origin адмінки та IAM з `s3:PutObject` на `products/*`.
+
+**`STORAGE_TYPE=local`:**
+
+- У **`ProductCrudController`** поле **`ImageField`** зберігає файл у **`var/tmp/ea-product-uploads/`**, параметр **`admin.product.image_upload_dir`** у `config/services.yaml`.
+- Після збереження **`ProductImageService::syncAfterWrite`** читає файл з цього каталогу (або з `public/img/` для старих записів) і викликає **`FileStorageInterface::write`**; у БД — ключ `products/{id}-...`.
 
 ---
 
@@ -26,9 +39,9 @@
 
 | Змінна | Призначення |
 |--------|-------------|
-| `FILE_STORAGE` | `local` або `s3` — визначає активний бекенд. **Має бути рівно один рядок** у `.env` / `.env.local`; дублікати з різними значеннями призводять до того, що «перемагає» останній рядок. |
+| `STORAGE_TYPE` | `local` або `s3` — визначає активний бекенд. **Має бути рівно один рядок** у `.env` / `.env.local`; дублікати з різними значеннями призводять до того, що «перемагає» останній рядок. |
 
-### 2.2. Локальне сховище (`FILE_STORAGE=local`)
+### 2.2. Локальне сховище (`STORAGE_TYPE=local`)
 
 | Параметр | Джерело | Опис |
 |----------|---------|------|
@@ -36,7 +49,7 @@
 
 Додаткові змінні AWS для режиму `local` можуть бути порожніми, якщо S3 не використовується; однак сервіс `Aws\S3\S3Client` усе одно описаний у контейнері — у тестовому середовищі для OAuth/інших сценаріїв зазвичай задають тестові значення в `.env.test`.
 
-### 2.3. Amazon S3 (`FILE_STORAGE=s3`)
+### 2.3. Amazon S3 (`STORAGE_TYPE=s3`)
 
 Усі наведені змінні повинні відповідати реальному бакету та обліковому запису IAM з правами на потрібні операції S3.
 
@@ -56,7 +69,7 @@
 
 ### 3.1. Локальна розробка (local)
 
-1. У `.env` або `.env.local` встановіть **`FILE_STORAGE=local`**.
+1. У `.env` або `.env.local` встановіть **`STORAGE_TYPE=local`**.
 2. Переконайтеся, що каталог `var/storage` існує і доступний для запису процесу PHP (веб-сервер, `php-fpm`, `symfony server`):
    - за потреби: `mkdir -p var/storage` і коректні права на Unix-системах.
 3. Очистіть кеш Symfony після зміни змінних:  
@@ -68,7 +81,7 @@
 1. Створіть бакет у AWS (або сумісному сховищі), увімкніть потрібну політику доступу (читання об’єктів для публічних URL, якщо використовуєте прямі посилання).
 2. Створіть користувача IAM з політикою мінімально необхідних прав (`s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:ListBucket` тощо — залежно від сценаріїв).
 3. У **`.env.local`** (або змінних оточення на сервері) задайте:
-   - `FILE_STORAGE=s3`
+   - `STORAGE_TYPE=s3`
    - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_S3_BUCKET`, `AWS_S3_VERSION`
 4. Виконайте `php bin/console cache:clear`.
 5. Перевірте завантаження тестового зображення та відкриття URL з `publicUrl()` (пряме посилання S3) у браузері.
@@ -80,13 +93,14 @@
 Якщо застосунок у контейнері:
 
 - Для **`local`**: змонтуйте том або використовуйте іменований volume для `var/storage`, щоб дані не губилися при пересозданні контейнера.
-- Для **`s3`**: передайте змінні AWS через `environment` у `compose` або secrets; не вбудовуйте секрети в образ.
+- Для **`s3`**: у **`compose.yaml`** для сервісу **`php`** підключено **`env_file: .env.local`** (опційно), щоб у процесі PHP були `AWS_*` і **`STORAGE_TYPE`**; альтернатива — лише змонтований каталог проєкту (Symfony читає `.env.local` з диска). Після зміни регіону/ключів: **`docker compose up -d`** (або `restart php`) і **`php bin/console cache:clear`** у контейнері.
+- **CORS на бакеті** має дозволяти **PUT** з origin вашого сайту (браузер завантажує файл напряму на S3). Якщо PUT падає з 403 — перевірте CORS і точний **`Content-Type`**, який підписано в presigned URL.
 
 ---
 
 ## 4. Операційні вказівки
 
-### 4.1. Після зміни `FILE_STORAGE` або AWS
+### 4.1. Після зміни `STORAGE_TYPE` або AWS
 
 - Завжди виконуйте **`php bin/console cache:clear`** (у продакшені — з відповідним `--env=prod` та `--no-debug` за вашою політикою).
 - Перезапуск PHP-FPM / контейнера потрібен лише якщо змінні оточення підхоплюються лише при старті процесу.
@@ -99,8 +113,8 @@
 
 ### 4.3. Відображення зображень у додатку
 
-- У режимі **S3** `ProductImageService::getUrlForDisplay()` віддає прямий URL бакета, якщо `publicUrl()` не `null`.
-- У режимі **local** для ключів `products/...` використовується маршрут **`app_media`** (`/media?key=...`), який читає файл через `FileStorageInterface` і повертає відповідь з коректним `Content-Type`.
+- У режимі **S3** для ключів `products/...` **`ProductImageService::getUrlForDisplay()`** завжди використовує **`app_media`** (`/media?key=...`), щоб не залежати від публічного читання об’єктів у бакеті.
+- У режимі **local** для ключів `products/...` також використовується **`app_media`**, якщо `publicUrl()` повертає `null`.
 
 ### 4.4. Тести
 
@@ -115,20 +129,20 @@
 
 1. Підготуйте бакет і облікові дані IAM (див. п. 3.2).
 2. **Синхронізуйте** існуючі файли з `var/storage` у бакет з збереженням ключів (наприклад префікс `products/`), якщо потрібна безперервність відображення старих зображень.
-3. У `.env.local` (або на сервері) встановіть `FILE_STORAGE=s3` та всі змінні `AWS_*`.
+3. У `.env.local` (або на сервері) встановіть `STORAGE_TYPE=s3` та всі змінні `AWS_*`.
 4. Виконайте `cache:clear`, перевірте одне завантаження та одне відкриття URL.
 5. Переконайтеся, що CORS і політика бакета дозволяють відкриття зображень з вашого домену (якщо зображення вставляються напряму з S3).
 
 ### 5.2. З S3 на local
 
-1. Встановіть `FILE_STORAGE=local`.
+1. Встановіть `STORAGE_TYPE=local`.
 2. За потреби **завантажте** об’єкти з бакета в `var/storage` з тими самими ключами (`products/...`).
 3. `cache:clear`, перевірка відображення через `/media?key=...`.
 
 ### 5.3. Типові помилки
 
-- **Два рядки `FILE_STORAGE` у `.env`:** спрацьовує останнє значення — легко отримати несподіваний режим. Залишайте один активний рядок, інші коментуйте.
-- **Порожні `AWS_*` при `FILE_STORAGE=s3`:** помилки при записі/читанні з S3.
+- **Два рядки `STORAGE_TYPE` у `.env`:** спрацьовує останнє значення — легко отримати несподіваний режим. Залишайте один активний рядок, інші коментуйте.
+- **Порожні `AWS_*` при `STORAGE_TYPE=s3`:** помилки при записі/читанні з S3.
 - **Немає прав на запис у `var/storage` при `local`:** помилки при збереженні файлів.
 
 ---
@@ -142,10 +156,11 @@
 | Конфіг сервісів сховища | `config/packages/storage.yaml` |
 | Клієнт S3 | `config/packages/aws.yaml` |
 | Зображення товарів | `src/Service/ProductImageService.php` |
-| Видача локальних файлів по HTTP | `src/Controller/MediaController.php` |
+| Presigned PUT для S3 (адмінка) | `src/Service/ProductImagePresignService.php`, `src/Controller/Admin/ProductImagePresignController.php` |
+| Видача файлів по HTTP | `src/Controller/MediaController.php` |
 
 ---
 
 ## 7. Версіонування документа
 
-Документ описує стан інтеграції сховища в кодовій базі на момент останнього оновлення файлу. Після зміни параметрів у `storage.yaml` / `aws.yaml` або семантики `FILE_STORAGE` оновіть відповідні розділи цього файлу.
+Документ описує стан інтеграції сховища в кодовій базі на момент останнього оновлення файлу. Після зміни параметрів у `storage.yaml` / `aws.yaml` або семантики `STORAGE_TYPE` оновіть відповідні розділи цього файлу.

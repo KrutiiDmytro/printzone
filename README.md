@@ -17,7 +17,7 @@ Symfony-додаток електронної комерції з чистою �
 ### Облікові дані та параметри S3 у Symfony
 
 - Значення задаються в **`.env`** / **`.env.local`** (секрети — лише в `.env.local`).
-- Для S3 потрібні змінні `AWS_*` та **`FILE_STORAGE=s3`** (див. наступний підрозділ).
+- Для S3 потрібні змінні `AWS_*` та **`STORAGE_TYPE=s3`** (див. наступний підрозділ).
 - Повний перелік змінних і операційних кроків — у **[`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)**.
 
 ### Абстракція файлової системи (Flysystem)
@@ -32,13 +32,34 @@ Symfony-додаток електронної комерції з чистою �
 - У режимі **local** зображення для вітрини можуть віддаватися через маршрут **`GET /media?key=...`** (`MediaController`).
 - У режимі **S3** для відображення використовується **пряме посилання** на об’єкт (`publicUrl`), коли налаштовано клієнт і бакет.
 
-### Інтеграція з додатком (зображення товарів)
+### Інтеграція з додатком — пряме завантаження в S3
 
-- **`App\Service\ProductImageService`**: синхронізація зображень після збереження товару в EasyAdmin, видалення старих зображень у сховищі, формування URL для Twig (`ProductImageExtension`).
+**`STORAGE_TYPE=s3`** — EasyAdmin використовує **presigned PUT** для прямого завантаження файлу в S3 з браузера:
+
+1. Форма товару містить прихований текстовий ключ S3 + вбудований вибір файлу (скрипт **`public/js/admin-product-image-s3.js`**).
+2. Після вибору файлу JS звертається до **`POST /admin/product-image/presign`** (`ProductImagePresignController`) → отримує **presigned PUT URL** і ключ виду `products/{uuid}-{ім'я}`.
+3. JS виконує **PUT** безпосередньо на S3 (минаючи сервер) → об'єкт з'являється в бакеті.
+4. Ключ записується у приховане поле → при «Зберегти» зберігається в БД.
+5. Відображення картинок: через **`GET /media?key=...`** (`MediaController`) — бакет лишається приватним.
+
+**Вимоги для S3:**
+
+| Що | Де налаштувати |
+|---|---|
+| IAM: `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` на `products/*` | AWS Console → IAM |
+| CORS: `PUT`, `GET`, `HEAD` для origin адмінки | AWS Console → S3 → Permissions → CORS |
+| Регіон бакета = `AWS_DEFAULT_REGION` | `.env.local` |
+
+Приклад CORS:
+```json
+[{ "AllowedHeaders": ["*"], "AllowedMethods": ["PUT","GET","HEAD"], "AllowedOrigins": ["http://localhost","https://e-commerce.it.com"], "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3000 }]
+```
+
+**`STORAGE_TYPE=local`** — EasyAdmin зберігає файл у **`var/tmp/ea-product-uploads/`**, далі **`ProductImageService`** записує у `var/storage`; URL через `/media?key=...`.
 
 ### Перемикання між файловими системами
 
-- Параметр **`FILE_STORAGE`**: `local` (за замовчуванням — локальний каталог `var/storage`) або **`s3`**.
+- Параметр **`STORAGE_TYPE`**: `local` (за замовчуванням — локальний каталог `var/storage`) або **`s3`**.
 - Перемикання без зміни коду бізнес-логіки — лише через **змінні середовища** та `cache:clear` після зміни.
 - Додаткові пояснення: **перемикання**, **Docker**, **типові помилки** — у [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md).
 
@@ -106,18 +127,20 @@ GITHUB_CLIENT_SECRET=ваш_github_client_secret
 GITHUB_REDIRECT_URI=http://localhost:8080/auth/github/callback
 ```
 
-Для **S3** (Task 22) додайте, наприклад:
+Для **S3** (Task 22) додайте:
 
 ```env
-FILE_STORAGE=s3
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_DEFAULT_REGION=eu-central-1
+STORAGE_TYPE=s3
+AWS_ACCESS_KEY_ID=your-key-id
+AWS_SECRET_ACCESS_KEY=your-secret
+AWS_DEFAULT_REGION=eu-north-1
 AWS_S3_BUCKET=your-bucket-name
 AWS_S3_VERSION=latest
 ```
 
-Для **локального** сховища: `FILE_STORAGE=local` (деталі в [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)).
+> **Важливо:** `AWS_DEFAULT_REGION` має точно збігатися з регіоном, у якому створено бакет. Перевірити: AWS Console → S3 → ваш бакет → назва регіону поруч з іменем.
+
+Для **локального** сховища: `STORAGE_TYPE=local` (деталі в [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)).
 
 ### 3. Зібрати образ PHP, запустити контейнери та встановити залежності
 
@@ -267,7 +290,7 @@ src/
 │   ├── GoogleAuthController.php # OAuth контролер для Google
 │   └── GitHubAuthController.php # OAuth контролер для GitHub
 ├── Repository/                  # Репозиторії Doctrine
-├── Service/                     # Бізнес-логіка (CartService, ProductImageService)
+├── Service/                     # Бізнес-логіка (CartService, ProductImageService, ProductImagePresignService)
 ├── EventListener/               # Слухачі подій (LoginListener)
 └── DataFixtures/                # Тестові дані
 ```
@@ -296,11 +319,22 @@ docker compose exec php php bin/phpunit tests/Unit/
 docker compose exec php php bin/phpunit tests/Unit/Storage/
 ```
 
+### Тести адмінки (presign, CRUD):
+```bash
+docker compose exec php php bin/phpunit tests/Functional/Admin/
+```
+
 ### Приклад успішного прогону:
 ```
-OK (72 tests, 168 assertions)
+OK (75 tests, 174 assertions)
 ```
 *(фактичні числа залежать від версії тестів)*
+
+### Діагностика S3:
+```bash
+docker compose exec php php bin/console app:verify-storage
+```
+Показує STORAGE_TYPE, регіон, бакет і список об'єктів `products/*` у S3.
 
 ---
 
@@ -326,16 +360,18 @@ GITHUB_REDIRECT_URI=https://e-commerce.it.com/auth/github/callback
 
 3. **Запустіть контейнери**:
 ```bash
-docker-compose up -d
-docker-compose exec php php bin/console doctrine:migrations:migrate --no-interaction
+docker compose up -d
+docker compose exec php php bin/console doctrine:migrations:migrate --no-interaction
 ```
+
+4. **Для S3** на продакшні налаштуйте CORS на бакеті (`AllowedOrigins`: домен вашого сайту) та IAM-політику для `products/*`.
 
 
 ## 📦 Використані пакети
 
 | Пакет | Версія | Призначення |
 |-------|--------|-------------|
-| `aws/aws-sdk-php` | ^3.0 | AWS SDK (S3-клієнт) |
+| `aws/aws-sdk-php` | ^3.0 | AWS SDK (S3-клієнт, presigned URL) |
 | `league/flysystem` | 3.x | Абстракція файлової системи |
 | `league/flysystem-aws-s3-v3` | 3.x | Адаптер Flysystem для S3 |
 | `league/oauth2-google` | ^4.1 | Google OAuth 2.0 |

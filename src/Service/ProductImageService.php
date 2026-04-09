@@ -9,6 +9,10 @@ use App\Storage\FileStorageInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
+/**
+ * Local: EasyAdmin зберігає файл у тимчасовий каталог, потім запис у сховище.
+ * S3: ключ `products/...` задається після presigned upload (див. ProductImagePresignService).
+ */
 final class ProductImageService
 {
     private const PREFIX = 'products/';
@@ -18,6 +22,10 @@ final class ProductImageService
         private readonly UrlGeneratorInterface $urlGenerator,
         #[Autowire('%kernel.project_dir%')]
         private readonly string $projectDir,
+        #[Autowire('%admin.product.image_upload_dir%')]
+        private readonly string $adminImageUploadDir,
+        #[Autowire('%env(STORAGE_TYPE)%')]
+        private readonly string $storageType,
     ) {
     }
 
@@ -39,9 +47,16 @@ final class ProductImageService
             return;
         }
 
-        $localPath = $this->projectDir.'/public/img/'.$current;
+        $safeName = basename(str_replace('\\', '/', $current));
+        $localPath = $this->adminImageUploadDir.'/'.$safeName;
+
         if (!is_file($localPath)) {
-            return;
+            $legacyPath = $this->projectDir.'/public/img/'.$safeName;
+            if (is_file($legacyPath)) {
+                $localPath = $legacyPath;
+            } else {
+                return;
+            }
         }
 
         $contents = file_get_contents($localPath);
@@ -50,7 +65,7 @@ final class ProductImageService
         }
 
         $mime = mime_content_type($localPath) ?: 'application/octet-stream';
-        $key = sprintf('%s%d-%s', self::PREFIX, $product->getId(), basename($current));
+        $key = sprintf('%s%d-%s', self::PREFIX, $product->getId(), $safeName);
 
         $this->storage->write($key, $contents, $mime);
         unlink($localPath);
@@ -71,6 +86,11 @@ final class ProductImageService
         }
 
         if (str_starts_with($image, self::PREFIX)) {
+            // Приватний S3: прямий getObjectUrl часто дає 403; показ через проксі.
+            if ('s3' === strtolower(trim($this->storageType))) {
+                return $this->urlGenerator->generate('app_media', ['key' => $image]);
+            }
+
             $public = $this->storage->publicUrl($image);
             if ($public !== null) {
                 return $public;

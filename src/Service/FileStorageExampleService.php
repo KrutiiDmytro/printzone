@@ -7,7 +7,7 @@ namespace App\Service;
 use App\Storage\FileStorageInterface;
 
 /**
- * Приклад використання FileStorageInterface (локальне сховище або S3 залежно від FILE_STORAGE).
+ * Приклад використання FileStorageInterface (локальне сховище або S3 залежно від STORAGE_TYPE).
  */
 final class FileStorageExampleService
 {
