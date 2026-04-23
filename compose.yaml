@@ -27,7 +27,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.php
-    image: task22-php:8.2-fpm
+    image: task-23:8.2-fpm
+    container_name: task-23
     env_file:
       - path: .env.local
         required: false
