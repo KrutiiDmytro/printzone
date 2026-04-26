@@ -4,8 +4,8 @@ stages:
 deploy:
   stage: deploy
   script:
+    - rsync -av --exclude='.git' $CI_PROJECT_DIR/ /var/www/task-23/
     - cd /var/www/task-23
-    - git pull origin develop
     - docker compose up -d
     - docker compose exec -T php composer install --no-scripts
     - docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
