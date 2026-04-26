@@ -43,9 +43,11 @@ class GoogleAuthController extends AbstractController
     public function callback(Request $request): Response
     {
         $code = $request->query->get('code');
+        $error = $request->query->get('error');
+        $errorDescription = $request->query->get('error_description');
 
         if (!$code) {
-            $this->addFlash('error', 'Google authentication failed');
+            $this->addFlash('error', 'Google auth failed: ' . ($error ?? 'no_code') . ' - ' . ($errorDescription ?? ''));
             return $this->redirectToRoute('app_login');
         }
 
