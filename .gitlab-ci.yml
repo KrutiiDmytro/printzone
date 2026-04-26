@@ -13,18 +13,14 @@ deploy:
     - ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
   script:
     - |
-      ssh "$SERVER_USER@$SERVER_IP" << EOF
+      ssh -o ConnectTimeout=10 "$SERVER_USER@$SERVER_IP" "
         set -e
-        if [ ! -d "$SERVER_PATH" ]; then
-          git clone git@git.foxminded.ua:foxmidedteam/task-23.git "$SERVER_PATH"
-        fi
-        cd "$SERVER_PATH"
+        cd $SERVER_PATH
         git pull origin develop
-        docker compose build php
         docker compose up -d
-        docker compose exec -T php composer install --no-dev --optimize-autoloader
+        docker compose exec -T php composer install --no-scripts
         docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
-        docker compose exec -T php php bin/console cache:clear
-      EOF
+        docker compose exec -T php rm -rf var/cache/*
+      "
   only:
     - develop
