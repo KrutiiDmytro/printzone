@@ -12,6 +12,9 @@ use Symfony\Component\Serializer\Annotation\Groups;
 
 #[ORM\Entity(repositoryClass: ProductRepository::class)]
 #[ORM\Table(name: 'products')]
+#[ORM\Index(columns: ['is_featured'], name: 'idx_products_is_featured')]
+#[ORM\Index(columns: ['stock'], name: 'idx_products_stock')]
+#[ORM\Index(columns: ['category_id', 'stock'], name: 'idx_products_category_stock')]
 #[ApiResource(
     normalizationContext: ['groups' => ['product:read']],
     denormalizationContext: ['groups' => ['product:write']]
