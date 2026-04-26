@@ -13,6 +13,8 @@ use Symfony\Component\Serializer\Annotation\Groups;
 
 #[ORM\Entity(repositoryClass: OrderRepository::class)]
 #[ORM\Table(name: 'orders')]
+#[ORM\Index(columns: ['created_at'], name: 'idx_orders_created_at')]
+#[ORM\Index(columns: ['status'], name: 'idx_orders_status')]
 #[ApiResource(
     normalizationContext: ['groups' => ['order:read']],
     denormalizationContext: ['groups' => ['order:write']]
