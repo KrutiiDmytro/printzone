@@ -106,13 +106,21 @@ class CartService
         }
 
         $sessionCart = $this->getSession()->get(self::CART_SESSION_KEY, []);
-        
+
         if (empty($sessionCart)) {
             return;
         }
 
+        $products = $this->productRepository->findBy(['id' => array_keys($sessionCart)]);
+        $productMap = [];
+        foreach ($products as $product) {
+            $productMap[$product->getId()] = $product;
+        }
+
         foreach ($sessionCart as $productId => $quantity) {
-            $this->addToDatabase($user, $productId, $quantity);
+            if (isset($productMap[$productId])) {
+                $this->addProductToDatabase($user, $productMap[$productId], $quantity);
+            }
         }
 
         $this->clearSession();
@@ -129,10 +137,24 @@ class CartService
             return;
         }
 
-        // Проверяем, есть ли уже такой товар
+        $this->upsertCartItem($cart, $product, $quantity);
+        $cart->setUpdatedAt(new \DateTime());
+        $this->entityManager->flush();
+    }
+
+    private function addProductToDatabase($user, Product $product, int $quantity): void
+    {
+        $cart = $this->getOrCreateCart($user);
+        $this->upsertCartItem($cart, $product, $quantity);
+        $cart->setUpdatedAt(new \DateTime());
+        $this->entityManager->flush();
+    }
+
+    private function upsertCartItem(Cart $cart, Product $product, int $quantity): void
+    {
         $existingItem = null;
         foreach ($cart->getItems() as $item) {
-            if ($item->getProduct()->getId() === $productId) {
+            if ($item->getProduct()->getId() === $product->getId()) {
                 $existingItem = $item;
                 break;
             }
@@ -146,9 +168,6 @@ class CartService
             $cartItem->setQuantity($quantity);
             $cart->addItem($cartItem);
         }
-
-        $cart->setUpdatedAt(new \DateTime());
-        $this->entityManager->flush();
     }
 
     private function removeFromDatabase($user, int $productId): void
@@ -297,12 +316,22 @@ class CartService
         $session = $this->getSession();
         $cart = $session->get(self::CART_SESSION_KEY, []);
 
+        if (empty($cart)) {
+            return ['items' => [], 'total' => 0, 'count' => 0];
+        }
+
+        $products = $this->productRepository->findBy(['id' => array_keys($cart)]);
+        $productMap = [];
+        foreach ($products as $product) {
+            $productMap[$product->getId()] = $product;
+        }
+
         $cartItems = [];
         $total = 0;
 
         foreach ($cart as $productId => $quantity) {
-            $product = $this->productRepository->find($productId);
-            
+            $product = $productMap[$productId] ?? null;
+
             if ($product && $product->getStock() >= $quantity) {
                 $itemTotal = $product->getPrice() * $quantity;
                 $cartItems[] = [

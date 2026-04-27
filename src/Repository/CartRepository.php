@@ -17,6 +17,9 @@ class CartRepository extends ServiceEntityRepository
     public function findOneByUser(User $user): ?Cart
     {
         return $this->createQueryBuilder('c')
+            ->addSelect('i', 'p')
+            ->leftJoin('c.items', 'i')
+            ->leftJoin('i.product', 'p')
             ->where('c.user = :user')
             ->setParameter('user', $user)
             ->getQuery()

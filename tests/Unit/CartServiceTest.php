@@ -172,8 +172,7 @@ class CartServiceTest extends TestCase
         $product1->setName('Product 1');
         $product1->setPrice(10000);
         $product1->setCategory($category);
-        
-        // Устанавливаем ID для product1
+
         $reflection1 = new \ReflectionClass($product1);
         $idProperty1 = $reflection1->getProperty('id');
         $idProperty1->setAccessible(true);
@@ -183,36 +182,28 @@ class CartServiceTest extends TestCase
         $product2->setName('Product 2');
         $product2->setPrice(5000);
         $product2->setCategory($category);
-        
-        // Устанавливаем ID для product2
+
         $reflection2 = new \ReflectionClass($product2);
         $idProperty2 = $reflection2->getProperty('id');
         $idProperty2->setAccessible(true);
         $idProperty2->setValue($product2, 2);
 
-        // Создаем корзину, которая будет возвращена после первого вызова
         $cart = new Cart();
         $cart->setUser($user);
 
         $this->security->method('getUser')->willReturn($user);
         $this->requestStack->method('getSession')->willReturn($session);
-        
-        // Первый вызов возвращает null (корзины нет), последующие возвращают созданную корзину
-        $this->cartRepository->method('findOneByUser')
-            ->willReturnOnConsecutiveCalls(null, $cart, $cart);
-        
-        $this->productRepository->method('find')
-            ->willReturnMap([
-                [1, $product1],
-                [2, $product2]
-            ]);
 
-        // persist вызывается один раз при создании корзины
-        // flush вызывается: 
-        //   1 раз при создании корзины в getOrCreateCart()
-        //   1 раз в первом addToDatabase() после добавления первого товара
-        //   1 раз во втором addToDatabase() после добавления второго товара
-        // Итого: 3 flush
+        // Products are batch-fetched once via findBy; findOneByUser called twice (once per item)
+        $this->cartRepository->method('findOneByUser')
+            ->willReturnOnConsecutiveCalls(null, $cart);
+
+        $this->productRepository->expects($this->once())
+            ->method('findBy')
+            ->with(['id' => [1, 2]])
+            ->willReturn([$product1, $product2]);
+
+        // persist: 1× (create cart); flush: 3× (create cart + 2× addProductToDatabase)
         $this->entityManager->expects($this->once())->method('persist');
         $this->entityManager->expects($this->exactly(3))->method('flush');
 
@@ -224,7 +215,7 @@ class CartServiceTest extends TestCase
     {
         $session = new Session(new MockArraySessionStorage());
         $session->set('cart', [1 => 2, 2 => 1]);
-        
+
         $category = new Category();
         $category->setName('Test Category');
         $category->setSlug('test-category');
@@ -235,19 +226,27 @@ class CartServiceTest extends TestCase
         $product1->setStock(10);
         $product1->setCategory($category);
 
+        $reflection1 = new \ReflectionClass($product1);
+        $idProp1 = $reflection1->getProperty('id');
+        $idProp1->setAccessible(true);
+        $idProp1->setValue($product1, 1);
+
         $product2 = new Product();
         $product2->setName('Product 2');
         $product2->setPrice(5000);
         $product2->setStock(5);
         $product2->setCategory($category);
 
+        $reflection2 = new \ReflectionClass($product2);
+        $idProp2 = $reflection2->getProperty('id');
+        $idProp2->setAccessible(true);
+        $idProp2->setValue($product2, 2);
+
         $this->requestStack->method('getSession')->willReturn($session);
         $this->security->method('getUser')->willReturn(null);
-        $this->productRepository->method('find')
-            ->willReturnMap([
-                [1, $product1],
-                [2, $product2]
-            ]);
+        $this->productRepository->method('findBy')
+            ->with(['id' => [1, 2]])
+            ->willReturn([$product1, $product2]);
 
         $this->assertEquals(2, $this->cartService->getCount());
     }
