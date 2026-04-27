@@ -21,11 +21,14 @@ class GoogleAuthController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $passwordHasher,
+        private string $googleClientId,
+        private string $googleClientSecret,
+        private string $googleRedirectUri,
     ) {
         $this->provider = new Google([
-            'clientId'     => $_ENV['GOOGLE_CLIENT_ID'],
-            'clientSecret' => $_ENV['GOOGLE_CLIENT_SECRET'],
-            'redirectUri'  => $_ENV['GOOGLE_REDIRECT_URI'],
+            'clientId'     => $this->googleClientId,
+            'clientSecret' => $this->googleClientSecret,
+            'redirectUri'  => $this->googleRedirectUri,
         ]);
     }
 

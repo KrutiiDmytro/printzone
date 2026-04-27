@@ -22,5 +22,11 @@ services:
         exclude:
             - '../src/Storage/FileStorageFactory.php'
 
+    App\Controller\GoogleAuthController:
+        arguments:
+            $googleClientId: '%env(GOOGLE_CLIENT_ID)%'
+            $googleClientSecret: '%env(GOOGLE_CLIENT_SECRET)%'
+            $googleRedirectUri: '%env(GOOGLE_REDIRECT_URI)%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

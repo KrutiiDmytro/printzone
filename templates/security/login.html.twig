@@ -16,6 +16,10 @@
                         </div>
                     {% endif %}
 
+                    {% for message in app.flashes('error') %}
+                        <div class="alert alert-danger">{{ message }}</div>
+                    {% endfor %}
+
                     {% if app.user %}
                         <div class="mb-3">
                             You are logged in as {{ app.user.userIdentifier }}, 
