@@ -28,5 +28,11 @@ services:
             $googleClientSecret: '%env(GOOGLE_CLIENT_SECRET)%'
             $googleRedirectUri: '%env(GOOGLE_REDIRECT_URI)%'
 
+    App\Controller\GitHubAuthController:
+        arguments:
+            $githubClientId: '%env(GITHUB_CLIENT_ID)%'
+            $githubClientSecret: '%env(GITHUB_CLIENT_SECRET)%'
+            $githubRedirectUri: '%env(GITHUB_REDIRECT_URI)%'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

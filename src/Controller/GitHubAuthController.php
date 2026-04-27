@@ -20,11 +20,14 @@ class GitHubAuthController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $passwordHasher,
+        private string $githubClientId,
+        private string $githubClientSecret,
+        private string $githubRedirectUri,
     ) {
         $this->provider = new Github([
-            'clientId'     => $_ENV['GITHUB_CLIENT_ID'],
-            'clientSecret' => $_ENV['GITHUB_CLIENT_SECRET'],
-            'redirectUri'  => $_ENV['GITHUB_REDIRECT_URI'],
+            'clientId'     => $this->githubClientId,
+            'clientSecret' => $this->githubClientSecret,
+            'redirectUri'  => $this->githubRedirectUri,
         ]);
     }
 
