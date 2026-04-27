@@ -8,6 +8,7 @@ use Symfony\Component\Serializer\Annotation\Groups;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'product_attributes')]
+#[ORM\Index(columns: ['product_id'], name: 'idx_product_attributes_product_id')]
 #[ApiResource(
     normalizationContext: ['groups' => ['product_attribute:read']],
     denormalizationContext: ['groups' => ['product_attribute:write']]

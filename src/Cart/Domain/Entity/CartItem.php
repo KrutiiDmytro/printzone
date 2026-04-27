@@ -7,6 +7,8 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'cart_items')]
+#[ORM\Index(columns: ['cart_id'], name: 'idx_cart_items_cart_id')]
+#[ORM\Index(columns: ['product_id'], name: 'idx_cart_items_product_id')]
 class CartItem
 {
     #[ORM\Id]
