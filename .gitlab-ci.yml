@@ -8,7 +8,7 @@ deploy:
     - cd /var/www/task-23
     - docker compose up -d
     - docker compose exec -T php composer install --no-scripts
-    - until docker compose exec -T database-replica pg_isready -U app -q; do echo "Waiting for replica..."; sleep 3; done
+    - i=0; until docker compose exec -T database-replica pg_isready -U app -q; do i=$((i+1)); if [ $i -ge 40 ]; then echo "Replica not ready after 2min, aborting"; docker compose logs database-replica --tail=20; exit 1; fi; echo "Waiting for replica... ($i/40)"; sleep 3; done
     - docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
     - docker compose exec -T php rm -rf var/cache/*
   only:
