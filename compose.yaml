@@ -7,6 +7,10 @@ services:
       -c log_min_duration_statement=100
       -c log_statement=all
       -c shared_preload_libraries=pg_stat_statements
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c max_replication_slots=3
+      -c hba_file=/etc/postgresql/pg_hba.conf
     env_file:
       - path: .env.local
         required: false
@@ -24,9 +28,39 @@ services:
       - "5434:5432"
     volumes:
       - database_data:/var/lib/postgresql/data:rw
+      - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./docker/postgres/primary/init:/docker-entrypoint-initdb.d:ro
       # use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
       # - ./docker/db/data:/var/lib/postgresql/data:rw
       ###< doctrine/doctrine-bundle ###
+
+  database-replica:
+    image: postgres:${POSTGRES_VERSION:-16}-alpine
+    entrypoint: ["/bin/sh", "/usr/local/bin/replica-entrypoint.sh"]
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret123}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      PRIMARY_HOST: database
+      PRIMARY_PORT: 5432
+      REPLICATION_USER: replicator
+      PGDATA: /var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-d", "${POSTGRES_DB:-app}", "-U", "${POSTGRES_USER:-app}" ]
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    ports:
+      - "5435:5432"
+    volumes:
+      - database_replica_data:/var/lib/postgresql/data:rw
+      - ./docker/postgres/replica/entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+    depends_on:
+      database:
+        condition: service_healthy
 
   php:
     build:
@@ -69,3 +103,4 @@ services:
 volumes:
   ###> doctrine/doctrine-bundle ###
   database_data: ###< doctrine/doctrine-bundle ###
+  database_replica_data:

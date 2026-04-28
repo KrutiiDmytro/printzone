@@ -1,6 +1,10 @@
 doctrine:
     dbal:
         url: '%env(resolve:DATABASE_URL)%'
+        driver: pdo_pgsql
+        replicas:
+            replica1:
+                url: '%env(resolve:DATABASE_REPLICA_URL)%'
         profiling_collect_backtrace: '%kernel.debug%'
         use_savepoints: true
     orm:
