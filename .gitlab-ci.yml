@@ -6,6 +6,9 @@ deploy:
   script:
     - rsync -av --exclude='.git' $CI_PROJECT_DIR/ /var/www/task-23/
     - cd /var/www/task-23
+    - docker compose up -d database
+    - until docker compose exec -T database pg_isready -U app -q; do sleep 2; done
+    - docker compose exec -T database psql -U app -c "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
     - docker compose up -d
     - docker compose exec -T php composer install --no-scripts
     - i=0; until docker compose exec -T database-replica pg_isready -U app -q; do i=$((i+1)); if [ $i -ge 40 ]; then echo "Replica not ready after 2min, aborting"; docker compose logs database-replica --tail=20; exit 1; fi; echo "Waiting for replica... ($i/40)"; sleep 3; done
