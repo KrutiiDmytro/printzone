@@ -92,5 +92,7 @@ class DashboardController extends AbstractDashboardController
         yield MenuItem::linkToCrud('Заказы', 'fa fa-shopping-cart', Order::class);
         yield MenuItem::section('Пользователи');
         yield MenuItem::linkToCrud('Пользователи', 'fa fa-users', User::class);
+        yield MenuItem::section('Інструменти');
+        yield MenuItem::linkToRoute('Експорт', 'fa fa-download', 'admin_export');
     }
 }

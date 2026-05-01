@@ -1,4 +1,62 @@
-# Task 23 — Master-Slave (Primary-Replica) Replication
+# Task 23 — Data Export Module
+
+## Plan
+
+- [x] Sub-task 1: Enums (ExportStatus, ExportType, ExportFormat), ExportJob entity, ExportJobRepository, Doctrine migration
+- [x] Sub-task 2: ExportFormatterInterface, CsvFormatter, JsonFormatter, XmlFormatter, ExportExtractorInterface, ProductExtractor, OrderExtractor, UserExtractor, ProcessExportMessage, ProcessExportHandler, ExportService
+- [x] Sub-task 3: ExportController (GET/POST/download), templates (index.html.twig, email.html.twig)
+- [x] Sub-task 4: messenger.yaml routing, DashboardController menu item
+- [x] Unit tests: CsvFormatterTest, JsonFormatterTest, XmlFormatterTest (9 tests, all pass)
+- [x] Sub-task 5: CSRF захист форми (template + controller validation)
+- [x] Sub-task 6: Unit tests (ExportJobTest, ExportServiceTest, ProcessExportHandlerTest) + розширення CsvFormatterTest
+- [x] Sub-task 7: Functional tests (ExportControllerTest — 8 тестів access control + POST + download)
+
+## Architecture
+
+```
+Admin UI (/admin/export)
+    │  POST form (type + format + filters)
+    ▼
+ExportController → ExportService → ExportJob (DB, status: pending)
+                                         │
+                                         ▼ Messenger async
+                               ProcessExportHandler
+                                    │       │
+                              Extractor  Formatter
+                                    │       │
+                                    └──► S3 (FileStorageInterface::write)
+                                         │
+                                  ExportJob (status: completed, file_path)
+                                         │
+                                  Email notification → Admin
+```
+
+## Review
+
+### Що зроблено
+1. **Domain**: PHP 8.1 backed enums (ExportStatus/Type/Format), `ExportJob` entity з полями type/format/status/filePath/filters/createdAt/completedAt/errorMessage/requestedBy
+2. **Formatters**: CSV (fputcsv), JSON (json_encode), XML (SimpleXMLElement + DOMDocument)
+3. **Extractors**: Product (фільтри: category/isFeatured/priceMin/priceMax/stockMin/stockMax), Order (status/dateFrom/dateTo), User (email/role)
+4. **Background processing**: `ProcessExportMessage` → async transport → `ProcessExportHandler` (#[AsMessageHandler])
+5. **S3 storage**: файли зберігаються за шляхом `exports/{type}/{format}/{id}-{timestamp}.{ext}`
+6. **Email**: `TemplatedEmail` через `admin/export/email.html.twig`
+7. **Admin UI**: кастомна EasyAdmin-сторінка з Bootstrap-формою (динамічні фільтри JS), таблицею завдань, кнопкою download
+8. **Wiring**: messenger.yaml routing, `ADMIN_EMAIL` env var, `services.yaml` service config, doctrine.yaml Export mapping, DashboardController menu
+
+### Edge cases
+- Порожній набір даних → порожній файл (коректно для CSV/JSON/XML)
+- Невалідний тип/формат → flash error, redirect
+- Помилка в handler → ExportJob.status = failed, email з текстом помилки
+- Retry у Messenger: max_retries=3, multiplier=2 (вже налаштовано)
+
+### Запуск worker
+```bash
+docker compose exec php php bin/console messenger:consume async --limit=10
+```
+
+---
+
+# Task 22 — Master-Slave (Primary-Replica) Replication
 
 ## Plan
 

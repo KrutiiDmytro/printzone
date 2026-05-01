@@ -41,6 +41,12 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Cart/Domain/Entity'
                 prefix: 'App\Cart\Domain\Entity'
                 alias: Cart
+            Export:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Export/Domain/Entity'
+                prefix: 'App\Export\Domain\Entity'
+                alias: Export
         controller_resolver:
             auto_mapping: false
 
