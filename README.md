@@ -1,111 +1,108 @@
-# Інтернет-магазин електроніки (Task-22)
+# Інтернет-магазин електроніки (Task-24)
 
 Symfony-додаток електронної комерції з чистою архітектурою, принципами SOLID та сучасними найкращими практиками.
 Включає **REST API** на базі API Platform із захистом через **JWT-токени**, а також **OAuth 2.0 аутентифікацію** через Google та GitHub.
 
-**Task 22** додає **абстракцію файлового сховища** (локальна ФС або **Amazon S3**) через **AWS SDK для PHP** та **Flysystem** — детальний опис нижче та у [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md).
-
-## 📦 Task 22: інтеграція AWS S3 та абстракція файлової системи
-
-Цей блок відповідає вимогам завдання: інтеграція SDK, конфігурація, єдиний API для local/S3, перемикання, тести та документація.
-
-### Інтеграція AWS SDK (Composer)
-
-- Пакети: **`aws/aws-sdk-php`**, **`league/flysystem`**, **`league/flysystem-aws-s3-v3`** (див. `composer.json`).
-- Клієнт AWS налаштовується у `config/packages/aws.yaml` — регіон, версія API, облікові дані з **змінних середовища** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_S3_BUCKET`, `AWS_S3_VERSION`).
-
-### Облікові дані та параметри S3 у Symfony
-
-- Значення задаються в **`.env`** / **`.env.local`** (секрети — лише в `.env.local`).
-- Для S3 потрібні змінні `AWS_*` та **`STORAGE_TYPE=s3`** (див. наступний підрозділ).
-- Повний перелік змінних і операційних кроків — у **[`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)**.
-
-### Абстракція файлової системи (Flysystem)
-
-- Інтерфейс **`App\Storage\FileStorageInterface`**: завантаження (`write`), читання (`read`), видалення (`delete`), перевірка наявності (`exists`), перелік **файлів** за префіксом (`listKeys`), публічний URL (`publicUrl`).
-- Реалізація **`App\Storage\FlysystemFileStorage`** працює поверх **League Flysystem** (локальний адаптер або **AwsS3V3Adapter**).
-- Фабрика **`App\Storage\FileStorageFactory`** створює потрібний екземпляр залежно від конфігурації; сервіс у контейнері: `config/packages/storage.yaml`.
-
-### Операції та узгодженість local / S3
-
-- Один і той самий контракт **для обох** бекендів: ті самі ключі (наприклад `products/{id}-...`).
-- У режимі **local** зображення для вітрини можуть віддаватися через маршрут **`GET /media?key=...`** (`MediaController`).
-- У режимі **S3** для відображення використовується **пряме посилання** на об’єкт (`publicUrl`), коли налаштовано клієнт і бакет.
-
-### Інтеграція з додатком — пряме завантаження в S3
-
-**`STORAGE_TYPE=s3`** — EasyAdmin використовує **presigned PUT** для прямого завантаження файлу в S3 з браузера:
-
-1. Форма товару містить прихований текстовий ключ S3 + вбудований вибір файлу (скрипт **`public/js/admin-product-image-s3.js`**).
-2. Після вибору файлу JS звертається до **`POST /admin/product-image/presign`** (`ProductImagePresignController`) → отримує **presigned PUT URL** і ключ виду `products/{uuid}-{ім'я}`.
-3. JS виконує **PUT** безпосередньо на S3 (минаючи сервер) → об'єкт з'являється в бакеті.
-4. Ключ записується у приховане поле → при «Зберегти» зберігається в БД.
-5. Відображення картинок: через **`GET /media?key=...`** (`MediaController`) — бакет лишається приватним.
-
-**Вимоги для S3:**
-
-| Що | Де налаштувати |
-|---|---|
-| IAM: `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` на `products/*` | AWS Console → IAM |
-| CORS: `PUT`, `GET`, `HEAD` для origin адмінки | AWS Console → S3 → Permissions → CORS |
-| Регіон бакета = `AWS_DEFAULT_REGION` | `.env.local` |
-
-Приклад CORS:
-```json
-[{ "AllowedHeaders": ["*"], "AllowedMethods": ["PUT","GET","HEAD"], "AllowedOrigins": ["http://localhost","https://e-commerce.it.com"], "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3000 }]
-```
-
-**`STORAGE_TYPE=local`** — EasyAdmin зберігає файл у **`var/tmp/ea-product-uploads/`**, далі **`ProductImageService`** записує у `var/storage`; URL через `/media?key=...`.
-
-### Перемикання між файловими системами
-
-- Параметр **`STORAGE_TYPE`**: `local` (за замовчуванням — локальний каталог `var/storage`) або **`s3`**.
-- Перемикання без зміни коду бізнес-логіки — лише через **змінні середовища** та `cache:clear` після зміни.
-- Додаткові пояснення: **перемикання**, **Docker**, **типові помилки** — у [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md).
-
-### Тестування та TDD
-
-- Юніт-тести сховища: **`tests/Unit/Storage/`** — локальний адаптер, фабрика, сценарії для S3 через **`Aws\MockHandler`** (повний цикл без реального бакета).
-- Рекомендований підхід завдання: **TDD** — спочатку тести для контракту сховища (завантаження, вилучення/читання, перелік, видалення) для **local** і **S3**, потім/паралельно реалізація.
-- Запуск усіх тестів:
-  ```bash
-  php bin/phpunit
-  ```
-  або в Docker:
-  ```bash
-  docker compose exec php php bin/phpunit
-  ```
-
-### Документація
-
-- Операційні процедури, налаштування, перемикання — **[`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)**.
+**Task 24** додає **аналіз та планування мікросервісної архітектури**: визначення меж сервісів за DDD, проектування API контрактів, схем даних, патернів комунікації та стратегії міграції від монолита до мікросервісів.
 
 ---
 
-## 🚀 Функціонал
+## Task 24: Мікросервісна архітектура
 
-- **Каталог товарів**: Перегляд електроніки за категоріями з атрибутами
-- **Файлове сховище**: локальне або S3 для зображень товарів (Task 22)
-- **Аутентифікація**: JWT-токени для захисту API, реєстрація та вхід для веб-інтерфейсу
-- **OAuth 2.0**: Вхід через Google та GitHub акаунти
-- **REST API**: Повноцінний CRUD для товарів, категорій, замовлень, користувачів
-- **Документація API**: Автоматично згенерована Swagger UI (OpenAPI 3.0)
-- **Формати відповідей**: JSON, JSON-LD, XML
-- **Кошик покупок**: Гібридний кошик (сесія для гостей, БД для авторизованих)
-- **Адмін-панель**: EasyAdmin для керування контентом
+### Що зроблено
+
+Проведено повний аналіз поточного монолита та спроектовано цільову мікросервісну архітектуру.
+
+### Ідентифіковані мікросервіси
+
+| Сервіс | Відповідальності | БД |
+|---|---|---|
+| **User Service** | Реєстрація, автентифікація, JWT, OAuth | `db-users` |
+| **Catalog Service** | Продукти, категорії, атрибути, зображення | `db-catalog` |
+| **Cart Service** | Кошик (гість + авторизований), міграція | `db-cart` |
+| **Order Service** | Замовлення, lifecycle статусів, Checkout Saga | `db-orders` |
+| **Payment Service** | Оплата, webhook Stripe/LiqPay, повернення | `db-payments` |
+| **Delivery Service** | Відправлення, трекінг, Нова Пошта/DHL | `db-delivery` |
+| **Notification Service** | Email, SMS, push-сповіщення (stateless) | — |
+| **Export Service** | Async CSV/JSON/XML export jobs | `db-exports` |
+| **Storage Service** | Файли S3/local (stateless proxy) | — |
+
+### Застосовані патерни
+
+| Патерн | Де застосовується |
+|---|---|
+| **Strangler Fig** | Поступова міграція монолита через API Gateway |
+| **Database per Service** | Окрема PostgreSQL на кожен сервіс |
+| **Choreography Saga** | Checkout: резервування → оплата → доставка |
+| **Outbox Pattern** | Гарантована доставка подій з DB транзакцією |
+| **CQRS** | Export Service читає через read-only API |
+| **BFF (Backend for Frontend)** | Окремі gateway для Mobile, Desktop, Public API |
+| **Circuit Breaker** | Захист від каскадних відмов між сервісами |
+| **Event Sourcing** | Immutable лог подій відстеження доставки |
+| **Idempotency Key** | Захист від дублювання webhook від Stripe/LiqPay |
+
+### BFF шар
+
+```
+Mobile App    →  BFF Mobile   (порт 8010)  ─┐
+Desktop Web   →  BFF Desktop  (порт 8011)  ─┼──→  Мікросервіси
+Public API    →  BFF Public   (порт 8012)  ─┘
+```
+
+### Черга повідомлень
+
+**RabbitMQ** (замінює поточний `doctrine://` transport Symfony Messenger):
+- Topic exchanges на домен: `user.events`, `order.events`, `payment.events` тощо
+- 22 типи подій між сервісами (повний список у каталозі подій)
+
+### Документація
+
+| Файл | Зміст |
+|---|---|
+| [`docs/microservices-architecture.md`](docs/microservices-architecture.md) | Повна архітектурна документація: межі сервісів, API endpoints, схеми БД, комунікація, безпека, стратегія міграції |
+| [`docs/event-catalog.md`](docs/event-catalog.md) | Каталог 22 асинхронних подій зі схемами payload та sequence diagrams |
+
+---
+
+## Task 22–23: Файлове сховище (AWS S3)
+
+**Task 22** додає **абстракцію файлового сховища** (локальна ФС або **Amazon S3**) через **AWS SDK для PHP** та **Flysystem**.
+
+- Інтерфейс `FileStorageInterface`: `write`, `read`, `delete`, `exists`, `listKeys`, `publicUrl`
+- Фабрика `FileStorageFactory` перемикається через `STORAGE_TYPE=local|s3`
+- Presigned PUT URL для прямого завантаження в S3 з браузера
+- Детальна документація: [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)
+
+---
+
+## Функціонал
+
+- **Каталог товарів**: перегляд електроніки за категоріями з атрибутами
+- **Файлове сховище**: локальне або S3 для зображень товарів
+- **Кошик покупок**: гібридний кошик (сесія для гостей, БД для авторизованих)
+- **Аутентифікація**: JWT-токени для API, реєстрація та вхід для веб-інтерфейсу
+- **OAuth 2.0**: вхід через Google та GitHub акаунти
+- **REST API**: повноцінний CRUD для товарів, категорій, замовлень, користувачів
+- **Документація API**: Swagger UI (OpenAPI 3.0) за адресою `/api/docs`
+- **Адмін-панель**: EasyAdmin для керування контентом та експорту даних
+- **Async Export**: експорт даних у CSV/JSON/XML через чергу повідомлень
 - **Чиста архітектура**: Domain-Driven Design з окремими доменами
 
-## 📋 Вимоги
+---
 
-- Docker & Docker Compose
+## Вимоги
+
+- Docker та Docker Compose
 - Git
 
-## 🛠️ Встановлення та Запуск
+---
+
+## Встановлення та запуск
 
 ### 1. Клонувати репозиторій
 ```bash
 git clone <repository-url>
-cd Task-22
+cd task-24
 ```
 
 ### 2. Налаштувати змінні середовища
@@ -113,7 +110,7 @@ cd Task-22
 cp .env .env.local
 ```
 
-Відредагуйте `.env.local` та вкажіть ваші OAuth credentials:
+Відредагуйте `.env.local`:
 
 ```env
 # Google OAuth
@@ -127,7 +124,7 @@ GITHUB_CLIENT_SECRET=ваш_github_client_secret
 GITHUB_REDIRECT_URI=http://localhost:8080/auth/github/callback
 ```
 
-Для **S3** (Task 22) додайте:
+Для **S3** додайте:
 
 ```env
 STORAGE_TYPE=s3
@@ -135,16 +132,11 @@ AWS_ACCESS_KEY_ID=your-key-id
 AWS_SECRET_ACCESS_KEY=your-secret
 AWS_DEFAULT_REGION=eu-north-1
 AWS_S3_BUCKET=your-bucket-name
-AWS_S3_VERSION=latest
 ```
 
-> **Важливо:** `AWS_DEFAULT_REGION` має точно збігатися з регіоном, у якому створено бакет. Перевірити: AWS Console → S3 → ваш бакет → назва регіону поруч з іменем.
+Для **локального** сховища: `STORAGE_TYPE=local`
 
-Для **локального** сховища: `STORAGE_TYPE=local` (деталі в [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)).
-
-### 3. Зібрати образ PHP, запустити контейнери та встановити залежності
-
-Перший запуск або після змін у `Dockerfile.php`:
+### 3. Зібрати образи та запустити контейнери
 
 ```bash
 docker compose build php
@@ -153,111 +145,54 @@ docker compose exec php composer install
 ```
 
 ### 4. Налаштувати базу даних та ключі JWT
+
 ```bash
-# Виконати міграції
 docker compose exec php php bin/console doctrine:migrations:migrate --no-interaction
-
-# Завантажити тестові дані (категорії, товари, користувачі)
 docker compose exec php php bin/console doctrine:fixtures:load --no-interaction
-
-# Згенерувати ключі для JWT
 docker compose exec php php bin/console lexik:jwt:generate-keypair
 ```
 
-Тепер сайт доступний за адресою: [http://localhost:8080](http://localhost:8080)
+Сайт доступний за адресою: [http://localhost:8080](http://localhost:8080)
 
 ---
 
-## 🔐 OAuth 2.0 Аутентифікація
+## Аутентифікація
 
-### Вхід через Google
-
-#### Налаштування Google Cloud Console:
-1. Відкрийте [console.cloud.google.com](https://console.cloud.google.com)
-2. Перейдіть в **APIs & Services → Credentials**
-3. Натисніть **Create Credentials → OAuth 2.0 Client ID**
-4. Тип: **Web application**
-5. Додайте в **Authorized redirect URIs**:
-   ```
-   http://localhost:8080/auth/google/callback
-   ```
-6. Збережіть `Client ID` та `Client Secret` в `.env`
-
-#### Використання:
-- Відкрийте [http://localhost:8080/login](http://localhost:8080/login)
-- Натисніть кнопку **"Sign in with Google"**
-- Авторизуйтесь через Google акаунт
-- Після успішного входу ви будете перенаправлені на головну сторінку
-
----
-
-### Вхід через GitHub
-
-#### Налаштування GitHub OAuth App:
-1. Відкрийте [github.com/settings/developers](https://github.com/settings/developers)
-2. Натисніть **New OAuth App**
-3. Заповніть форму:
-   - **Application name**: `Task-21`
-   - **Homepage URL**: `http://localhost:8080`
-   - **Authorization callback URL**: `http://localhost:8080/auth/github/callback`
-4. Збережіть `Client ID` та `Client Secret` в `.env`
-
-#### Використання:
-- Відкрийте [http://localhost:8080/login](http://localhost:8080/login)
-- Натисніть кнопку **"Sign in with GitHub"**
-- Авторизуйтесь через GitHub акаунт
-- Після успішного входу ви будете перенаправлені на головну сторінку
-
----
-
-## 🔑 Аутентифікація через JWT
-
-API захищено JWT-токенами. Для доступу до захищених ресурсів потрібно отримати токен.
-
-### 1. Отримання токена
-
-Відправте POST-запит на `/api/login`:
+### JWT API
 
 ```bash
+# Отримати токен
 curl -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin@example.com", "password": "admin123"}'
+
+# Використати токен
+curl http://localhost:8080/api/products \
+  -H "Authorization: Bearer <ваш_токен>"
 ```
 
-**Відповідь:**
-```json
-{"token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9..."}
-```
-
-### 2. Використання токена
-
-Додайте заголовок до кожного захищеного запиту:
-```
-Authorization: Bearer <ваш_токен>
-```
-
-### 3. Дані за замовчуванням (тестові)
+### Тестові облікові дані
 
 | Роль | Email | Пароль |
-|------|-------|--------|
+|---|---|---|
 | Адміністратор | `admin@example.com` | `admin123` |
 | Користувач | `user@example.com` | `user123` |
 
+### OAuth 2.0
+
+- **Google**: [console.cloud.google.com](https://console.cloud.google.com) → Credentials → OAuth 2.0 Client ID
+- **GitHub**: [github.com/settings/developers](https://github.com/settings/developers) → New OAuth App
+
+Callback URL для обох: `http://localhost:8080/auth/{google|github}/callback`
+
 ---
 
-## 📚 Документація API (Swagger UI)
+## API документація
 
-Відкрийте в браузері: [http://localhost:8080/api/docs](http://localhost:8080/api/docs)
+Swagger UI: [http://localhost:8080/api/docs](http://localhost:8080/api/docs)
 
-1. Натисніть кнопку **Authorize** (🔓 вгорі праворуч).
-2. Введіть токен у форматі: `Bearer <ваш_токен>`.
-3. Натисніть **Authorize** → **Close**.
-4. Тестуйте будь-які ендпоінти.
-
-### Доступні ресурси API
-
-| Ресурс | Ендпоінт | Методи |
-|--------|----------|--------|
+| Ресурс | Endpoint | Методи |
+|---|---|---|
 | Категорії | `/api/categories` | GET, POST, PATCH, DELETE |
 | Товари | `/api/products` | GET, POST, PATCH, DELETE |
 | Атрибути товарів | `/api/product_attributes` | GET, POST, PATCH, DELETE |
@@ -265,118 +200,65 @@ Authorization: Bearer <ваш_токен>
 | Елементи замовлень | `/api/order_items` | GET, POST, PATCH, DELETE |
 | Користувачі | `/api/users` | GET, POST |
 
-### Формати відповідей
-
-API підтримує кілька форматів. Вкажіть потрібний в заголовку `Accept`:
-
-| Формат | Accept Header |
-|--------|--------------|
-| JSON | `application/json` |
-| JSON-LD | `application/ld+json` |
-| XML | `application/xml` |
+Підтримувані формати: `application/json`, `application/ld+json`, `application/xml`
 
 ---
 
-## 📁 Структура проекту
+## Структура проекту
 
 ```
 src/
-├── Cart/Domain/Entity/          # Сутності кошика
-├── Catalog/Domain/Entity/       # Товари, категорії, атрибути
-├── Order/Domain/Entity/         # Замовлення та елементи замовлень
-├── User/Domain/Entity/          # Користувачі
-├── Storage/                     # Абстракція файлового сховища (Flysystem, S3/local)
-├── Controller/                  # Контролери (веб + API)
-│   ├── GoogleAuthController.php # OAuth контролер для Google
-│   └── GitHubAuthController.php # OAuth контролер для GitHub
-├── Repository/                  # Репозиторії Doctrine
-├── Service/                     # Бізнес-логіка (CartService, ProductImageService, ProductImagePresignService)
-├── EventListener/               # Слухачі подій (LoginListener)
-└── DataFixtures/                # Тестові дані
+├── Catalog/Domain/Entity/    Продукти, категорії, атрибути
+├── Cart/Domain/Entity/       Кошик та елементи кошика
+├── Order/Domain/Entity/      Замовлення та елементи замовлень
+├── User/Domain/Entity/       Користувачі
+├── Export/                   Async export jobs (Saga, handlers, formatters)
+├── Storage/                  Абстракція файлового сховища (S3 / local)
+├── Controller/               HTTP контролери (веб + адмін + OAuth)
+├── Repository/               Doctrine репозиторії
+├── Service/                  Бізнес-логіка (CartService, ProductImageService)
+└── EventListener/            LoginListener (міграція кошика при вході)
+
+docs/
+├── microservices-architecture.md   Мікросервісна архітектура (Task 24)
+├── event-catalog.md                Каталог подій RabbitMQ (Task 24)
+└── STORAGE_SETUP.md                Налаштування S3 / local storage (Task 22)
 ```
 
 ---
 
-## 🧪 Тестування
+## Тестування
 
-### Запустити всі тести:
 ```bash
+# Всі тести
 docker compose exec php php bin/phpunit
-```
 
-### Запустити тільки OAuth тести:
-```bash
-docker compose exec php php bin/phpunit tests/Functional/Controller/OAuthControllerTest.php
-```
+# За суітами
+docker compose exec php php bin/phpunit --testsuite Unit
+docker compose exec php php bin/phpunit --testsuite Functional
 
-### Запустити Unit тести:
-```bash
-docker compose exec php php bin/phpunit tests/Unit/
-```
-
-### Тести сховища (Task 22):
-```bash
+# Окремі директорії
 docker compose exec php php bin/phpunit tests/Unit/Storage/
-```
-
-### Тести адмінки (presign, CRUD):
-```bash
 docker compose exec php php bin/phpunit tests/Functional/Admin/
-```
 
-### Приклад успішного прогону:
-```
-OK (75 tests, 174 assertions)
-```
-*(фактичні числа залежать від версії тестів)*
-
-### Діагностика S3:
-```bash
+# Діагностика S3
 docker compose exec php php bin/console app:verify-storage
 ```
-Показує STORAGE_TYPE, регіон, бакет і список об'єктів `products/*` у S3.
 
 ---
 
-## 🌐 Production Розгортання
+## Використані пакети
 
-Додаток розгорнуто на DigitalOcean VPS з SSL сертифікатом:
-
-**URL**: [https://e-commerce.it.com](https://e-commerce.it.com)
-
-### Налаштування для Production:
-
-1. **SSL сертифікат** (Let's Encrypt):
-```bash
-certbot certonly --standalone -d e-commerce.it.com -d www.e-commerce.it.com
-```
-
-2. **Оновіть `.env`** на сервері:
-```env
-DEFAULT_URI=https://e-commerce.it.com
-GOOGLE_REDIRECT_URI=https://e-commerce.it.com/auth/google/callback
-GITHUB_REDIRECT_URI=https://e-commerce.it.com/auth/github/callback
-```
-
-3. **Запустіть контейнери**:
-```bash
-docker compose up -d
-docker compose exec php php bin/console doctrine:migrations:migrate --no-interaction
-```
-
-4. **Для S3** на продакшні налаштуйте CORS на бакеті (`AllowedOrigins`: домен вашого сайту) та IAM-політику для `products/*`.
-
-
-## 📦 Використані пакети
-
-| Пакет | Версія | Призначення |
-|-------|--------|-------------|
-| `aws/aws-sdk-php` | ^3.0 | AWS SDK (S3-клієнт, presigned URL) |
-| `league/flysystem` | 3.x | Абстракція файлової системи |
-| `league/flysystem-aws-s3-v3` | 3.x | Адаптер Flysystem для S3 |
-| `league/oauth2-google` | ^4.1 | Google OAuth 2.0 |
-| `league/oauth2-github` | ^3.1 | GitHub OAuth 2.0 |
-| `lexik/jwt-authentication-bundle` | * | JWT аутентифікація |
-| `api-platform/core` | ^4.2 | REST API |
-| `easycorp/easyadmin-bundle` | ^4.27 | Адмін-панель |
-| `doctrine/orm` | ^3.6 | ORM |
+| Пакет | Призначення |
+|---|---|
+| `symfony/framework-bundle` ^7.4 | Основний фреймворк |
+| `api-platform/core` ^4.2 | REST API (OpenAPI 3.0) |
+| `easycorp/easyadmin-bundle` ^4.27 | Адмін-панель |
+| `lexik/jwt-authentication-bundle` | JWT автентифікація |
+| `doctrine/orm` ^3.6 | ORM |
+| `league/oauth2-google` ^4.1 | Google OAuth 2.0 |
+| `league/oauth2-github` ^3.1 | GitHub OAuth 2.0 |
+| `aws/aws-sdk-php` ^3.0 | AWS SDK (S3, presigned URL) |
+| `league/flysystem` 3.x | Абстракція файлової системи |
+| `league/flysystem-aws-s3-v3` 3.x | Flysystem адаптер для S3 |
+| `symfony/messenger` | Async черга повідомлень |
