@@ -3,16 +3,51 @@ stages:
 
 deploy:
   stage: deploy
+  timeout: 10 minutes
   script:
-    - rsync -av --exclude='.git' $CI_PROJECT_DIR/ /var/www/task-23/
-    - cd /var/www/task-23
+    - rsync -av --exclude='.git' $CI_PROJECT_DIR/ /var/www/task-24/
+    - cd /var/www/task-24
+
+    # Start primary DB first and wait with a hard limit
     - docker compose up -d database
-    - until docker compose exec -T database pg_isready -U app -q; do sleep 2; done
+    - |
+      i=0
+      until docker compose exec -T database pg_isready -U app -q; do
+        i=$((i+1))
+        if [ $i -ge 30 ]; then
+          echo "Primary DB not ready after 60s"
+          docker compose logs database --tail=20
+          exit 1
+        fi
+        echo "Waiting for primary DB... ($i/30)"
+        sleep 2
+      done
+
+    # Create replication user (idempotent)
     - docker compose exec -T database psql -U app -c "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
+
+    # Start remaining services
     - docker compose up -d
-    - docker compose exec -T php composer install --no-scripts
-    - i=0; until docker compose exec -T database-replica pg_isready -U app -q; do i=$((i+1)); if [ $i -ge 40 ]; then echo "Replica not ready after 2min, aborting"; docker compose logs database-replica --tail=20; exit 1; fi; echo "Waiting for replica... ($i/40)"; sleep 3; done
+
+    # Install dependencies
+    - docker compose exec -T php composer install --no-interaction --no-scripts
+
+    # Wait for replica with hard limit
+    - |
+      i=0
+      until docker compose exec -T database-replica pg_isready -U app -q; do
+        i=$((i+1))
+        if [ $i -ge 40 ]; then
+          echo "Replica not ready after 2min — continuing without replica"
+          docker compose logs database-replica --tail=20
+          break
+        fi
+        echo "Waiting for replica... ($i/40)"
+        sleep 3
+      done
+
+    # Run migrations and clear cache
     - docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
-    - docker compose exec -T php rm -rf var/cache/*
+    - docker compose exec -T php php bin/console cache:clear --no-warmup
   only:
     - develop
