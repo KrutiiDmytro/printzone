@@ -1,0 +1,1021 @@
+# Мікросервісна Архітектура — Task-24 E-Commerce
+
+## Зміст
+
+1. [Поточний стан (As-Is)](#1-поточний-стан-as-is)
+2. [Цільова архітектура (To-Be)](#2-цільова-архітектура-to-be)
+3. [Межі сервісів (DDD Bounded Contexts)](#3-межі-сервісів-ddd-bounded-contexts)
+4. [Дизайн сервісів](#4-дизайн-сервісів)
+   - [4.1 User Service](#41-user-service)
+   - [4.2 Catalog Service](#42-catalog-service)
+   - [4.3 Cart Service](#43-cart-service)
+   - [4.4 Order Service](#44-order-service)
+   - [4.5 Payment Service](#45-payment-service)
+   - [4.6 Delivery Service](#46-delivery-service)
+   - [4.7 Notification Service](#47-notification-service)
+   - [4.8 Export Service](#48-export-service)
+   - [4.9 Storage Service](#49-storage-service)
+5. [Міжсервісна комунікація](#5-міжсервісна-комунікація)
+6. [BFF шар](#6-bff-шар)
+7. [Health Check API](#7-health-check-api)
+8. [Спостережуваність](#8-спостережуваність)
+9. [Безпека](#9-безпека)
+10. [Стратегія міграції](#10-стратегія-міграції)
+
+---
+
+## 1. Поточний стан (As-Is)
+
+Додаток є **модульним монолітом** (Symfony 7.4), вже організованим за DDD-принципами з п'ятьма обмеженими контекстами, що спільно використовують одну базу даних PostgreSQL та один асинхронний воркер.
+
+```
+Єдиний Symfony додаток
+    ├── src/Catalog/    → Продукти, Категорії, Атрибути продуктів
+    ├── src/Cart/       → Кошик, Елементи кошика (сесія + БД)
+    ├── src/Order/      → Замовлення, Елементи замовлення
+    ├── src/User/       → Користувачі, OAuth (Google, GitHub)
+    ├── src/Export/     → Завдання експорту (async CSV/JSON/XML)
+    └── src/Storage/    → FileStorageInterface (S3 / Local)
+
+Єдина PostgreSQL (всі таблиці в одній схемі)
+Єдиний Messenger Воркер (всі черги: export, mail, SMS)
+Єдиний S3 Bucket (зображення продуктів + файли експорту)
+```
+
+### Точки зв'язності для усунення
+
+| Зв'язність | Поточна реалізація | Проблема |
+|---|---|---|
+| `order_items.product_id` → `products` | Doctrine FK, спільна БД | Жорстка міждоменна залежність |
+| `cart_items.product_id` → `products` | Doctrine FK, спільна БД | Жорстка міждоменна залежність |
+| `orders.user_id` → `users` | Doctrine FK, спільна БД | Всі домени залежать від таблиці користувачів |
+| `carts.user_id` → `users` | Doctrine FK, спільна БД | Всі домени залежать від таблиці користувачів |
+| `ProcessExportHandler` → всі репозиторії | Прямі Doctrine запити | Експорт читає всі домени напряму |
+| `LoginListener` → `CartService` | Синхронний виклик | Міждоменна синхронна зв'язність |
+
+---
+
+## 2. Цільова архітектура (To-Be)
+
+### Загальна схема системи
+
+```
+┌──────────────┐  ┌───────────────┐  ┌──────────────┐
+│  BFF Mobile  │  │  BFF Desktop  │  │  BFF Public  │
+│   (порт 8010)│  │   (порт 8011) │  │  (порт 8012) │
+└──────┬───────┘  └───────┬───────┘  └──────┬───────┘
+       └──────────────────┼──────────────────┘
+                          │ HTTP / JWT
+              ┌───────────▼───────────┐
+              │      RabbitMQ         │  ← асинхронні події
+              └───────────┬───────────┘
+       ┌──────────────────┼───────────────────────┐
+       │        │         │          │            │
+┌──────▼──┐ ┌───▼────┐ ┌──▼─────┐ ┌──▼──────┐ ┌───▼─────┐
+│  User   │ │Catalog │ │  Cart  │ │  Order  │ │ Payment │
+│ Service │ │Service │ │Service │ │ Service │ │ Service │
+│  :8001  │ │ :8002  │ │ :8003  │ │  :8004  │ │  :8005  │
+└──────┬──┘ └───┬────┘ └──┬─────┘ └──┬──────┘ └───┬─────┘
+       │        │         │          │            │
+  БД:users БД:catalog  БД:cart   БД:orders    БД:payments
+
+┌──────────────┐  ┌────────────────┐  ┌──────────────┐
+│  Delivery    │  │  Notification  │  │    Export    │
+│ Service :8006│  │ Service :8007  │  │ Service :8008│
+└──────┬───────┘  └───────┬────────┘  └──────┬───────┘
+       │            stateless                │
+  БД:delivery                           БД:exports
+                                             │
+                                      ┌──────▼───────┐
+                                      │   Storage    │
+                                      │ Service :8009│
+                                      └──────┬───────┘
+                                         S3 / Local
+```
+
+### Цільова топологія Docker Compose
+
+```yaml
+services:
+  # BFF шар
+  bff-mobile:    { порт: 8010 }
+  bff-desktop:   { порт: 8011 }
+  bff-public:    { порт: 8012 }
+
+  # Основні сервіси
+  user-service:         { порт: 8001, db: db-user }
+  catalog-service:      { порт: 8002, db: db-catalog }
+  cart-service:         { порт: 8003, db: db-cart }
+  order-service:        { порт: 8004, db: db-order }
+  payment-service:      { порт: 8005, db: db-payment }
+  delivery-service:     { порт: 8006, db: db-delivery }
+  notification-service: { порт: 8007, stateless: true }
+  export-service:       { порт: 8008, db: db-export }
+  export-worker:        { команда: messenger:consume async }
+  storage-service:      { порт: 8009, stateless: true }
+
+  # Інфраструктура
+  rabbitmq:    { порт: 5672, ui: 15672 }
+  db-user:     { postgres: 16 }
+  db-catalog:  { postgres: 16 }
+  db-cart:     { postgres: 16 }
+  db-order:    { postgres: 16 }
+  db-payment:  { postgres: 16 }
+  db-delivery: { postgres: 16 }
+  db-export:   { postgres: 16 }
+  mailpit:     { smtp: 1025, ui: 8025 }
+  jaeger:      { ui: 16686 }
+```
+
+---
+
+## 3. Межі сервісів (DDD Bounded Contexts)
+
+### Карта обмежених контекстів
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   Контекст Користувача                    │
+│  Постачальник ідентичності для всіх інших контекстів     │
+│  Видає JWT токени; інші сервіси перевіряють публічний ключ│
+└────────────────────────┬─────────────────────────────────┘
+                         │ JWT claims (userId, roles)
+     ┌───────────────────┼────────────────────┐
+     ▼                   ▼                    ▼
+┌──────────┐      ┌──────────┐        ┌──────────────┐
+│ Catalog  │◄─────│   Cart   │        │    Order     │
+│ Контекст │ HTTP │ Контекст │──────► │  Контекст    │
+│          │      │          │знімок  │              │
+└──────────┘      └──────────┘        └──────┬───────┘
+                                             │ події
+                                      ┌──────▼───────┐
+                                      │   Payment    │
+                                      │  Контекст    │
+                                      └──────┬───────┘
+                                             │ події
+                                      ┌──────▼───────┐
+                                      │   Delivery   │
+                                      │  Контекст    │
+                                      └──────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│  Контекст Сповіщень — підписується на всі події          │
+│  Контекст Експорту — читає всі контексти через HTTP API  │
+│  Контекст Зберігання — спільна інфраструктура            │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Правила ізоляції
+
+1. Сервіс **ніколи** не імпортує клас Entity іншого сервісу
+2. Сервіс **ніколи** не виконує JOIN через межі сервісів
+3. Дані іншого сервісу отримуються виключно через **HTTP API або повідомлення подій**
+4. Посилання між сервісами використовують лише **рядки UUID** — жодних FK constraints у БД
+5. Коли сервісу потрібні дані з іншого домену, він зберігає **знімок** (денормалізовану копію)
+
+---
+
+## 4. Дизайн сервісів
+
+---
+
+### 4.1 User Service
+
+**Відповідальності**: реєстрація, автентифікація, видача JWT, OAuth (Google/GitHub), профілі користувачів
+
+**API Endpoints**
+
+```
+POST   /api/auth/register           Реєстрація через email + пароль
+POST   /api/auth/login              Видача JWT access + refresh токенів
+POST   /api/auth/refresh            Оновлення access токена через refresh токен
+POST   /api/auth/logout             Відкликання refresh токена
+GET    /api/auth/google             Перенаправлення на Google OAuth
+GET    /api/auth/google/callback    Обробка Google OAuth callback
+GET    /api/auth/github             Перенаправлення на GitHub OAuth
+GET    /api/auth/github/callback    Обробка GitHub OAuth callback
+GET    /api/users/{id}              Отримання профілю (ROLE_USER: лише власний)
+PUT    /api/users/{id}              Оновлення профілю
+GET    /api/users                   Список всіх користувачів (лише ROLE_ADMIN)
+GET    /health/live                 Liveness probe
+GET    /health/ready                Readiness probe (БД + RabbitMQ)
+```
+
+**Схема даних**
+
+```sql
+CREATE TABLE users (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email      VARCHAR(180) UNIQUE NOT NULL,
+    password   VARCHAR(255),                          -- NULL для OAuth користувачів
+    full_name  VARCHAR(255),
+    roles      JSONB NOT NULL DEFAULT '["ROLE_USER"]',
+    google_id  VARCHAR(255),
+    github_id  VARCHAR(255),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_users_email     ON users(email);
+CREATE INDEX        idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;
+CREATE INDEX        idx_users_github_id ON users(github_id) WHERE github_id IS NOT NULL;
+```
+
+**Публіковані події**
+
+| Подія | Payload | Підписники |
+|---|---|---|
+| `UserRegistered` | `{userId, email, fullName}` | Notification |
+| `UserLoggedIn` | `{userId, email, sessionId}` | Cart (міграція), Notification |
+| `UserUpdated` | `{userId, changedFields[]}` | Notification |
+
+**Споживані події**: відсутні
+
+**Зовнішні залежності**: Google OAuth API, GitHub OAuth API, RSA ключова пара (JWT RS256)
+
+---
+
+### 4.2 Catalog Service
+
+**Відповідальності**: продукти, категорії, атрибути продуктів, управління зображеннями, резервування запасів
+
+**API Endpoints**
+
+```
+GET    /api/products                Список продуктів (фільтри: category, price, stock, featured)
+GET    /api/products/featured       Рекомендовані продукти для головної сторінки
+GET    /api/products/{id}           Деталі продукту
+POST   /api/products                Створення продукту (ROLE_ADMIN)
+PUT    /api/products/{id}           Оновлення продукту (ROLE_ADMIN)
+DELETE /api/products/{id}           Видалення продукту (ROLE_ADMIN)
+POST   /api/products/{id}/presign   Отримання S3 presigned URL для завантаження (ROLE_ADMIN)
+GET    /api/categories              Дерево категорій
+GET    /api/categories/{slug}       Категорія з її продуктами
+POST   /api/categories              Створення категорії (ROLE_ADMIN)
+PUT    /api/categories/{id}         Оновлення категорії (ROLE_ADMIN)
+DELETE /api/categories/{id}         Видалення категорії (ROLE_ADMIN)
+GET    /health/live                 Liveness probe
+GET    /health/ready                Readiness probe (БД + RabbitMQ + Storage)
+```
+
+**Схема даних**
+
+```sql
+CREATE TABLE categories (
+    id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name      VARCHAR(255) NOT NULL,
+    slug      VARCHAR(255) UNIQUE NOT NULL,
+    parent_id UUID REFERENCES categories(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_categories_parent ON categories(parent_id);
+CREATE INDEX idx_categories_slug   ON categories(slug);
+
+CREATE TABLE products (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    name        VARCHAR(255) NOT NULL,
+    description TEXT,
+    price       INTEGER NOT NULL,           -- зберігається в центах
+    stock       INTEGER NOT NULL DEFAULT 0,
+    image       VARCHAR(500),
+    is_featured BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_featured ON products(is_featured) WHERE is_featured = TRUE;
+CREATE INDEX idx_products_stock    ON products(stock)        WHERE stock > 0;
+
+CREATE TABLE product_attributes (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    name       VARCHAR(255) NOT NULL,
+    value      VARCHAR(500) NOT NULL
+);
+CREATE INDEX idx_product_attributes_product ON product_attributes(product_id);
+```
+
+**Публіковані події**
+
+| Подія | Payload | Підписники |
+|---|---|---|
+| `ProductCreated` | `{productId, name, price, stock}` | — |
+| `ProductUpdated` | `{productId, changedFields[]}` | Cart (оновлення ціни) |
+| `ProductDeleted` | `{productId}` | Cart, Notification |
+| `StockReserved` | `{productId, quantity, orderId}` | Order (крок саги 2→3) |
+| `StockReservationFailed` | `{productId, quantity, orderId, reason}` | Order (компенсація саги) |
+| `StockReleased` | `{productId, quantity, orderId}` | — |
+
+**Споживані події**
+
+| Подія | Дія |
+|---|---|
+| `OrderCreated` | Резервування запасів для всіх позицій замовлення |
+| `OrderCancelled` | Звільнення зарезервованих запасів |
+
+**Зовнішні залежності**: Storage Service (зображення продуктів)
+
+---
+
+### 4.3 Cart Service
+
+**Відповідальності**: кошик покупок (гостьова сесія + авторизований БД), міграція кошика при вході
+
+**API Endpoints**
+
+```
+GET    /api/cart                    Отримання поточного кошика (гість або авторизований)
+POST   /api/cart/items              Додавання товару {productId, quantity}
+PUT    /api/cart/items/{itemId}     Оновлення кількості {quantity}
+DELETE /api/cart/items/{itemId}     Видалення позиції
+DELETE /api/cart                    Очищення кошика
+POST   /api/cart/migrate            Міграція гостьового кошика → користувача (внутрішній)
+GET    /api/cart/summary            Знімок для Order Service під час оформлення замовлення
+GET    /health/live                 Liveness probe
+GET    /health/ready                Readiness probe (БД + RabbitMQ + Catalog доступний)
+```
+
+**Схема даних**
+
+```sql
+CREATE TABLE carts (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID,                          -- NULL для гостьових кошиків
+    session_id VARCHAR(128),                  -- NULL для авторизованих кошиків
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_cart_user    UNIQUE (user_id),
+    CONSTRAINT uq_cart_session UNIQUE (session_id),
+    CONSTRAINT chk_cart_owner  CHECK (
+        (user_id IS NOT NULL AND session_id IS NULL) OR
+        (user_id IS NULL    AND session_id IS NOT NULL)
+    )
+);
+
+CREATE TABLE cart_items (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cart_id      UUID NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+    product_id   UUID NOT NULL,                 -- UUID посилання, без FK (міжсервісний)
+    product_name VARCHAR(255) NOT NULL,         -- знімок з Catalog Service
+    price        INTEGER NOT NULL,              -- знімок у центах
+    quantity     INTEGER NOT NULL CHECK (quantity > 0)
+);
+CREATE INDEX idx_cart_items_cart    ON cart_items(cart_id);
+CREATE INDEX idx_cart_items_product ON cart_items(product_id);
+```
+
+**Публіковані події**
+
+| Подія | Payload | Підписники |
+|---|---|---|
+| `CartCleared` | `{cartId, userId}` | — |
+| `CartMigrated` | `{sessionId, userId, cartId}` | — |
+
+**Споживані події**
+
+| Подія | Дія |
+|---|---|
+| `UserLoggedIn` | Запуск міграції сесійного кошика → кошик користувача |
+| `ProductUpdated` | Оновлення знімку ціни при зміні ціни продукту |
+
+**Зовнішні залежності**: Catalog Service HTTP (`GET /api/products/{id}` — валідація продукту та отримання актуальної ціни при додаванні в кошик)
+
+---
+
+### 4.4 Order Service
+
+**Відповідальності**: створення замовлень, життєвий цикл статусів, оркестрація оформлення через Сагу
+
+**API Endpoints**
+
+```
+POST   /api/orders                  Створення замовлення (запускає Checkout Saga)
+GET    /api/orders                  Список замовлень поточного користувача
+GET    /api/orders/{id}             Деталі замовлення
+PUT    /api/orders/{id}/status      Зміна статусу (ROLE_ADMIN)
+GET    /api/orders/admin            Всі замовлення з фільтрами (ROLE_ADMIN)
+GET    /health/live                 Liveness probe
+GET    /health/ready                Readiness probe (БД + RabbitMQ)
+```
+
+**POST /api/orders — Тіло запиту**
+
+```json
+{
+  "shippingAddress": {
+    "street": "вул. Хрещатик 1",
+    "city": "Київ",
+    "zip": "01001",
+    "country": "UA"
+  }
+}
+```
+
+Позиції кошика отримуються з Cart Service (`GET /api/cart/summary`) під час оформлення.
+
+**Схема даних**
+
+```sql
+CREATE TYPE order_status AS ENUM (
+    'PENDING', 'PAYMENT_PENDING', 'PAID',
+    'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'
+);
+
+CREATE TABLE orders (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id          UUID NOT NULL,              -- UUID посилання, без FK (міжсервісний)
+    user_email       VARCHAR(180) NOT NULL,      -- знімок
+    status           order_status NOT NULL DEFAULT 'PENDING',
+    total_amount     INTEGER NOT NULL,           -- центи
+    shipping_address JSONB NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+CREATE INDEX idx_orders_status  ON orders(status);
+CREATE INDEX idx_orders_created ON orders(created_at DESC);
+
+CREATE TABLE order_items (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id     UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    product_id   UUID NOT NULL,                 -- UUID посилання, без FK (міжсервісний)
+    product_name VARCHAR(255) NOT NULL,         -- знімок
+    quantity     INTEGER NOT NULL CHECK (quantity > 0),
+    price        INTEGER NOT NULL               -- знімок у центах на момент замовлення
+);
+CREATE INDEX idx_order_items_order   ON order_items(order_id);
+CREATE INDEX idx_order_items_product ON order_items(product_id);
+```
+
+**Checkout Saga (Хореографія)**
+
+```
+Крок 1  OrderService     Створює Order (PENDING)
+        Публікує ───────► OrderCreated {orderId, userId, items[], totalAmount}
+
+Крок 2  CatalogService   Слухає OrderCreated
+        Резервує запаси для кожної позиції
+        Публікує ───────► StockReserved {orderId, items[]}
+                    АБО ── StockReservationFailed {orderId, productId, reason}
+
+Крок 3а OrderService     Слухає StockReserved
+        Order → PAYMENT_PENDING
+        Публікує ───────► PaymentRequested {orderId, amount, userId}
+
+Крок 3б OrderService     Слухає StockReservationFailed
+        Order → CANCELLED (компенсація: запаси ще не були зарезервовані)
+        Публікує ───────► OrderCancelled {orderId, reason: 'out_of_stock'}
+
+Крок 4  PaymentService   Слухає PaymentRequested
+        Ініціює оплату через провайдер
+
+Крок 5а OrderService     Слухає PaymentSucceeded
+        Order → PAID
+        Публікує ───────► OrderPaid {orderId, userId}
+
+Крок 5б OrderService     Слухає PaymentFailed
+        Order → CANCELLED
+        Публікує ───────► OrderCancelled {orderId, reason: 'payment_failed'}
+
+Крок 6  CatalogService   Слухає OrderCancelled
+        Звільняє зарезервовані запаси (компенсація)
+```
+
+**Публіковані події**
+
+| Подія | Payload |
+|---|---|
+| `OrderCreated` | `{orderId, userId, userEmail, items[], totalAmount, shippingAddress}` |
+| `OrderPaid` | `{orderId, userId, paidAt}` |
+| `OrderCancelled` | `{orderId, reason, items[]}` |
+| `OrderStatusChanged` | `{orderId, previousStatus, newStatus, changedAt}` |
+
+**Споживані події**
+
+| Подія | Дія |
+|---|---|
+| `StockReserved` | Просування саги: Order → PAYMENT_PENDING |
+| `StockReservationFailed` | Компенсація: Order → CANCELLED |
+| `PaymentSucceeded` | Просування саги: Order → PAID |
+| `PaymentFailed` | Компенсація: Order → CANCELLED |
+
+---
+
+### 4.5 Payment Service
+
+**Відповідальності**: платіжні транзакції, webhook від провайдерів, повернення коштів
+
+**API Endpoints**
+
+```
+POST   /api/payments                Ініціація оплати (внутрішній, з Order Saga)
+GET    /api/payments/{id}           Статус оплати
+POST   /api/payments/{id}/refund    Повернення коштів (ROLE_ADMIN)
+POST   /api/webhooks/stripe         Приймання Stripe webhook (підписаний)
+POST   /api/webhooks/liqpay         Приймання LiqPay webhook (підписаний HMAC)
+GET    /health/live                 Liveness probe
+GET    /health/ready                Readiness probe (БД + RabbitMQ + Stripe API)
+```
+
+**Схема даних**
+
+```sql
+CREATE TYPE payment_status   AS ENUM ('PENDING','PROCESSING','SUCCEEDED','FAILED','REFUNDED');
+CREATE TYPE payment_provider AS ENUM ('stripe','paypal','liqpay');
+
+CREATE TABLE payments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id        UUID NOT NULL UNIQUE,
+    amount          INTEGER NOT NULL,               -- центи
+    currency        CHAR(3) NOT NULL DEFAULT 'EUR',
+    status          payment_status NOT NULL DEFAULT 'PENDING',
+    provider        payment_provider,
+    provider_tx_id  VARCHAR(255),
+    idempotency_key VARCHAR(255) UNIQUE NOT NULL,   -- захист від дублювання webhook
+    metadata        JSONB,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_payments_order_id ON payments(order_id);
+CREATE INDEX idx_payments_status   ON payments(status);
+
+CREATE TABLE refunds (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    payment_id      UUID NOT NULL REFERENCES payments(id),
+    amount          INTEGER NOT NULL,
+    reason          TEXT,
+    status          VARCHAR(50),
+    provider_ref_id VARCHAR(255),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+**Публіковані події**
+
+| Подія | Payload |
+|---|---|
+| `PaymentSucceeded` | `{paymentId, orderId, amount, currency}` |
+| `PaymentFailed` | `{paymentId, orderId, reason}` |
+| `RefundProcessed` | `{refundId, paymentId, amount}` |
+
+**Споживані події**
+
+| Подія | Дія |
+|---|---|
+| `PaymentRequested` | Ініціація транзакції через провайдер |
+
+**Ключовий патерн**: **Idempotency Key** — кожен webhook обробляється рівно один раз завдяки унікальному обмеженню `idempotency_key`.
+
+**Зовнішні залежності**: Stripe API, LiqPay API
+
+---
+
+### 4.6 Delivery Service
+
+**Відповідальності**: створення відправлень, відстеження, інтеграція з логістичними провайдерами
+
+**API Endpoints**
+
+```
+POST   /api/shipments                    Створення відправлення (внутрішній)
+GET    /api/shipments/{id}               Статус відправлення
+GET    /api/shipments/order/{orderId}    Відправлення для замовлення
+GET    /api/shipments/{id}/tracking      Історія подій відстеження
+POST   /api/webhooks/novaposhta          Webhook від Нової Пошти
+GET    /health/live                      Liveness probe
+GET    /health/ready                     Readiness probe (БД + RabbitMQ + API Нової Пошти)
+```
+
+**Схема даних**
+
+```sql
+CREATE TYPE shipment_status AS ENUM (
+    'PENDING','PICKED_UP','IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED','FAILED'
+);
+
+CREATE TABLE shipments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id        UUID NOT NULL UNIQUE,
+    provider        VARCHAR(50) NOT NULL,    -- 'nova_poshta', 'ukrposhta', 'dhl'
+    tracking_number VARCHAR(100),
+    status          shipment_status NOT NULL DEFAULT 'PENDING',
+    address         JSONB NOT NULL,
+    estimated_at    DATE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Event Sourcing: незмінний лог відстеження, ніколи не оновлюється
+CREATE TABLE tracking_events (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    shipment_id UUID NOT NULL REFERENCES shipments(id),
+    status      VARCHAR(100) NOT NULL,
+    location    VARCHAR(255),
+    description TEXT,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_tracking_shipment ON tracking_events(shipment_id, occurred_at DESC);
+```
+
+**Публіковані події**
+
+| Подія | Payload |
+|---|---|
+| `ShipmentCreated` | `{shipmentId, orderId, trackingNumber, provider}` |
+| `TrackingUpdated` | `{shipmentId, orderId, status, location}` |
+| `ShipmentDelivered` | `{shipmentId, orderId, deliveredAt}` |
+
+**Споживані події**
+
+| Подія | Дія |
+|---|---|
+| `OrderPaid` | Створення відправлення для замовлення |
+
+**Ключовий патерн**: **Event Sourcing** для `tracking_events` — незмінний лог тільки для додавання. Історія статусів ніколи не перезаписується.
+
+**Зовнішні залежності**: API Нової Пошти, API Укрпошти, API DHL (Polling Scheduler для провайдерів без webhook)
+
+---
+
+### 4.7 Notification Service
+
+**Відповідальності**: централізована відправка email, SMS та push-сповіщень
+
+**API**: Відсутній публічний HTTP API — працює виключно як споживач подій.
+
+**Канали доставки**
+
+| Канал | Провайдер (dev) | Провайдер (prod) |
+|---|---|---|
+| Email | Mailpit (SMTP 1025) | AWS SES / SendGrid |
+| SMS | Лише логування | Twilio / Nexmo |
+| Push (iOS) | Лише логування | APNs |
+| Push (Android) | Лише логування | FCM |
+
+**Споживані події → Ініційоване сповіщення**
+
+| Подія | Сповіщення |
+|---|---|
+| `UserRegistered` | Привітальний email |
+| `OrderCreated` | Email підтвердження замовлення |
+| `PaymentSucceeded` | Email квитанція оплати |
+| `PaymentFailed` | Сповіщення про проблему (email + SMS) |
+| `ShipmentCreated` | Номер відстеження (email + SMS) |
+| `TrackingUpdated` | Оновлення статусу (push-сповіщення) |
+| `ShipmentDelivered` | Підтвердження доставки (email) |
+| `ExportJobCompleted` | Посилання для завантаження (email) |
+| `ExportJobFailed` | Повідомлення про помилку (email) |
+
+**Stateless**: Немає власної бази даних. Споживає події та відправляє сповіщення.
+
+---
+
+### 4.8 Export Service
+
+**Відповідальності**: управління асинхронними завданнями експорту, витягування даних, генерація файлів (CSV/JSON/XML)
+
+**API Endpoints**
+
+```
+POST   /api/exports                 Створення завдання {type, format, filters}
+GET    /api/exports                 Список завдань (ROLE_ADMIN)
+GET    /api/exports/{id}            Статус та метадані завдання
+GET    /api/exports/{id}/download   Завантаження готового файлу
+GET    /health/live                 Liveness probe
+GET    /health/ready                Readiness probe (БД + RabbitMQ + Storage)
+```
+
+**Схема даних**
+
+```sql
+CREATE TYPE export_type   AS ENUM ('products','orders','users');
+CREATE TYPE export_format AS ENUM ('csv','json','xml');
+CREATE TYPE export_status AS ENUM ('pending','processing','completed','failed');
+
+CREATE TABLE export_jobs (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type          export_type NOT NULL,
+    format        export_format NOT NULL,
+    status        export_status NOT NULL DEFAULT 'pending',
+    file_path     VARCHAR(500),
+    filters       JSONB,
+    requested_by  VARCHAR(180) NOT NULL,  -- email користувача (м'яке посилання, без FK)
+    error_message TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at  TIMESTAMPTZ
+);
+CREATE INDEX idx_export_jobs_status  ON export_jobs(status);
+CREATE INDEX idx_export_jobs_created ON export_jobs(created_at DESC);
+```
+
+**Процес асинхронної обробки**
+
+```
+POST /api/exports
+  → Зберегти ExportJob (статус: pending)
+  → Відправити ProcessExportMessage в RabbitMQ
+
+[Воркер] ProcessExportHandler отримує повідомлення
+  → Позначити: processing
+  → Посторінковий HTTP GET до відповідного сервісу:
+      products → GET /api/products?page=1&limit=500&{filters}
+      orders   → GET /api/orders/admin?page=1&limit=500&{filters}
+      users    → GET /api/users?page=1&limit=500&{filters}
+  → Форматувати дані (CsvFormatter / JsonFormatter / XmlFormatter)
+  → PUT файл в Storage Service: /api/storage/exports/{jobId}.{ext}
+  → Позначити: completed, зберегти file_path
+  → Опублікувати ExportJobCompleted
+
+При помилці:
+  → Позначити: failed, зберегти error_message
+  → Опублікувати ExportJobFailed
+```
+
+**Публіковані події**
+
+| Подія | Payload |
+|---|---|
+| `ExportJobCompleted` | `{jobId, filePath, requestedBy}` |
+| `ExportJobFailed` | `{jobId, errorMessage, requestedBy}` |
+
+**Зовнішні залежності**: Catalog Service API, Order Service API, User Service API, Storage Service
+
+---
+
+### 4.9 Storage Service
+
+**Відповідальності**: завантаження/отримання файлів, генерація S3 presigned URLs, підтримка локальної файлової системи
+
+**API Endpoints**
+
+```
+PUT    /api/storage/{key}           Завантаження файлу (multipart або raw body)
+GET    /api/storage/{key}           Отримання файлу або перенаправлення на S3
+DELETE /api/storage/{key}           Видалення файлу
+POST   /api/storage/presign         Presigned S3 PUT URL для прямого завантаження з браузера
+GET    /health/live                 Liveness probe
+GET    /health/ready                Перевірка з'єднання з S3
+```
+
+**Простори імен ключів**
+
+| Простір | Використовується | Приклад |
+|---|---|---|
+| `products/{id}-{filename}` | Catalog Service | `products/uuid-iphone.jpg` |
+| `exports/{type}/{format}/{jobId}.{ext}` | Export Service | `exports/orders/csv/uuid.csv` |
+
+**Stateless**: Немає власної бази даних. Обгортає S3 SDK (або локальну файлову систему) за єдиним HTTP API.
+
+**Зовнішні залежності**: AWS S3 (або локальна файлова система через змінну `STORAGE_TYPE`)
+
+---
+
+## 5. Міжсервісна комунікація
+
+### Синхронні HTTP виклики
+
+| Ініціатор | Отримувач | Endpoint | Коли |
+|---|---|---|---|
+| Cart Service | Catalog Service | `GET /api/products/{id}` | Додавання товару в кошик (валідація + ціна) |
+| Order Service | Cart Service | `GET /api/cart/summary` | Оформлення: отримання знімку кошика |
+| Export Service | Catalog Service | `GET /api/products` (посторінково) | Генерація експорту |
+| Export Service | Order Service | `GET /api/orders/admin` (посторінково) | Генерація експорту |
+| Export Service | User Service | `GET /api/users` (посторінково) | Генерація експорту |
+| Будь-який сервіс | Storage Service | `PUT/GET /api/storage/{key}` | Завантаження/отримання файлів |
+
+### Асинхронні події (RabbitMQ)
+
+RabbitMQ використовує **topic exchanges** для кожного домену: `user.events`, `catalog.events`, `cart.events`, `order.events`, `payment.events`, `delivery.events`, `export.events`
+
+Повний каталог подій зі схемами payload дивіться у [event-catalog.md](./event-catalog.md).
+
+### Автоматичний вимикач (Circuit Breaker)
+
+Застосовується до всіх синхронних HTTP викликів, де відмова залежного сервісу не повинна поширюватися:
+
+| Виклик | Поведінка при відмові |
+|---|---|
+| Cart → Catalog (додавання товару) | Повернути помилку: "Товар недоступний" |
+| Order → Cart (оформлення) | Повернути помилку: "Кошик недоступний, спробуйте ще раз" |
+| Export → будь-який сервіс | Позначити завдання як failed з описом помилки |
+
+---
+
+## 6. BFF Шар
+
+Кожен BFF є **тонким агрегаційним шаром**, відповідальним за: форматування специфічне для клієнта, тип автентифікації та агрегацію відповідей. Бізнес-логіка залишається в мікросервісах.
+
+### BFF Mobile (порт 8010)
+
+- Стиснутий payload (URL мініатюри, мінімальні поля)
+- Агрегація Product + Category в одній відповіді
+- Анонімний кошик через сесійний cookie
+- Реєстрація токена push-сповіщень
+- Оптимізовано для поганого з'єднання (`ETag`, `Cache-Control`)
+
+### BFF Desktop / Admin (порт 8011)
+
+- Повні вкладені об'єкти з пов'язаними даними
+- Маршрутизація EasyAdmin CRUD дій до відповідних сервісів
+- Автентифікація через сесійний cookie + пересилання JWT до сервісів
+- UI експорту проксіюється до Export Service
+
+### BFF Public API (порт 8012)
+
+- Версіонований REST: `/v1/`, `/v2/`
+- Автентифікація через API Key (додатково до JWT)
+- Суворе обмеження швидкості (нижче ніж для внутрішніх клієнтів)
+- Документація OpenAPI 3.0 за адресою `/v1/docs`
+
+---
+
+## 7. Health Check API
+
+Кожен сервіс надає два стандартних endpoint для Kubernetes проб.
+
+### Endpoints
+
+```
+GET /health/live   → 200 якщо процес живий (liveness probe)
+GET /health/ready  → 200 якщо сервіс готовий приймати трафік (readiness probe)
+```
+
+### Формат відповіді
+
+```json
+// 200 OK — справний
+{
+  "status": "ok",
+  "checks": {
+    "database":  { "status": "ok",    "latency_ms": 2 },
+    "rabbitmq":  { "status": "ok",    "latency_ms": 1 },
+    "storage":   { "status": "ok",    "latency_ms": 12 }
+  }
+}
+
+// 503 Service Unavailable — несправний
+{
+  "status": "error",
+  "checks": {
+    "database":  { "status": "error", "detail": "Connection refused" },
+    "rabbitmq":  { "status": "ok",    "latency_ms": 1 }
+  }
+}
+```
+
+### Матриця перевірок Readiness
+
+| Сервіс | БД | RabbitMQ | Зовнішні |
+|---|---|---|---|
+| User Service | ✅ | ✅ | — |
+| Catalog Service | ✅ | ✅ | Storage Service `/health/live` |
+| Cart Service | ✅ | ✅ | Catalog Service `/health/live` |
+| Order Service | ✅ | ✅ | — |
+| Payment Service | ✅ | ✅ | Доступність Stripe API |
+| Delivery Service | ✅ | ✅ | Доступність API Нової Пошти |
+| Notification Service | — | ✅ | Доступність SMTP |
+| Export Service | ✅ | ✅ | Storage Service `/health/live` |
+| Storage Service | — | — | S3 `HeadBucket` |
+
+### Інтеграція з Docker Compose
+
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost/health/live"]
+  interval: 10s
+  timeout: 5s
+  retries: 3
+  start_period: 30s
+
+depends_on:
+  catalog-service:
+    condition: service_healthy
+```
+
+### Реалізація на Symfony
+
+```php
+#[Route('/health/live', methods: ['GET'])]
+public function live(): JsonResponse
+{
+    return new JsonResponse(['status' => 'ok']);
+}
+
+#[Route('/health/ready', methods: ['GET'])]
+public function ready(Connection $db): JsonResponse
+{
+    $checks = [];
+    try {
+        $start = microtime(true);
+        $db->executeQuery('SELECT 1');
+        $checks['database'] = [
+            'status'     => 'ok',
+            'latency_ms' => (int) round((microtime(true) - $start) * 1000),
+        ];
+    } catch (\Throwable $e) {
+        $checks['database'] = ['status' => 'error', 'detail' => $e->getMessage()];
+        return new JsonResponse(['status' => 'error', 'checks' => $checks], 503);
+    }
+    return new JsonResponse(['status' => 'ok', 'checks' => $checks]);
+}
+```
+
+---
+
+## 8. Спостережуваність
+
+| Компонент | Інструмент | Призначення |
+|---|---|---|
+| **Розподілене трасування** | Jaeger | Трасування запитів через всі сервіси через заголовок `X-Trace-Id` |
+| **Централізоване логування** | Loki + Grafana | JSON структуровані логи агреговані з усіх сервісів |
+| **Метрики** | Prometheus + Grafana | RPS, p99 затримка, глибина черги, рівень помилок на сервіс |
+| **Health Checks** | `/health/live` + `/health/ready` | Kubernetes liveness/readiness проби |
+| **Сповіщення** | Grafana Alerts | Тригери на: платіжні помилки > 5%, глибина черги > 1000, сервіс недоступний |
+
+### Поширення трасування
+
+Кожен вхідний HTTP запит отримує заголовок `X-Trace-Id` (генерується BFF якщо відсутній). Кожен сервіс передає цей заголовок у всіх вихідних HTTP викликах та включає його до заголовків повідомлень RabbitMQ.
+
+---
+
+## 9. Безпека
+
+| Механізм | Де застосовується |
+|---|---|
+| **JWT RS256** | User Service видає токени; BFF перевіряє підпис; мікросервіси витягують `userId` та `roles` з перевірених claims |
+| **Сервіс-до-сервісні токени** | Внутрішні API виклики (Export → Catalog тощо) використовують окремі короткострокові сервісні токени, не JWT користувача |
+| **mTLS** | Між сервісами у production (Kubernetes + Istio) |
+| **Мережева ізоляція** | Payment Service недоступний з публічного інтернету; доступний лише через RabbitMQ події та внутрішню мережу |
+| **Перевірка підпису webhook** | Stripe: заголовок `Stripe-Signature`; LiqPay: HMAC-SHA512 |
+| **Патерн Outbox** | Гарантує доставку подій в рамках тієї ж DB транзакції що й зміна стану |
+| **Обмеження швидкості** | Застосовується на рівні BFF шару для кожного типу клієнта (суворіше для Public API) |
+
+---
+
+## 10. Стратегія міграції
+
+Міграція виконується за патерном **Strangler Fig**: поступове виокремлення сервісів поки моноліт продовжує працювати. Кожна фаза незалежно розгортається та тестується.
+
+### Фаза 1 — Ізоляція модулів (в межах монолита, без нової інфраструктури)
+
+Ціль: Видалити всі міждоменні зв'язності з існуючої кодової бази.
+
+- [ ] Замінити міждоменні Doctrine `ManyToOne` зв'язки на поля UUID рядків
+- [ ] Додати поле `product_name` до `order_items` та `cart_items`
+- [ ] Замінити синхронний виклик `CartService` в `LoginListener` на відправку події `UserLoggedIn`
+- [ ] Замінити прямі виклики Doctrine репозиторіїв у `ProcessExportHandler` на HTTP клієнти
+- [ ] Перевірка: `grep -r "use App\\Catalog" src/Order/ src/Cart/` повертає нуль результатів
+
+### Фаза 2 — База даних для кожного сервісу (розділення схем)
+
+Ціль: Розділити єдину PostgreSQL на окремі схеми для кожного сервісу.
+
+- [ ] Створити окремі схеми: `users`, `catalog`, `cart`, `orders`, `payments`, `delivery`, `exports`
+- [ ] Видалити всі FK constraints між схемами
+- [ ] Додати RabbitMQ до `docker-compose.yml`, замінити DSN транспорту `doctrine://`
+
+### Фаза 3 — Виокремлення User Service
+
+Ціль: Перший самостійний мікросервіс — найменша зв'язність.
+
+- [ ] Новий Symfony додаток для User Service
+- [ ] API Gateway маршрутизує `/api/auth/*` → User Service
+- [ ] Моноліт читає `userId` + `roles` лише з JWT claims
+
+### Фаза 4 — Виокремлення Catalog Service
+
+Ціль: Основний домен читання, дозволяє Cart та Order відв'язатися від даних продуктів.
+
+- [ ] Новий Symfony додаток для Catalog Service
+- [ ] Cart та Order отримують дані продуктів через HTTP
+- [ ] Storage Service виокремлений або вбудований
+
+### Фаза 5 — Виокремлення Cart + Order Services + Checkout Saga
+
+Ціль: Повний процес оформлення замовлення як розподілена транзакція.
+
+- [ ] Cart Service з анонімним сесійним кошиком (на основі cookie)
+- [ ] Хореографічна Сага: ReserveStock → CreateOrder → PaymentRequested
+- [ ] Компенсаційні транзакції для всіх шляхів відмови
+
+### Фаза 6 — Виокремлення Payment + Delivery Services
+
+Ціль: Фінансовий та логістичний домени ізольовані.
+
+- [ ] Обробники Stripe/LiqPay webhook у Payment Service
+- [ ] Інтеграція Нової Пошти у Delivery Service
+- [ ] Event Sourcing для `tracking_events` (append-only)
+
+### Фаза 7 — Виокремлення Export + Notification + Storage Services
+
+Ціль: Допоміжні сервіси повністю незалежні.
+
+- [ ] Export Service читає дані через посторінкові внутрішні API
+- [ ] Notification Service централізує всі email/SMS/push
+- [ ] Storage Service як окремий проксі для S3/local
+
+---
+
+## Пов'язані документи
+
+- [event-catalog.md](./event-catalog.md) — Повний каталог подій зі схемами payload
+- [STORAGE_SETUP.md](./STORAGE_SETUP.md) — Налаштування S3 та локального сховища
