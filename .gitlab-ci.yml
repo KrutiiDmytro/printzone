@@ -8,8 +8,9 @@ variables:
   DEPLOY_DIR: /var/www/task-24
   PHP_IMAGE: php:8.2-cli-alpine
   COMPOSER_IMAGE: composer:2
-  # vendor/ і var/ створюються Docker-контейнерами від root — виключаємо їх з git clean
-  GIT_CLEAN_FLAGS: -ffdx -e vendor/ -e var/
+  # Без -x: не чіпаємо gitignored директорії (vendor/, var/, .phpunit.cache/ тощо)
+  # що створені Docker-контейнерами від root і не можуть бути видалені runner-користувачем
+  GIT_CLEAN_FLAGS: -ffd
 
 # ─────────────────────────────────────────────────────────────
 # VALIDATE
