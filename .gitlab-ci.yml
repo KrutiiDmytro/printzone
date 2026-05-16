@@ -16,20 +16,27 @@ variables:
 
 lint:php:
   stage: validate
-  image: php:8.2-cli-alpine
   script:
     - echo "=== PHP syntax check ==="
-    - find src tests -name "*.php" | xargs php -l | grep -v "No syntax errors" || true
-    - echo "All files OK"
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -w /app \
+        $PHP_IMAGE \
+        sh -c "find src tests -name '*.php' | xargs php -l | grep -v 'No syntax errors' || true && echo 'All files OK'"
   only:
     - develop
 
 composer:validate:
   stage: validate
-  image: composer:2
   script:
     - echo "=== Validating composer.json ==="
-    - composer validate --strict --no-check-publish
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -w /app \
+        $COMPOSER_IMAGE \
+        validate --strict --no-check-publish
   only:
     - develop
 
