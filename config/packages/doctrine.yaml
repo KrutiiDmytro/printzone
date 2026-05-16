@@ -50,6 +50,12 @@ doctrine:
         controller_resolver:
             auto_mapping: false
 
+when@test:
+    doctrine:
+        dbal:
+            driver: pdo_sqlite
+            replicas: ~
+
 when@prod:
     doctrine:
         orm:
