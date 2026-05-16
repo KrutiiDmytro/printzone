@@ -8,6 +8,7 @@ use Aws\S3\S3Client;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
+use League\Flysystem\UnixVisibility\PortableVisibilityConverter;
 
 final class FileStorageFactory
 {
@@ -28,7 +29,13 @@ final class FileStorageFactory
             return new FlysystemFileStorage($filesystem, $this->s3Bucket, $this->s3Client);
         }
 
-        $adapter = new LocalFilesystemAdapter($this->localRoot);
+        $adapter = new LocalFilesystemAdapter(
+            $this->localRoot,
+            PortableVisibilityConverter::fromArray([
+                'file' => ['public' => 0644, 'private' => 0600],
+                'dir'  => ['public' => 0755, 'private' => 0700],
+            ], 'public'),
+        );
         $filesystem = new Filesystem($adapter);
 
         return new FlysystemFileStorage($filesystem);

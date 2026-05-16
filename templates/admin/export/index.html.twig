@@ -168,8 +168,9 @@
                                     <td>
                                         {% if job.status.value == 'completed' %}
                                             <a href="{{ path('admin_export_download', {id: job.id}) }}"
-                                               class="btn btn-xs btn-outline-success">
-                                                <i class="fa fa-download"></i>
+                                               class="btn btn-xs btn-outline-success"
+                                               download="{{ job.id }}-{{ job.type.value }}.{{ job.format.value }}">
+                                                <i class="fa fa-download"></i> {{ job.format.value|upper }}
                                             </a>
                                         {% elseif job.status.value == 'failed' %}
                                             <span class="text-danger small" title="{{ job.errorMessage }}">
