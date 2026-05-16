@@ -58,6 +58,14 @@ composer:validate:
         -e COMPOSER_HOME=/composer-cache \
         $COMPOSER_IMAGE \
         install --no-interaction --prefer-dist --optimize-autoloader
+  after_script:
+    # Повертаємо права runner-користувачу, щоб git clean міг видалити vendor/ і var/
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        --entrypoint="" \
+        $PHP_IMAGE \
+        sh -c "chown -R $(id -u):$(id -g) /app" || true
   only:
     - develop
 
