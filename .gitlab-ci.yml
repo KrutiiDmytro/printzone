@@ -6,6 +6,7 @@ stages:
 
 variables:
   DEPLOY_DIR: /var/www/task-24
+  DEPLOY_USER: deploy
   PHP_IMAGE: php:8.2-cli-alpine
   COMPOSER_IMAGE: composer:2
   # Без -x: не чіпаємо gitignored директорії (vendor/, var/, .phpunit.cache/ тощо)
@@ -109,7 +110,7 @@ build:image:
   stage: build
   script:
     - echo "=== Building PHP image ==="
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
     - docker build
       -f Dockerfile.php
       -t "$CI_REGISTRY_IMAGE/php:$CI_COMMIT_SHA"
@@ -136,76 +137,79 @@ deploy:
   environment:
     name: production
     url: http://localhost:8080
+  before_script:
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan "$DEPLOY_HOST" >> ~/.ssh/known_hosts
   script:
     - echo "=== Deploying to $DEPLOY_DIR ==="
 
-    # Синхронізуємо файли
+    # Синхронізуємо файли через SSH
     - rsync -a --delete
       --exclude='.git'
       --exclude='vendor'
       --exclude='node_modules'
       --exclude='var/cache'
       --exclude='var/log'
-      "$CI_PROJECT_DIR/" "$DEPLOY_DIR/"
+      -e ssh
+      "$CI_PROJECT_DIR/"
+      "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
 
-    - cd "$DEPLOY_DIR"
-
-    # Стартуємо primary DB
-    - echo "--- Starting primary database ---"
-    - docker compose up -d database
+    # Всі наступні команди виконуємо на сервері через SSH
     - |
-      i=0
-      until docker compose exec -T database pg_isready -U app -q; do
-        i=$((i+1))
-        if [ $i -ge 30 ]; then
-          echo "ERROR: Primary DB not ready after 60s"
-          docker compose logs database --tail=30
-          exit 1
-        fi
-        echo "Waiting for DB ($i/30)..."
-        sleep 2
-      done
-      echo "Primary DB is ready"
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s << 'ENDSSH'
+        set -e
+        cd /var/www/task-24
 
-    # Replication user (idempotent)
-    - docker compose exec -T database psql -U app -c
-      "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
+        echo "--- Starting primary database ---"
+        docker compose up -d database
+        i=0
+        until docker compose exec -T database pg_isready -U app -q; do
+          i=$((i+1))
+          if [ $i -ge 30 ]; then
+            echo "ERROR: Primary DB not ready after 60s"
+            docker compose logs database --tail=30
+            exit 1
+          fi
+          echo "Waiting for DB ($i/30)..."
+          sleep 2
+        done
+        echo "Primary DB is ready"
 
-    # Стартуємо решту сервісів
-    - echo "--- Starting all services ---"
-    - docker compose up -d
+        docker compose exec -T database psql -U app -c \
+          "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
 
-    # Встановлюємо залежності (використовуємо образ з registry)
-    - echo "--- Installing dependencies ---"
-    - docker compose exec -T php composer install
-      --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+        echo "--- Starting all services ---"
+        docker compose up -d
 
-    # Чекаємо репліку (не блокуємо деплой)
-    - |
-      i=0
-      until docker compose exec -T database-replica pg_isready -U app -q; do
-        i=$((i+1))
-        if [ $i -ge 40 ]; then
-          echo "WARNING: Replica not ready after 2min — continuing"
-          docker compose logs database-replica --tail=20
-          break
-        fi
-        echo "Waiting for replica ($i/40)..."
+        echo "--- Installing dependencies ---"
+        docker compose exec -T php composer install \
+          --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+
+        i=0
+        until docker compose exec -T database-replica pg_isready -U app -q; do
+          i=$((i+1))
+          if [ $i -ge 40 ]; then
+            echo "WARNING: Replica not ready after 2min — continuing"
+            docker compose logs database-replica --tail=20
+            break
+          fi
+          echo "Waiting for replica ($i/40)..."
+          sleep 3
+        done
+
+        echo "--- Running migrations ---"
+        docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
+
+        echo "--- Clearing cache ---"
+        docker compose exec -T php php bin/console cache:clear --no-warmup
+
+        echo "--- Health check ---"
         sleep 3
-      done
-
-    # Міграції та кеш
-    - echo "--- Running migrations ---"
-    - docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
-
-    - echo "--- Clearing cache ---"
-    - docker compose exec -T php php bin/console cache:clear --no-warmup
-
-    # Health check
-    - echo "--- Health check ---"
-    - sleep 3
-    - docker compose exec -T php php bin/console about
-    - echo "=== Deploy complete ==="
+        docker compose exec -T php php bin/console about
+        echo "=== Deploy complete ==="
+      ENDSSH
 
   needs:
     - build:image
