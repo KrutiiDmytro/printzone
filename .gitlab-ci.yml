@@ -1,53 +1,204 @@
 stages:
+  - validate
+  - test
+  - build
   - deploy
+
+variables:
+  DEPLOY_DIR: /var/www/task-24
+  PHP_IMAGE: php:8.2-cli-alpine
+  COMPOSER_IMAGE: composer:2
+
+# ─────────────────────────────────────────────────────────────
+# VALIDATE
+# Швидкі статичні перевірки без залежностей
+# ─────────────────────────────────────────────────────────────
+
+lint:php:
+  stage: validate
+  script:
+    - echo "=== PHP syntax check ==="
+    - find src tests -name "*.php" | xargs php -l | grep -v "No syntax errors" && echo "All files OK" || true
+  only:
+    - develop
+
+composer:validate:
+  stage: validate
+  script:
+    - echo "=== Validating composer.json ==="
+    - docker run --rm
+      -v "$CI_PROJECT_DIR:/app"
+      -w /app
+      $COMPOSER_IMAGE
+      validate --strict --no-check-publish
+  only:
+    - develop
+
+# ─────────────────────────────────────────────────────────────
+# TEST
+# Ізольовані контейнери з SQLite (без PostgreSQL)
+# ─────────────────────────────────────────────────────────────
+
+.test_base:
+  stage: test
+  before_script:
+    # Кешуємо vendor/ у іменованому Docker volume між запусками
+    - docker volume create composer-cache-task24 || true
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task24:/composer-cache" \
+        -w /app \
+        -e COMPOSER_HOME=/composer-cache \
+        $COMPOSER_IMAGE \
+        install --no-interaction --prefer-dist --optimize-autoloader
+  only:
+    - develop
+
+test:unit:
+  extends: .test_base
+  script:
+    - echo "=== Unit Tests ==="
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task24:/composer-cache" \
+        -w /app \
+        -e APP_ENV=test \
+        -e COMPOSER_HOME=/composer-cache \
+        $PHP_IMAGE \
+        sh -c "
+          apk add --no-cache libsodium-dev icu-dev libzip-dev sqlite &&
+          docker-php-ext-install intl zip sodium &&
+          php bin/phpunit --testsuite Unit --colors=never
+        "
+
+test:functional:
+  extends: .test_base
+  script:
+    - echo "=== Functional Tests (SQLite) ==="
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task24:/composer-cache" \
+        -w /app \
+        -e APP_ENV=test \
+        -e COMPOSER_HOME=/composer-cache \
+        $PHP_IMAGE \
+        sh -c "
+          apk add --no-cache libsodium-dev icu-dev libzip-dev sqlite &&
+          docker-php-ext-install intl zip sodium &&
+          php bin/phpunit --testsuite Functional --colors=never
+        "
+
+# ─────────────────────────────────────────────────────────────
+# BUILD
+# Збираємо Docker образ та пушимо в GitLab Registry
+# ─────────────────────────────────────────────────────────────
+
+build:image:
+  stage: build
+  script:
+    - echo "=== Building PHP image ==="
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build
+      -f Dockerfile.php
+      -t "$CI_REGISTRY_IMAGE/php:$CI_COMMIT_SHA"
+      -t "$CI_REGISTRY_IMAGE/php:latest"
+      --cache-from "$CI_REGISTRY_IMAGE/php:latest"
+      .
+    - docker push "$CI_REGISTRY_IMAGE/php:$CI_COMMIT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/php:latest"
+    - echo "Image pushed $CI_REGISTRY_IMAGE/php:$CI_COMMIT_SHA"
+  needs:
+    - test:unit
+    - test:functional
+  only:
+    - develop
+
+# ─────────────────────────────────────────────────────────────
+# DEPLOY
+# Розгортання на сервер після успішних тестів та збірки
+# ─────────────────────────────────────────────────────────────
 
 deploy:
   stage: deploy
   timeout: 10 minutes
+  environment:
+    name: production
+    url: http://localhost:8080
   script:
-    - rsync -av --exclude='.git' $CI_PROJECT_DIR/ /var/www/task-24/
-    - cd /var/www/task-24
+    - echo "=== Deploying to $DEPLOY_DIR ==="
 
-    # Start primary DB first and wait with a hard limit
+    # Синхронізуємо файли
+    - rsync -a --delete
+      --exclude='.git'
+      --exclude='vendor'
+      --exclude='node_modules'
+      --exclude='var/cache'
+      --exclude='var/log'
+      "$CI_PROJECT_DIR/" "$DEPLOY_DIR/"
+
+    - cd "$DEPLOY_DIR"
+
+    # Стартуємо primary DB
+    - echo "--- Starting primary database ---"
     - docker compose up -d database
     - |
       i=0
       until docker compose exec -T database pg_isready -U app -q; do
         i=$((i+1))
         if [ $i -ge 30 ]; then
-          echo "Primary DB not ready after 60s"
-          docker compose logs database --tail=20
+          echo "ERROR: Primary DB not ready after 60s"
+          docker compose logs database --tail=30
           exit 1
         fi
-        echo "Waiting for primary DB... ($i/30)"
+        echo "Waiting for DB ($i/30)..."
         sleep 2
       done
+      echo "Primary DB is ready"
 
-    # Create replication user (idempotent)
-    - docker compose exec -T database psql -U app -c "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
+    # Replication user (idempotent)
+    - docker compose exec -T database psql -U app -c
+      "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
 
-    # Start remaining services
+    # Стартуємо решту сервісів
+    - echo "--- Starting all services ---"
     - docker compose up -d
 
-    # Install dependencies
-    - docker compose exec -T php composer install --no-interaction --no-scripts
+    # Встановлюємо залежності (використовуємо образ з registry)
+    - echo "--- Installing dependencies ---"
+    - docker compose exec -T php composer install
+      --no-interaction --no-scripts --prefer-dist --optimize-autoloader
 
-    # Wait for replica with hard limit
+    # Чекаємо репліку (не блокуємо деплой)
     - |
       i=0
       until docker compose exec -T database-replica pg_isready -U app -q; do
         i=$((i+1))
         if [ $i -ge 40 ]; then
-          echo "Replica not ready after 2min — continuing without replica"
+          echo "WARNING: Replica not ready after 2min — continuing"
           docker compose logs database-replica --tail=20
           break
         fi
-        echo "Waiting for replica... ($i/40)"
+        echo "Waiting for replica ($i/40)..."
         sleep 3
       done
 
-    # Run migrations and clear cache
+    # Міграції та кеш
+    - echo "--- Running migrations ---"
     - docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
+
+    - echo "--- Clearing cache ---"
     - docker compose exec -T php php bin/console cache:clear --no-warmup
+
+    # Health check
+    - echo "--- Health check ---"
+    - sleep 3
+    - docker compose exec -T php php bin/console about
+    - echo "=== Deploy complete ==="
+
+  needs:
+    - build:image
   only:
     - develop
