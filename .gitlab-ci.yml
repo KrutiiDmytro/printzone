@@ -4,8 +4,12 @@ stages:
   - build
   - deploy
 
+default:
+  tags:
+    - Веб-разработка
+
 variables:
-  DEPLOY_DIR: /var/www/task-24
+  DEPLOY_DIR: /var/www/task-25
   DEPLOY_USER: deploy
   PHP_IMAGE: php:8.2-cli-alpine
   COMPOSER_IMAGE: composer:2
