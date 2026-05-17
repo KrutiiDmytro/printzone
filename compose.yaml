@@ -66,8 +66,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.php
-    image: task-23:8.2-fpm
-    container_name: task-23
+    image: task-25/php:latest
+    container_name: task-25
     env_file:
       - path: .env.local
         required: false
@@ -78,7 +78,7 @@ services:
       - database
 
   worker:
-    image: task-23:8.2-fpm
+    image: task-25/php:latest
     env_file:
       - path: .env.local
         required: false
