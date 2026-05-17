@@ -1,3 +1,14 @@
+# Task 25 — CI/CD & S3 Storage
+
+## CI/CD Status
+- [x] Fixed PDOException: added pdo_sqlite driver for test env
+- [x] Fixed memory_limit: raised to 256M in phpunit config
+- [x] Fixed build:image: use CI_JOB_TOKEN for GitLab registry auth
+- [x] Added SSH deployment with SSH_PRIVATE_KEY
+- [x] Added AWS S3 variables to GitLab CI
+
+---
+
 # Task 23 — Data Export Module
 
 ## Plan
