@@ -108,20 +108,15 @@ test:functional:
 
 build:image:
   stage: build
-  when: manual
-  allow_failure: true
   script:
-    - echo "=== Building PHP image ==="
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
+    - echo "=== Building PHP image locally ==="
     - docker build
       -f Dockerfile.php
-      -t "$CI_REGISTRY_IMAGE/php:$CI_COMMIT_SHA"
-      -t "$CI_REGISTRY_IMAGE/php:latest"
-      --cache-from "$CI_REGISTRY_IMAGE/php:latest"
+      -t task-25/php:$CI_COMMIT_SHA
+      -t task-25/php:latest
+      --cache-from task-25/php:latest
       .
-    - docker push "$CI_REGISTRY_IMAGE/php:$CI_COMMIT_SHA"
-    - docker push "$CI_REGISTRY_IMAGE/php:latest"
-    - echo "Image pushed $CI_REGISTRY_IMAGE/php:$CI_COMMIT_SHA"
+    - echo "Image built task-25/php:$CI_COMMIT_SHA"
   needs:
     - test:unit
     - test:functional
