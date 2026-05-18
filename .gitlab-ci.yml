@@ -144,6 +144,7 @@ deploy:
     # Синхронізуємо файли локально (runner на тому самому сервері)
     - rsync -a --delete
       --exclude='.git'
+      --exclude='.env.local'
       --exclude='vendor'
       --exclude='node_modules'
       --exclude='var/cache'

@@ -28,7 +28,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app}
       POSTGRES_USER: ${POSTGRES_USER:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - postgres_primary:/var/lib/postgresql/data
       - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
@@ -47,7 +47,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app}
       POSTGRES_USER: ${POSTGRES_USER:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       PRIMARY_HOST: database
       PRIMARY_PORT: "5432"
       REPLICATION_USER: replicator

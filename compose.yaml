@@ -17,7 +17,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app}
       # I should definitely change the password in production )
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       POSTGRES_USER: ${POSTGRES_USER:-app}
     healthcheck:
       test: [ "CMD", "pg_isready", "-d", "${POSTGRES_DB:-app}", "-U", "${POSTGRES_USER:-app}" ]
@@ -42,7 +42,7 @@ services:
         required: false
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       POSTGRES_USER: ${POSTGRES_USER:-app}
       PRIMARY_HOST: database
       PRIMARY_PORT: 5432
