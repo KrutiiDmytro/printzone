@@ -9,6 +9,13 @@ use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 
 abstract class WebTestCase extends BaseWebTestCase
 {
+    public static function createClient(array $options = [], array $server = []): \Symfony\Bundle\FrameworkBundle\KernelBrowser
+    {
+        $client = parent::createClient($options, $server);
+        $client->disableReboot();
+        return $client;
+    }
+
     protected function ensureDatabaseExists(): void
     {
         $container = static::getContainer();

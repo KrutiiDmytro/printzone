@@ -15,6 +15,7 @@
         <ini name="memory_limit" value="256M" />
         <server name="APP_ENV" value="test" force="true" />
         <server name="SHELL_VERBOSITY" value="-1" />
+        <env name="STORAGE_TYPE" value="local" force="true" />
     </php>
 
     <testsuites>
