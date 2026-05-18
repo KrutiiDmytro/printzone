@@ -171,6 +171,8 @@ deploy:
 
     - docker compose exec -T database psql -U app -c
       "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
+    - docker compose exec -T database psql -U app -c
+      "ALTER USER app WITH PASSWORD 'changeme';"
 
     - echo "--- Starting all services ---"
     - docker compose up -d
