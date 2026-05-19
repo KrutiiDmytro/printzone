@@ -54,6 +54,7 @@ services:
     volumes:
       - database_replica_data:/var/lib/postgresql/data:rw
       - ./docker/postgres/replica/entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+      - ./docker/postgres/replica/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     depends_on:
       database:
         condition: service_healthy

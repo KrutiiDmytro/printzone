@@ -34,4 +34,6 @@ if [ ! -f "${PGDATA}/PG_VERSION" ]; then
 fi
 
 echo "[replica] Запускаємо PostgreSQL у режимі hot standby..."
-exec /usr/local/bin/docker-entrypoint.sh postgres -c hot_standby=on
+exec /usr/local/bin/docker-entrypoint.sh postgres \
+    -c hot_standby=on \
+    -c hba_file=/etc/postgresql/pg_hba.conf

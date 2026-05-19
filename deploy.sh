@@ -49,8 +49,23 @@ echo "=== 4. Building and starting containers ==="
 docker compose -f compose.yaml -f compose.prod.yaml build php
 docker compose -f compose.yaml -f compose.prod.yaml up -d database database-replica
 
-echo "Waiting for database to be ready..."
-sleep 15
+echo "Waiting for primary database..."
+until docker compose -f compose.yaml -f compose.prod.yaml exec -T database pg_isready -U app -d app -q 2>/dev/null; do
+    sleep 3
+done
+echo "Primary ready."
+
+echo "Waiting for replica database (pg_basebackup may take a minute)..."
+ATTEMPTS=0
+until docker compose -f compose.yaml -f compose.prod.yaml exec -T database-replica pg_isready -U app -d app -q 2>/dev/null; do
+    ATTEMPTS=$((ATTEMPTS + 1))
+    if [ $ATTEMPTS -ge 40 ]; then
+        echo "WARNING: Replica not ready after 2 minutes, proceeding anyway..."
+        break
+    fi
+    sleep 3
+done
+echo "Replica ready."
 
 echo "=== 5. Installing dependencies ==="
 docker compose -f compose.yaml -f compose.prod.yaml run --rm php composer install --no-dev --optimize-autoloader --no-interaction
