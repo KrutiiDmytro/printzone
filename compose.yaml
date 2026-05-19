@@ -64,7 +64,6 @@ services:
       context: .
       dockerfile: Dockerfile.php
     image: task-25/php:latest
-    container_name: task-25
     env_file:
       - path: .env.local
         required: false
