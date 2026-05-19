@@ -6,6 +6,12 @@ services:
       - certbot_webroot:/var/www/certbot
       - letsencrypt:/etc/letsencrypt
 
+  database:
+    ports: []
+
+  database-replica:
+    ports: []
+
   php:
     environment:
       APP_ENV: prod
