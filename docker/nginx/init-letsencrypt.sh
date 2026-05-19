@@ -1,32 +1,29 @@
 #!/bin/bash
-# Run once on first deployment to obtain SSL certificate from Let's Encrypt.
-# After this script completes, switch nginx to default.conf and restart.
+set -e
 
 DOMAIN="e-commerce.it.com"
 EMAIL="krutiidmytro@gmail.com"
-CERT_PATH="/etc/letsencrypt/live/$DOMAIN"
 COMPOSE="docker compose -f compose.yaml -f compose.prod.yaml"
 
-# Create dummy certs so nginx can start and serve the ACME challenge
-if [ ! -d "$CERT_PATH" ]; then
-    echo "Creating temporary self-signed certificate..."
-    mkdir -p "$CERT_PATH"
+# Create dummy cert inside the letsencrypt Docker volume so nginx can start
+echo "Creating temporary self-signed certificate in volume..."
+$COMPOSE run --rm --entrypoint sh certbot -c "
+    mkdir -p /etc/letsencrypt/live/$DOMAIN &&
     openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-        -keyout "$CERT_PATH/privkey.pem" \
-        -out "$CERT_PATH/fullchain.pem" \
-        -subj "/CN=$DOMAIN" 2>/dev/null
-fi
+        -keyout /etc/letsencrypt/live/$DOMAIN/privkey.pem \
+        -out /etc/letsencrypt/live/$DOMAIN/fullchain.pem \
+        -subj '/CN=$DOMAIN' 2>/dev/null &&
+    echo 'Dummy cert created.'
+"
 
-# Start nginx with SSL (uses dummy cert initially)
+# Start nginx (now it can find the cert)
 echo "Starting nginx..."
 $COMPOSE up -d nginx
-
-# Wait for nginx to be ready
 sleep 5
 
-# Request real certificate via webroot
+# Request real certificate via webroot challenge
 echo "Requesting Let's Encrypt certificate..."
-$COMPOSE run --rm certbot certonly \
+$COMPOSE run --rm --entrypoint certbot certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email "$EMAIL" \
