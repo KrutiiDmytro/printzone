@@ -6,6 +6,9 @@ services:
       - certbot_webroot:/var/www/certbot
       - letsencrypt:/etc/letsencrypt
 
+  mailer:
+    ports: []
+
   php:
     environment:
       APP_ENV: prod
