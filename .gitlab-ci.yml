@@ -9,10 +9,11 @@ default:
     - Веб-разработка
 
 variables:
-  DEPLOY_DIR: /var/www/task-25
+  DEPLOY_DIR: /var/www/app
   DEPLOY_USER: deploy
   PHP_IMAGE: php:8.2-cli-alpine
   COMPOSER_IMAGE: composer:2
+  COMPOSE: "docker compose -f compose.yaml -f compose.prod.yaml"
   # Без -x: не чіпаємо gitignored директорії (vendor/, var/, .phpunit.cache/ тощо)
   # що створені Docker-контейнерами від root і не можуть бути видалені runner-користувачем
   GIT_CLEAN_FLAGS: -ffd
@@ -137,7 +138,7 @@ deploy:
   timeout: 10 minutes
   environment:
     name: production
-    url: http://localhost:8080
+    url: https://e-commerce.it.com
   script:
     - echo "=== Deploying to $DEPLOY_DIR ==="
 
@@ -153,15 +154,18 @@ deploy:
 
     - cd "$DEPLOY_DIR"
 
+    # Source .env.local so ${POSTGRES_PASSWORD} is available for compose substitution
+    - set -a && source .env.local && set +a
+
     - echo "--- Starting primary database ---"
-    - docker compose up -d database
+    - $COMPOSE up -d database
     - |
       i=0
-      until docker compose exec -T database pg_isready -U app -q; do
+      until $COMPOSE exec -T database pg_isready -U app -q; do
         i=$((i+1))
         if [ $i -ge 30 ]; then
           echo "ERROR: Primary DB not ready after 60s"
-          docker compose logs database --tail=30
+          $COMPOSE logs database --tail=30
           exit 1
         fi
         echo "Waiting for DB ($i/30)..."
@@ -169,25 +173,20 @@ deploy:
       done
       echo "Primary DB is ready"
 
-    - docker compose exec -T database psql -U app -c
-      "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
-    - docker compose exec -T database psql -U app -c
-      "ALTER USER app WITH PASSWORD 'changeme';"
-
     - echo "--- Starting all services ---"
-    - docker compose up -d
+    - $COMPOSE up -d
 
     - echo "--- Installing dependencies ---"
-    - docker compose exec -T php composer install
+    - $COMPOSE exec -T php composer install
       --no-interaction --no-scripts --prefer-dist --optimize-autoloader
 
     - |
       i=0
-      until docker compose exec -T database-replica pg_isready -U app -q; do
+      until $COMPOSE exec -T database-replica pg_isready -U app -q; do
         i=$((i+1))
         if [ $i -ge 40 ]; then
           echo "WARNING: Replica not ready after 2min — continuing"
-          docker compose logs database-replica --tail=20
+          $COMPOSE logs database-replica --tail=20
           break
         fi
         echo "Waiting for replica ($i/40)..."
@@ -195,14 +194,14 @@ deploy:
       done
 
     - echo "--- Running migrations ---"
-    - docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
+    - $COMPOSE exec -T php php bin/console doctrine:migrations:migrate --no-interaction
 
     - echo "--- Clearing cache ---"
-    - docker compose exec -T php php bin/console cache:clear --no-warmup
+    - $COMPOSE exec -T php php bin/console cache:clear --no-warmup
 
     - echo "--- Health check ---"
     - sleep 3
-    - docker compose exec -T php php bin/console about
+    - $COMPOSE exec -T php php bin/console about
     - echo "=== Deploy complete ==="
 
   needs:
