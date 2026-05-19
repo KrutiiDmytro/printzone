@@ -24,8 +24,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
-    ports:
-      - "5434:5432"
     volumes:
       - database_data:/var/lib/postgresql/data:rw
       - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
@@ -53,8 +51,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 90s
-    ports:
-      - "5435:5432"
     volumes:
       - database_replica_data:/var/lib/postgresql/data:rw
       - ./docker/postgres/replica/entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
