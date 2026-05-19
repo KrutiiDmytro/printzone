@@ -17,9 +17,9 @@ fi
 
 echo "=== 2. Opening firewall ports ==="
 if command -v ufw &> /dev/null; then
-    ufw allow 22 --quiet
-    ufw allow 80 --quiet
-    ufw allow 443 --quiet
+    ufw allow 22
+    ufw allow 80
+    ufw allow 443
     ufw --force enable
 fi
 
