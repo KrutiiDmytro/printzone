@@ -21,6 +21,9 @@ echo "Starting nginx..."
 $COMPOSE up -d nginx
 sleep 5
 
+# Remove dummy cert so certbot can issue a real one
+$COMPOSE run --rm --entrypoint sh certbot -c "rm -rf /etc/letsencrypt/live/$DOMAIN /etc/letsencrypt/archive/$DOMAIN /etc/letsencrypt/renewal/$DOMAIN.conf"
+
 # Request real certificate via webroot challenge
 echo "Requesting Let's Encrypt certificate..."
 $COMPOSE run --rm --entrypoint certbot certbot certonly \
