@@ -30,6 +30,7 @@ cd "$APP_DIR"
 if [ ! -f .env.local ]; then
     APP_SECRET=$(openssl rand -hex 32)
     POSTGRES_PASSWORD=$(openssl rand -hex 16)
+    JWT_PASSPHRASE=$(openssl rand -hex 16)
 
     cat > .env.local <<EOF
 APP_ENV=prod
@@ -42,6 +43,8 @@ POSTGRES_DB=app
 
 DATABASE_URL="postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
 DATABASE_REPLICA_URL="postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
+
+JWT_PASSPHRASE=${JWT_PASSPHRASE}
 
 CORS_ALLOW_ORIGIN=^https?://e-commerce\\.it\\.com$
 
