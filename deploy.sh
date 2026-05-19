@@ -3,7 +3,7 @@ set -e
 
 APP_DIR="/var/www/app"
 DOMAIN="e-commerce.it.com"
-COMPOSE="$COMPOSE --env-file .env.local"
+COMPOSE="docker compose -f compose.yaml -f compose.prod.yaml"
 
 echo "=== 1. Installing Docker ==="
 if ! command -v docker &> /dev/null; then
@@ -27,24 +27,36 @@ fi
 echo "=== 3. Creating .env.local ==="
 cd "$APP_DIR"
 
-cat > .env.local <<'EOF'
+if [ ! -f .env.local ]; then
+    APP_SECRET=$(openssl rand -hex 32)
+    POSTGRES_PASSWORD=$(openssl rand -hex 16)
+
+    cat > .env.local <<EOF
 APP_ENV=prod
 APP_DEBUG=0
-APP_SECRET=22f3533d6c51f660d8467e5b87229c7588fae6b4709ee9b2e9b87c235a370e75
+APP_SECRET=${APP_SECRET}
 
-POSTGRES_PASSWORD=62aaba0c934c5d087d8f3b078feb049c
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_USER=app
 POSTGRES_DB=app
 
-DATABASE_URL="postgresql://app:62aaba0c934c5d087d8f3b078feb049c@database:5432/app?serverVersion=16&charset=utf8"
-DATABASE_REPLICA_URL="postgresql://app:62aaba0c934c5d087d8f3b078feb049c@database-replica:5432/app?serverVersion=16&charset=utf8"
+DATABASE_URL="postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
+DATABASE_REPLICA_URL="postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
 
-CORS_ALLOW_ORIGIN=^https?://e-commerce\.it\.com$
+CORS_ALLOW_ORIGIN=^https?://e-commerce\\.it\\.com$
 
 STORAGE_TYPE=local
 EOF
+    echo ".env.local created with generated secrets."
+else
+    echo ".env.local already exists, skipping."
+fi
 
-echo ".env.local created."
+# Export vars from .env.local so docker compose uses them for ${VAR:-default} substitution
+set -a
+# shellcheck disable=SC1091
+source .env.local
+set +a
 
 echo "=== 4. Building and starting containers ==="
 $COMPOSE build php
