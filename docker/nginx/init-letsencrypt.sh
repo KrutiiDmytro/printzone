@@ -5,7 +5,7 @@
 DOMAIN="e-commerce.it.com"
 EMAIL="krutiidmytro@gmail.com"
 CERT_PATH="/etc/letsencrypt/live/$DOMAIN"
-COMPOSE="docker compose -f compose.yaml -f compose.prod.yaml"
+COMPOSE="docker compose -f compose.yaml -f compose.prod.yaml --env-file .env.local"
 
 # Create dummy certs so nginx can start and serve the ACME challenge
 if [ ! -d "$CERT_PATH" ]; then

@@ -3,6 +3,7 @@ set -e
 
 APP_DIR="/var/www/app"
 DOMAIN="e-commerce.it.com"
+COMPOSE="$COMPOSE --env-file .env.local"
 
 echo "=== 1. Installing Docker ==="
 if ! command -v docker &> /dev/null; then
@@ -46,18 +47,18 @@ EOF
 echo ".env.local created."
 
 echo "=== 4. Building and starting containers ==="
-docker compose -f compose.yaml -f compose.prod.yaml build php
-docker compose -f compose.yaml -f compose.prod.yaml up -d database database-replica
+$COMPOSE build php
+$COMPOSE up -d database database-replica
 
 echo "Waiting for primary database..."
-until docker compose -f compose.yaml -f compose.prod.yaml exec -T database pg_isready -U app -d app -q 2>/dev/null; do
+until $COMPOSE exec -T database pg_isready -U app -d app -q 2>/dev/null; do
     sleep 3
 done
 echo "Primary ready."
 
 echo "Waiting for replica database (pg_basebackup may take a minute)..."
 ATTEMPTS=0
-until docker compose -f compose.yaml -f compose.prod.yaml exec -T database-replica pg_isready -U app -d app -q 2>/dev/null; do
+until $COMPOSE exec -T database-replica pg_isready -U app -d app -q 2>/dev/null; do
     ATTEMPTS=$((ATTEMPTS + 1))
     if [ $ATTEMPTS -ge 40 ]; then
         echo "WARNING: Replica not ready after 2 minutes, proceeding anyway..."
@@ -68,20 +69,20 @@ done
 echo "Replica ready."
 
 echo "=== 5. Installing dependencies ==="
-docker compose -f compose.yaml -f compose.prod.yaml run --rm php composer install --no-dev --optimize-autoloader --no-interaction
+$COMPOSE run --rm php composer install --no-dev --optimize-autoloader --no-interaction
 
 echo "=== 6. Running migrations ==="
-docker compose -f compose.yaml -f compose.prod.yaml run --rm php php bin/console doctrine:migrations:migrate --no-interaction
+$COMPOSE run --rm php php bin/console doctrine:migrations:migrate --no-interaction
 
 echo "=== 7. Generating JWT keys ==="
-docker compose -f compose.yaml -f compose.prod.yaml run --rm php php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction
+$COMPOSE run --rm php php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction
 
 echo "=== 8. Getting SSL certificate ==="
 chmod +x docker/nginx/init-letsencrypt.sh
 ./docker/nginx/init-letsencrypt.sh
 
 echo "=== 9. Starting all services ==="
-docker compose -f compose.yaml -f compose.prod.yaml up -d
+$COMPOSE up -d
 
 echo ""
 echo "=== DONE ==="
