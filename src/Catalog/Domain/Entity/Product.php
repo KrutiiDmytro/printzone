@@ -49,6 +49,11 @@ class Product
     #[Groups(['product:read', 'product:write'])]
     private ?Category $category = null;
 
+    #[ORM\ManyToOne(inversedBy: 'products')]
+    #[ORM\JoinColumn(nullable: true)]
+    #[Groups(['product:read', 'product:write'])]
+    private ?Brand $brand = null;
+
     #[ORM\Column(length: 255, nullable: true)]
     #[Groups(['product:read', 'product:write'])]
     private ?string $image = null;
@@ -134,6 +139,17 @@ class Product
     public function setCategory(?Category $category): static
     {
         $this->category = $category;
+        return $this;
+    }
+
+    public function getBrand(): ?Brand
+    {
+        return $this->brand;
+    }
+
+    public function setBrand(?Brand $brand): static
+    {
+        $this->brand = $brand;
         return $this;
     }
 

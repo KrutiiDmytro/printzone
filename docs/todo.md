@@ -1,3 +1,66 @@
+# Price Range Filter (euros)
+
+## Checklist
+- [x] 1. `ProductRepository` — `findWithFilters()` + `getPriceRange()`
+- [x] 2. `ShopController` — всі 4 маршрути читають `price_min`/`price_max`, передають межі слайдера
+- [x] 3. `templates/shop/index.html.twig` — форма фільтрації, `$`→`€`, active tag
+
+## Files
+1. `src/Repository/ProductRepository.php`
+2. `src/Controller/ShopController.php`
+3. `templates/shop/index.html.twig`
+
+---
+
+# PrinterModel + Printer Finder Filter
+
+## Підзадачі
+- [x] Підзадача 1: `PrinterModel` entity + `PrinterModelRepository` (2 файли)
+- [x] Підзадача 2: Doctrine migration + fixtures з моделями для 8 брендів
+- [x] Підзадача 3: `BrandExtension` — додати `brand_models(slug)` + `PrinterModelCrudController` (2 файли)
+- [x] Підзадача 4: `home.html.twig` — блок "Printer Finder" з autocomplete + cascading dropdowns
+
+## Архітектура
+```
+Brand (1) ──► PrinterModel (many)
+              id, name, slug, brand_id
+
+Twig: brand_models('canon') → PrinterModel[]
+JS autocomplete: text input → filter all models → show dropdown
+Cascading: select brand → load models for that brand
+Search redirect: /brand/{slug}
+```
+
+---
+
+# Brand Entity — повноцінна реалізація
+
+## Підзадачі
+- [x] Підзадача 1: Brand entity (`src/Catalog/Domain/Entity/Brand.php`) + BrandRepository + міграція
+- [x] Підзадача 2: `brand` поле в Product entity + `findByBrand()` в ProductRepository + міграція
+- [x] Підзадача 3: `ShopController::showBrand()` маршрут + `BrandTwigExtension` (`all_brands()`)
+- [x] Підзадача 4: `BrandCrudController` + пункт "Бренди" в `DashboardController`
+- [x] Підзадача 5: Fixtures — 8 брендів з кольорами, прив'язка продуктів
+- [x] Підзадача 6: Шаблони — видалено хардкод у `base.html.twig` та `home.html.twig`
+
+## Результат
+- Бренди зберігаються в БД (таблиця `brands`: name, slug, color)
+- Кожен продукт має `brand_id` (nullable FK)
+- Маршрут `/brand/{slug}` повертає продукти фільтровані за брендом
+- `all_brands()` доступна у всіх Twig-шаблонах глобально
+- Адмінка має CRUD для брендів
+
+---
+
+# PrintZone — Redesign шапки сайту
+
+## План
+- [x] Записати план
+- [x] base.html.twig — назва "PrintZone", іконка принтера, нова категорійна navbar з dropdown-брендами
+- [x] home.html.twig — hero-заголовок і підзаголовок під PrintZone
+
+---
+
 # Task 25 — CI/CD & S3 Storage
 
 ## CI/CD Status

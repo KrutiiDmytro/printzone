@@ -2,7 +2,9 @@
 
 namespace App\Controller\Admin;
 
+use App\Catalog\Domain\Entity\Brand;
 use App\Catalog\Domain\Entity\Category;
+use App\Catalog\Domain\Entity\PrinterModel;
 use App\Catalog\Domain\Entity\Product;
 use App\Order\Domain\Entity\Order;
 use App\User\Domain\Entity\User;
@@ -77,22 +79,24 @@ class DashboardController extends AbstractDashboardController
     public function configureDashboard(): Dashboard
     {
         return Dashboard::new()
-            ->setTitle('Админ-панель')
+            ->setTitle('Admin Panel')
             ->setFaviconPath('favicon.ico')
             ->setTranslationDomain('admin');
     }
 
     public function configureMenuItems(): iterable
     {
-        yield MenuItem::linkToDashboard('Главная', 'fa fa-home');
-        yield MenuItem::section('Каталог');
-        yield MenuItem::linkToCrud('Товары', 'fa fa-box', Product::class);
-        yield MenuItem::linkToCrud('Категории', 'fa fa-folder', Category::class);
-        yield MenuItem::section('Заказы');
-        yield MenuItem::linkToCrud('Заказы', 'fa fa-shopping-cart', Order::class);
-        yield MenuItem::section('Пользователи');
-        yield MenuItem::linkToCrud('Пользователи', 'fa fa-users', User::class);
-        yield MenuItem::section('Інструменти');
-        yield MenuItem::linkToRoute('Експорт', 'fa fa-download', 'admin_export');
+        yield MenuItem::linkToDashboard('Dashboard', 'fa fa-home');
+        yield MenuItem::section('Catalogue');
+        yield MenuItem::linkToCrud('Products', 'fa fa-box', Product::class);
+        yield MenuItem::linkToCrud('Categories', 'fa fa-folder', Category::class);
+        yield MenuItem::linkToCrud('Brands', 'fa fa-tag', Brand::class);
+        yield MenuItem::linkToCrud('Printer Models', 'fa fa-print', PrinterModel::class);
+        yield MenuItem::section('Orders');
+        yield MenuItem::linkToCrud('Orders', 'fa fa-shopping-cart', Order::class);
+        yield MenuItem::section('Users');
+        yield MenuItem::linkToCrud('Users', 'fa fa-users', User::class);
+        yield MenuItem::section('Tools');
+        yield MenuItem::linkToRoute('Export', 'fa fa-download', 'admin_export');
     }
 }

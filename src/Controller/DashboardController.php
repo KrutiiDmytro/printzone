@@ -17,9 +17,11 @@ class DashboardController extends AbstractController
     ): Response {
         $featuredProducts = $productRepository->findFeatured(8);
         $categories = $categoryRepository->findAllRootCategories();
+        $bestsellerProducts = $productRepository->findLatest(6);
 
         return $this->render('home.html.twig', [
             'featuredProducts' => $featuredProducts,
+            'bestsellerProducts' => $bestsellerProducts,
             'categories' => $categories,
         ]);
     }
