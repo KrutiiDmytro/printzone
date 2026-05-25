@@ -66,7 +66,7 @@ composer:validate:
         -w /app \
         -e COMPOSER_HOME=/composer-cache \
         $COMPOSER_IMAGE \
-        install --no-interaction --prefer-dist --optimize-autoloader
+        install --no-interaction --no-scripts --prefer-dist --optimize-autoloader
   only:
     - develop
 
@@ -83,8 +83,8 @@ test:unit:
         -e COMPOSER_HOME=/composer-cache \
         $PHP_IMAGE \
         sh -c "
-          apk add --no-cache libsodium-dev icu-dev libzip-dev sqlite &&
-          docker-php-ext-install intl zip sodium &&
+          apk add --no-cache libsodium-dev sqlite &&
+          docker-php-ext-install sodium pdo_sqlite &&
           php bin/phpunit --testsuite Unit --colors=never
         "
 
@@ -101,8 +101,8 @@ test:functional:
         -e COMPOSER_HOME=/composer-cache \
         $PHP_IMAGE \
         sh -c "
-          apk add --no-cache libsodium-dev icu-dev libzip-dev sqlite &&
-          docker-php-ext-install intl zip sodium &&
+          apk add --no-cache libsodium-dev sqlite &&
+          docker-php-ext-install sodium pdo_sqlite &&
           php bin/phpunit --testsuite Functional --colors=never
         "
 
