@@ -54,7 +54,6 @@ class AppFixtures extends Fixture
 
         // Create Brands
         $brandsData = [
-            ['name' => 'Apple',   'slug' => 'apple',   'color' => '#555555'],
             ['name' => 'Samsung', 'slug' => 'samsung', 'color' => '#1428A0'],
             ['name' => 'Dell',    'slug' => 'dell',    'color' => '#007DB8'],
             ['name' => 'Sony',    'slug' => 'sony',    'color' => '#000000'],

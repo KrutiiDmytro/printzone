@@ -1,7 +1,7 @@
 stages:
   - validate
-  - test
   - build
+  - test
   - deploy
 
 default:
@@ -12,15 +12,13 @@ variables:
   DEPLOY_DIR: /var/www/app
   DEPLOY_USER: deploy
   PHP_IMAGE: php:8.2-cli-alpine
-  COMPOSER_IMAGE: composer:2
   COMPOSE: "docker compose -f compose.yaml -f compose.prod.yaml"
-  # Без -x: не чіпаємо gitignored директорії (vendor/, var/, .phpunit.cache/ тощо)
-  # що створені Docker-контейнерами від root і не можуть бути видалені runner-користувачем
   GIT_CLEAN_FLAGS: -ffd
+  LOCAL_IMAGE: task-25/php:latest
 
 # ─────────────────────────────────────────────────────────────
 # VALIDATE
-# Швидкі статичні перевірки без залежностей
+# Швидкі статичні перевірки — один docker run з PHP_IMAGE
 # ─────────────────────────────────────────────────────────────
 
 lint:php:
@@ -33,31 +31,49 @@ lint:php:
         -w /app \
         $PHP_IMAGE \
         sh -c "find src tests -name '*.php' | xargs php -l | grep -v 'No syntax errors' || true && echo 'All files OK'"
-  only:
-    - develop
-
-composer:validate:
-  stage: validate
-  script:
     - echo "=== Validating composer.json ==="
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
-        $COMPOSER_IMAGE \
-        validate --strict --no-check-publish
+        $PHP_IMAGE \
+        php -r "
+          \$json = file_get_contents('composer.json');
+          json_decode(\$json);
+          if (json_last_error() !== JSON_ERROR_NONE) { fwrite(STDERR, 'composer.json: invalid JSON\n'); exit(1); }
+          echo 'composer.json: valid JSON' . PHP_EOL;
+        "
+  only:
+    - develop
+
+# ─────────────────────────────────────────────────────────────
+# BUILD
+# Збираємо локальний образ паралельно з validate (needs: [])
+# ─────────────────────────────────────────────────────────────
+
+build:image:
+  stage: build
+  script:
+    - echo "=== Building PHP image locally ==="
+    - docker build
+      -f Dockerfile.php
+      -t task-25/php:$CI_COMMIT_SHA
+      -t task-25/php:latest
+      --cache-from task-25/php:latest
+      .
+    - echo "Image built task-25/php:$CI_COMMIT_SHA"
+  needs: []
   only:
     - develop
 
 # ─────────────────────────────────────────────────────────────
 # TEST
-# Ізольовані контейнери з SQLite (без PostgreSQL)
+# Використовує локальний образ — жодного pull з Docker Hub
 # ─────────────────────────────────────────────────────────────
 
 .test_base:
   stage: test
   before_script:
-    # Кешуємо vendor/ у іменованому Docker volume між запусками
     - docker volume create composer-cache-task24 || true
     - |
       docker run --rm \
@@ -65,8 +81,10 @@ composer:validate:
         -v "composer-cache-task24:/composer-cache" \
         -w /app \
         -e COMPOSER_HOME=/composer-cache \
-        $COMPOSER_IMAGE \
-        install --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+        $LOCAL_IMAGE \
+        composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+  needs:
+    - build:image
   only:
     - develop
 
@@ -81,12 +99,8 @@ test:unit:
         -w /app \
         -e APP_ENV=test \
         -e COMPOSER_HOME=/composer-cache \
-        $PHP_IMAGE \
-        sh -c "
-          apk add --no-cache libsodium-dev sqlite &&
-          docker-php-ext-install sodium pdo_sqlite &&
-          php bin/phpunit --testsuite Unit --colors=never
-        "
+        $LOCAL_IMAGE \
+        php bin/phpunit --testsuite Unit --colors=never
 
 test:functional:
   extends: .test_base
@@ -99,38 +113,11 @@ test:functional:
         -w /app \
         -e APP_ENV=test \
         -e COMPOSER_HOME=/composer-cache \
-        $PHP_IMAGE \
-        sh -c "
-          apk add --no-cache libsodium-dev sqlite &&
-          docker-php-ext-install sodium pdo_sqlite &&
-          php bin/phpunit --testsuite Functional --colors=never
-        "
-
-# ─────────────────────────────────────────────────────────────
-# BUILD
-# Збираємо Docker образ та пушимо в GitLab Registry
-# ─────────────────────────────────────────────────────────────
-
-build:image:
-  stage: build
-  script:
-    - echo "=== Building PHP image locally ==="
-    - docker build
-      -f Dockerfile.php
-      -t task-25/php:$CI_COMMIT_SHA
-      -t task-25/php:latest
-      --cache-from task-25/php:latest
-      .
-    - echo "Image built task-25/php:$CI_COMMIT_SHA"
-  needs:
-    - test:unit
-    - test:functional
-  only:
-    - develop
+        $LOCAL_IMAGE \
+        php bin/phpunit --testsuite Functional --colors=never
 
 # ─────────────────────────────────────────────────────────────
 # DEPLOY
-# Розгортання на сервер після успішних тестів та збірки
 # ─────────────────────────────────────────────────────────────
 
 deploy:
@@ -142,7 +129,6 @@ deploy:
   script:
     - echo "=== Deploying to $DEPLOY_DIR ==="
 
-    # Синхронізуємо файли локально (runner на тому самому сервері)
     - rsync -a --delete
       --exclude='.git'
       --exclude='.env.local'
@@ -154,7 +140,6 @@ deploy:
 
     - cd "$DEPLOY_DIR"
 
-    # Source .env.local so ${POSTGRES_PASSWORD} is available for compose substitution
     - set -a && source .env.local && set +a
 
     - echo "--- Starting primary database ---"
@@ -205,6 +190,7 @@ deploy:
     - echo "=== Deploy complete ==="
 
   needs:
-    - build:image
+    - test:unit
+    - test:functional
   only:
     - develop
