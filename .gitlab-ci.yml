@@ -134,8 +134,8 @@ deploy:
       --exclude='.env.local'
       --exclude='vendor'
       --exclude='node_modules'
-      --exclude='var/cache'
-      --exclude='var/log'
+      --exclude='var/'
+      --exclude='tests/'
       "$CI_PROJECT_DIR/" "$DEPLOY_DIR/"
 
     - cd "$DEPLOY_DIR"
