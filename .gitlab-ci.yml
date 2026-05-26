@@ -122,7 +122,7 @@ test:functional:
 
 deploy:
   stage: deploy
-  timeout: 10 minutes
+  timeout: 20 minutes
   environment:
     name: production
     url: https://e-commerce.it.com
