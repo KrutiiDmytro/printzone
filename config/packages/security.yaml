@@ -17,6 +17,10 @@ security:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
 
+        stripe_webhook:
+            pattern: ^/stripe/webhook
+            security: false
+
         # Брандмауэр для получения JWT токена (ПЕРВЫЙ!)
         login:
             pattern: ^/api/login

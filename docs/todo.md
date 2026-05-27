@@ -181,3 +181,74 @@ Doctrine-bundle встановлює `driver: pdo_mysql` як дефолт. Бе
 - Немає автоматичного failover — при падінні primary потрібен ручний switchover.
 - Для автофailover: Patroni або PgBouncer перед Doctrine.
 - Реплікація async — можлива мінімальна втрата даних при failover.
+
+---
+
+# Stripe Checkout Integration (EUR)
+
+## Архітектура флоу
+
+```
+[Checkout form] → POST /checkout/pay
+    │
+    ▼
+CheckoutController::pay()
+    │  створює Order (status: PENDING)
+    │  зберігає stripe_session_id в Order
+    ▼
+StripeCheckoutService::createSession(Order)
+    │  line_items з cart (ціни вже в центах)
+    │  success_url: /checkout/success?session_id={CHECKOUT_SESSION_ID}
+    │  cancel_url: /checkout/cancel
+    ▼
+redirect → Stripe hosted page
+    │
+    ├─ [Успіх] → GET /checkout/success → показує сторінку подяки
+    │
+    └─ [Webhook] POST /stripe/webhook
+           │  перевіряє Stripe-Signature
+           │  checkout.session.completed event
+           ▼
+       Order.status = PAID (надійне підтвердження)
+```
+
+## Підзадачі
+
+### Фаза 1 — Setup (≤3 файли)
+- [x] 1.1 `composer require stripe/stripe-php`
+- [x] 1.2 `.env` — додати `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
+- [x] 1.3 `src/Order/Domain/Entity/Order.php` — додати поле `stripeSessionId` (nullable string)
+- [x] 1.4 Doctrine migration для нового поля
+
+### Фаза 2 — Service + Controller (≤3 файли)
+- [x] 2.1 `src/Payment/Service/StripeCheckoutService.php` — новий сервіс, створює Stripe Checkout Session
+- [x] 2.2 `src/Controller/CheckoutController.php` — переробити `placeOrder` → `pay()`, редірект на Stripe
+
+### Фаза 3 — Webhook + Security (≤2 файли)
+- [x] 3.1 `src/Controller/StripeWebhookController.php` — POST `/stripe/webhook`, верифікація підпису, Order→PAID
+- [x] 3.2 `config/packages/security.yaml` — вивести `/stripe/webhook` з-під CSRF
+
+### Фаза 4 — Шаблони (≤2 файли)
+- [x] 4.1 `templates/checkout/success.html.twig` — сторінка успішної оплати
+- [x] 4.2 `templates/checkout/cancel.html.twig` — сторінка скасування
+
+## Ключові деталі реалізації
+
+| Деталь | Рішення |
+|--------|---------|
+| Ціни | `price` в БД — вже в центах (int). Stripe теж приймає центи → конвертація не потрібна |
+| Валюта | `eur` |
+| `stripeSessionId` | зберігається в Order до редіректу; webhook шукає Order по цьому полю |
+| Webhook безпека | `Stripe::constructEvent()` з `STRIPE_WEBHOOK_SECRET` верифікує підпис |
+| CSRF | Webhook endpoint виключений (`stateless: true` або `security: false`) |
+| Локальне тестування | `stripe listen --forward-to host.docker.internal/stripe/webhook` |
+
+## Тестові картки Stripe
+- `4242 4242 4242 4242` — успішна оплата
+- `4000 0000 0000 9995` — declined
+
+## Edge cases
+- Порожній кошик → redirect на `/cart` (вже є)
+- Stripe session expired → повторний checkout (cancel_url поверне на `/cart`)
+- Webhook fires після redirect success — порядок не гарантований, тому статус PAID ставиться лише вебхуком
+- Дублювання вебхуків — ідемпотентна обробка (if Order.status !== PAID → set PAID)

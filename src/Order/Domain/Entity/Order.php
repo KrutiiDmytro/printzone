@@ -46,6 +46,9 @@ class Order
     #[Groups(['order:read'])]
     private ?int $totalAmount = 0;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $stripeSessionId = null;
+
     #[ORM\OneToMany(mappedBy: 'orderRef', targetEntity: OrderItem::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[Groups(['order:read', 'order:write'])]
     private Collection $items;
@@ -132,6 +135,17 @@ class Order
             }
         }
 
+        return $this;
+    }
+
+    public function getStripeSessionId(): ?string
+    {
+        return $this->stripeSessionId;
+    }
+
+    public function setStripeSessionId(?string $stripeSessionId): static
+    {
+        $this->stripeSessionId = $stripeSessionId;
         return $this;
     }
 

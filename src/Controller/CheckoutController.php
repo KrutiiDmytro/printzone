@@ -4,11 +4,10 @@ namespace App\Controller;
 
 use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
-use App\Repository\OrderRepository;
+use App\Payment\Service\StripeCheckoutService;
 use App\Service\CartService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
@@ -18,7 +17,7 @@ class CheckoutController extends AbstractController
     public function __construct(
         private CartService $cartService,
         private EntityManagerInterface $entityManager,
-        private OrderRepository $orderRepository
+        private StripeCheckoutService $stripeCheckoutService,
     ) {
     }
 
@@ -40,9 +39,8 @@ class CheckoutController extends AbstractController
 
     #[Route('/checkout/place-order', name: 'app_checkout_place_order', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
-    public function placeOrder(Request $request): Response
+    public function pay(): Response
     {
-        $user = $this->getUser();
         $cart = $this->cartService->getCart();
 
         if (empty($cart['items'])) {
@@ -50,14 +48,11 @@ class CheckoutController extends AbstractController
             return $this->redirectToRoute('app_cart');
         }
 
-        // Создаем заказ
         $order = new Order();
-        $order->setUser($user);
+        $order->setUser($this->getUser());
         $order->setStatus('PENDING');
         $order->setTotalAmount($cart['total']);
-        $order->setCreatedAt(new \DateTime());
 
-        // Создаем элементы заказа
         foreach ($cart['items'] as $cartItem) {
             $orderItem = new OrderItem();
             $orderItem->setOrderRef($order);
@@ -67,15 +62,30 @@ class CheckoutController extends AbstractController
             $order->getItems()->add($orderItem);
         }
 
-        // Сохраняем заказ
         $this->entityManager->persist($order);
         $this->entityManager->flush();
 
-        // Очищаем корзину
+        $session = $this->stripeCheckoutService->createSession($order, $cart['items']);
+
+        $order->setStripeSessionId($session['id']);
+        $this->entityManager->flush();
+
+        return $this->redirect($session['url']);
+    }
+
+    #[Route('/checkout/success', name: 'app_checkout_success')]
+    #[IsGranted('ROLE_USER')]
+    public function success(): Response
+    {
         $this->cartService->clear();
 
-        $this->addFlash('success', 'Your order has been successfully placed! Order number: #' . $order->getId());
+        return $this->render('checkout/success.html.twig');
+    }
 
-        return $this->redirectToRoute('app_home');
+    #[Route('/checkout/cancel', name: 'app_checkout_cancel')]
+    #[IsGranted('ROLE_USER')]
+    public function cancel(): Response
+    {
+        return $this->render('checkout/cancel.html.twig');
     }
 }
