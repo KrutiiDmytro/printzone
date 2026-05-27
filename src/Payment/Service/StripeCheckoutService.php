@@ -9,14 +9,11 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 class StripeCheckoutService
 {
-    private StripeClient $stripe;
-
     public function __construct(
         #[Autowire(env: 'STRIPE_SECRET_KEY')]
         private string $secretKey,
         private UrlGeneratorInterface $urlGenerator,
     ) {
-        $this->stripe = new StripeClient($this->secretKey);
     }
 
     /**
@@ -25,6 +22,8 @@ class StripeCheckoutService
      */
     public function createSession(Order $order, array $cartItems): array
     {
+        $stripe = new StripeClient($this->secretKey);
+
         $lineItems = [];
         foreach ($cartItems as $item) {
             $lineItems[] = [
@@ -51,7 +50,7 @@ class StripeCheckoutService
             UrlGeneratorInterface::ABSOLUTE_URL
         );
 
-        $session = $this->stripe->checkout->sessions->create([
+        $session = $stripe->checkout->sessions->create([
             'mode' => 'payment',
             'line_items' => $lineItems,
             'success_url' => $successUrl,
