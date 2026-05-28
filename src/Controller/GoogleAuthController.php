@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\User\Domain\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
+use GuzzleHttp\Client as GuzzleClient;
 use League\OAuth2\Client\Provider\Google;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -29,6 +30,8 @@ class GoogleAuthController extends AbstractController
             'clientId'     => $this->googleClientId,
             'clientSecret' => $this->googleClientSecret,
             'redirectUri'  => $this->googleRedirectUri,
+        ], [
+            'httpClient' => new GuzzleClient(['timeout' => 10, 'connect_timeout' => 5]),
         ]);
     }
 

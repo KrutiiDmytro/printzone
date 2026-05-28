@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\User\Domain\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
+use GuzzleHttp\Client as GuzzleClient;
 use League\OAuth2\Client\Provider\Github;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -28,6 +29,8 @@ class GitHubAuthController extends AbstractController
             'clientId'     => $this->githubClientId,
             'clientSecret' => $this->githubClientSecret,
             'redirectUri'  => $this->githubRedirectUri,
+        ], [
+            'httpClient' => new GuzzleClient(['timeout' => 10, 'connect_timeout' => 5]),
         ]);
     }
 
