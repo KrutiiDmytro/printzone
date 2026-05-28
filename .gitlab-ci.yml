@@ -140,6 +140,20 @@ deploy:
 
     - cd "$DEPLOY_DIR"
 
+    - echo "--- Injecting secrets from CI variables into .env.local ---"
+    - |
+      upsert_env() {
+        local key="$1" val="$2" file="$3"
+        if grep -q "^${key}=" "$file" 2>/dev/null; then
+          sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+        else
+          echo "${key}=${val}" >> "$file"
+        fi
+      }
+      upsert_env STRIPE_SECRET_KEY      "$STRIPE_SECRET_KEY"      "$DEPLOY_DIR/.env.local"
+      upsert_env STRIPE_PUBLISHABLE_KEY "$STRIPE_PUBLISHABLE_KEY" "$DEPLOY_DIR/.env.local"
+      upsert_env STRIPE_WEBHOOK_SECRET  "$STRIPE_WEBHOOK_SECRET"  "$DEPLOY_DIR/.env.local"
+
     - set -a && source .env.local && set +a
 
     - echo "--- Starting primary database ---"
