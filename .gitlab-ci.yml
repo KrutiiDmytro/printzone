@@ -172,8 +172,11 @@ deploy:
       done
       echo "Primary DB is ready"
 
+    - echo "--- Building PHP image on deployment server ---"
+    - timeout 600 $COMPOSE build php
+
     - echo "--- Starting all services ---"
-    - $COMPOSE up -d
+    - $COMPOSE up -d --no-build
 
     - echo "--- Installing dependencies ---"
     - $COMPOSE exec -T php composer install
