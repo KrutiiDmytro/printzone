@@ -12,7 +12,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 
 
 class GoogleAuthController extends AbstractController
@@ -81,11 +80,8 @@ class GoogleAuthController extends AbstractController
 
             $this->em->flush();
 
-            // Авторизуем пользователя через сессию
-            $securityToken = new UsernamePasswordToken($user, 'main', $user->getRoles());
-            $request->getSession()->set('_security_main', serialize($securityToken));
-            $request->getSession()->save();
-            
+            $this->loginUser($user);
+
             return $this->redirectToRoute('app_home');
         } catch (\Exception $e) {
             $this->addFlash('error', 'Google authentication error: ' . $e->getMessage());

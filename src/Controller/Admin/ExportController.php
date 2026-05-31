@@ -78,6 +78,12 @@ final class ExportController extends AbstractController
             throw $this->createNotFoundException('Файл не знайдено.');
         }
 
+        /** @var \App\User\Domain\Entity\User $user */
+        $user = $this->getUser();
+        if ($job->getRequestedBy() !== $user->getEmail()) {
+            throw $this->createAccessDeniedException();
+        }
+
         $filePath = $job->getFilePath();
         $content = $this->storage->read($filePath);
         $filename = basename($filePath);
