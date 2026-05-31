@@ -1,10 +1,9 @@
-FROM php:8.2-fpm
+FROM php:8.2-fpm-alpine
 
 WORKDIR /var/www/html
 
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-
-RUN install-php-extensions pdo_pgsql intl zip sodium opcache
+RUN apk add --no-cache postgresql-dev libzip-dev icu-dev libsodium-dev \
+    && docker-php-ext-install pdo_pgsql intl zip sodium opcache
 
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
 
