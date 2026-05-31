@@ -27,6 +27,11 @@ class RegistrationController extends AbstractController
 
         // Обработка POST запроса (отправка формы)
         if ($request->isMethod('POST')) {
+            if (!$this->isCsrfTokenValid('register', $request->request->get('_token'))) {
+                $error = 'Invalid CSRF token.';
+                return $this->render('registration/register.html.twig', ['error' => $error]);
+            }
+
             $fullName = $request->request->get('fullName');
             $email = $request->request->get('email');
             $password = $request->request->get('password');
