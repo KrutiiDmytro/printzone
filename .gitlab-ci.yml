@@ -30,21 +30,35 @@ lint:php:
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
         $PHP_IMAGE \
-        sh -c "find src tests -name '*.php' | xargs php -l | grep -v 'No syntax errors' || true && echo 'All files OK'"
+        sh -c "find src tests -name '*.php' -print0 | xargs -0 -P4 php -l"
     - echo "=== Validating composer.json ==="
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
-        $PHP_IMAGE \
-        php -r "
-          \$json = file_get_contents('composer.json');
-          json_decode(\$json);
-          if (json_last_error() !== JSON_ERROR_NONE) { fwrite(STDERR, 'composer.json: invalid JSON\n'); exit(1); }
-          echo 'composer.json: valid JSON' . PHP_EOL;
-        "
-  only:
-    - develop
+        $LOCAL_IMAGE \
+        composer validate --strict --no-check-publish
+  needs:
+    - build:image
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+audit:composer:
+  stage: validate
+  script:
+    - echo "=== Composer security audit ==="
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task25:/composer-cache" \
+        -w /app \
+        -e COMPOSER_HOME=/composer-cache \
+        $LOCAL_IMAGE \
+        sh -c "composer install --no-interaction --no-scripts --prefer-dist -q && composer audit --format=plain"
+  needs:
+    - build:image
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
 
 # ─────────────────────────────────────────────────────────────
 # BUILD
@@ -63,8 +77,8 @@ build:image:
       .
     - echo "Image built task-25/php:$CI_COMMIT_SHA"
   needs: []
-  only:
-    - develop
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
 
 # ─────────────────────────────────────────────────────────────
 # TEST
@@ -74,47 +88,59 @@ build:image:
 .test_base:
   stage: test
   before_script:
-    - docker volume create composer-cache-task24 || true
+    - docker volume create composer-cache-task25 || true
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
-        -v "composer-cache-task24:/composer-cache" \
+        -v "composer-cache-task25:/composer-cache" \
         -w /app \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
         composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader
   needs:
     - build:image
-  only:
-    - develop
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
 
 test:unit:
   extends: .test_base
   script:
     - echo "=== Unit Tests ==="
+    - mkdir -p "$CI_PROJECT_DIR/reports"
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
-        -v "composer-cache-task24:/composer-cache" \
+        -v "composer-cache-task25:/composer-cache" \
         -w /app \
         -e APP_ENV=test \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
-        php bin/phpunit --testsuite Unit --colors=never
+        php bin/phpunit --testsuite Unit --colors=never --log-junit /app/reports/junit-unit.xml
+  artifacts:
+    when: always
+    reports:
+      junit: reports/junit-unit.xml
+    expire_in: 7 days
 
 test:functional:
   extends: .test_base
   script:
     - echo "=== Functional Tests (SQLite) ==="
+    - mkdir -p "$CI_PROJECT_DIR/reports"
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
-        -v "composer-cache-task24:/composer-cache" \
+        -v "composer-cache-task25:/composer-cache" \
         -w /app \
         -e APP_ENV=test \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
-        php bin/phpunit --testsuite Functional --colors=never
+        php bin/phpunit --testsuite Functional --colors=never --log-junit /app/reports/junit-functional.xml
+  artifacts:
+    when: always
+    reports:
+      junit: reports/junit-functional.xml
+    expire_in: 7 days
 
 # ─────────────────────────────────────────────────────────────
 # DEPLOY
@@ -144,11 +170,15 @@ deploy:
     - |
       upsert_env() {
         local key="$1" val="$2" file="$3"
+        local tmp
+        tmp=$(mktemp)
         if grep -q "^${key}=" "$file" 2>/dev/null; then
-          sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+          grep -v "^${key}=" "$file" > "$tmp"
         else
-          echo "${key}=${val}" >> "$file"
+          cp "$file" "$tmp" 2>/dev/null || touch "$tmp"
         fi
+        printf '%s=%s\n' "$key" "$val" >> "$tmp"
+        mv "$tmp" "$file"
       }
       upsert_env STRIPE_SECRET_KEY      "$STRIPE_SECRET_KEY"      "$DEPLOY_DIR/.env.local"
       upsert_env STRIPE_PUBLISHABLE_KEY "$STRIPE_PUBLISHABLE_KEY" "$DEPLOY_DIR/.env.local"
@@ -172,16 +202,13 @@ deploy:
       done
       echo "Primary DB is ready"
 
-    - echo "--- Building PHP image on deployment server ---"
-    - timeout 600 $COMPOSE build php
-
-    - echo "--- Starting all services ---"
+    - echo "--- Starting all services (using pre-built image from CI) ---"
     - $COMPOSE up -d --no-build
     - $COMPOSE exec -T nginx nginx -s reload
 
     - echo "--- Installing dependencies ---"
     - $COMPOSE exec -T php composer install
-      --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+      --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
 
     - |
       i=0
@@ -205,15 +232,27 @@ deploy:
         || echo "WARNING: cache:clear timed out, continuing"
       timeout 180 $COMPOSE exec -T php php bin/console cache:warmup --env=prod \
         || echo "WARNING: cache:warmup timed out, continuing"
-      $COMPOSE exec -T php chmod -R 777 var/cache var/log || true
+      $COMPOSE exec -T php chown -R www-data:www-data var/cache var/log || true
+      $COMPOSE exec -T php chmod -R 755 var/cache var/log || true
 
     - echo "--- Health check ---"
-    - sleep 3
-    - $COMPOSE exec -T php php bin/console about
+    - |
+      i=0
+      until $COMPOSE exec -T php php bin/console about > /dev/null 2>&1; do
+        i=$((i+1))
+        if [ $i -ge 15 ]; then
+          echo "ERROR: App health check failed after 30s"
+          $COMPOSE logs php --tail=20
+          exit 1
+        fi
+        echo "Health check attempt $i/15..."
+        sleep 2
+      done
+      echo "Application is healthy"
     - echo "=== Deploy complete ==="
 
   needs:
     - test:unit
     - test:functional
-  only:
-    - develop
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
