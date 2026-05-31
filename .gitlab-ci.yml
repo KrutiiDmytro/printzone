@@ -177,6 +177,7 @@ deploy:
 
     - echo "--- Starting all services ---"
     - $COMPOSE up -d --no-build
+    - $COMPOSE exec -T nginx nginx -s reload
 
     - echo "--- Installing dependencies ---"
     - $COMPOSE exec -T php composer install
