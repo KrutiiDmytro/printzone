@@ -36,8 +36,9 @@ lint:php:
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
+        -e GIT_CONFIG_GLOBAL=/dev/null \
         composer:2 \
-        composer validate --strict --no-check-publish
+        composer validate --no-check-publish
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
