@@ -65,7 +65,21 @@ class CheckoutController extends AbstractController
         $this->entityManager->persist($order);
         $this->entityManager->flush();
 
-        $session = $this->stripeCheckoutService->createSession($order, $cart['items']);
+        try {
+            $session = $this->stripeCheckoutService->createSession($order, $cart['items']);
+        } catch (\Exception $e) {
+            $order->setStatus('FAILED');
+            $this->entityManager->flush();
+            $this->addFlash('error', 'Payment service is unavailable. Please try again.');
+            return $this->redirectToRoute('app_checkout');
+        }
+
+        if ($session['url'] === null) {
+            $order->setStatus('FAILED');
+            $this->entityManager->flush();
+            $this->addFlash('error', 'Could not initiate payment session. Please try again.');
+            return $this->redirectToRoute('app_checkout');
+        }
 
         $order->setStripeSessionId($session['id']);
         $this->entityManager->flush();

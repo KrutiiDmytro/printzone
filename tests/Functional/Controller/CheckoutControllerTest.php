@@ -6,6 +6,7 @@ use App\Tests\Functional\WebTestCase;
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
 use App\Catalog\Domain\Entity\Product;
+use App\Payment\Service\StripeCheckoutService;
 use App\User\Domain\Entity\User;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -73,15 +74,99 @@ class CheckoutControllerTest extends WebTestCase
     public function testCheckoutRedirectsWhenCartIsEmpty(): void
     {
         $client = $this->createUserClient();
-        
+
         // Перевіряємо, що при порожній корзині користувач перенаправляється на сторінку кошика
         $client->request('GET', '/checkout');
-        
+
         // Перевіряємо редирект на /cart
         $this->assertResponseRedirects('/cart');
-        
+
         // Можна також перевірити flash-повідомлення після редиректу
         $client->followRedirect();
         $this->assertResponseIsSuccessful();
+    }
+
+    public function testPlaceOrderRedirectsToStripe(): void
+    {
+        $client = $this->createUserClient();
+        $container = static::getContainer();
+        $entityManager = $container->get('doctrine.orm.entity_manager');
+
+        $product = new Product();
+        $product->setName('Stripe Test Product');
+        $product->setDescription('Test');
+        $product->setPrice(2000);
+        $product->setStock(5);
+        $category = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class)->findOneBy([]);
+        if ($category) {
+            $product->setCategory($category);
+        }
+        $entityManager->persist($product);
+
+        $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
+
+        $cart = new Cart();
+        $cart->setUser($user);
+        $entityManager->persist($cart);
+
+        $cartItem = new CartItem();
+        $cartItem->setCart($cart);
+        $cartItem->setProduct($product);
+        $cartItem->setQuantity(1);
+        $cart->addItem($cartItem);
+        $entityManager->persist($cartItem);
+
+        $entityManager->flush();
+
+        $stripeUrl = 'https://checkout.stripe.com/c/pay/cs_test_123';
+
+        $mock = $this->createMock(StripeCheckoutService::class);
+        $mock->method('createSession')->willReturn(['id' => 'cs_test_123', 'url' => $stripeUrl]);
+        $container->set(StripeCheckoutService::class, $mock);
+
+        $client->request('POST', '/checkout/place-order');
+
+        $this->assertResponseRedirects($stripeUrl);
+    }
+
+    public function testPlaceOrderHandlesStripeFailure(): void
+    {
+        $client = $this->createUserClient();
+        $container = static::getContainer();
+        $entityManager = $container->get('doctrine.orm.entity_manager');
+
+        $product = new Product();
+        $product->setName('Stripe Fail Product');
+        $product->setDescription('Test');
+        $product->setPrice(1500);
+        $product->setStock(5);
+        $category = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class)->findOneBy([]);
+        if ($category) {
+            $product->setCategory($category);
+        }
+        $entityManager->persist($product);
+
+        $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
+
+        $cart = new Cart();
+        $cart->setUser($user);
+        $entityManager->persist($cart);
+
+        $cartItem = new CartItem();
+        $cartItem->setCart($cart);
+        $cartItem->setProduct($product);
+        $cartItem->setQuantity(1);
+        $cart->addItem($cartItem);
+        $entityManager->persist($cartItem);
+
+        $entityManager->flush();
+
+        $mock = $this->createMock(StripeCheckoutService::class);
+        $mock->method('createSession')->willThrowException(new \RuntimeException('Stripe API error'));
+        $container->set(StripeCheckoutService::class, $mock);
+
+        $client->request('POST', '/checkout/place-order');
+
+        $this->assertResponseRedirects('/checkout');
     }
 }
