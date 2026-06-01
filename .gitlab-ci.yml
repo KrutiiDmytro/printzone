@@ -67,7 +67,6 @@ build:image:
       -f Dockerfile.php
       -t task-25/php:$CI_COMMIT_SHA
       -t task-25/php:latest
-      --cache-from task-25/php:latest
       .
     - echo "Image built task-25/php:$CI_COMMIT_SHA"
   needs: []
