@@ -159,8 +159,9 @@ deploy:
 
     - cd "$DEPLOY_DIR"
 
-    - echo "--- Removing .env.local (secrets are passed via Docker environment) ---"
-    - rm -f "$DEPLOY_DIR/.env.local"
+    - echo "--- Fixing .env.local permissions (readable by www-data, not world) ---"
+    - chmod 640 "$DEPLOY_DIR/.env.local" 2>/dev/null || true
+    - chown root:www-data "$DEPLOY_DIR/.env.local" 2>/dev/null || true
 
     - echo "--- Starting primary database ---"
     - $COMPOSE up -d database
