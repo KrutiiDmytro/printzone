@@ -159,25 +159,8 @@ deploy:
 
     - cd "$DEPLOY_DIR"
 
-    - echo "--- Injecting secrets from CI variables into .env.local ---"
-    - |
-      upsert_env() {
-        local key="$1" val="$2" file="$3"
-        local tmp
-        tmp=$(mktemp)
-        if grep -q "^${key}=" "$file" 2>/dev/null; then
-          grep -v "^${key}=" "$file" > "$tmp"
-        else
-          cp "$file" "$tmp" 2>/dev/null || touch "$tmp"
-        fi
-        printf '%s=%s\n' "$key" "$val" >> "$tmp"
-        mv "$tmp" "$file"
-      }
-      upsert_env STRIPE_SECRET_KEY      "$STRIPE_SECRET_KEY"      "$DEPLOY_DIR/.env.local"
-      upsert_env STRIPE_PUBLISHABLE_KEY "$STRIPE_PUBLISHABLE_KEY" "$DEPLOY_DIR/.env.local"
-      upsert_env STRIPE_WEBHOOK_SECRET  "$STRIPE_WEBHOOK_SECRET"  "$DEPLOY_DIR/.env.local"
-
-    - set -a && source .env.local && set +a
+    - echo "--- Removing .env.local (secrets are passed via Docker environment) ---"
+    - rm -f "$DEPLOY_DIR/.env.local"
 
     - echo "--- Starting primary database ---"
     - $COMPOSE up -d database
