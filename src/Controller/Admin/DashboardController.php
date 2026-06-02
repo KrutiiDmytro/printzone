@@ -9,6 +9,7 @@ use App\Catalog\Domain\Entity\Product;
 use App\Order\Domain\Entity\Order;
 use App\User\Domain\Entity\User;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Assets;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\MenuItem;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractDashboardController;
@@ -74,6 +75,11 @@ class DashboardController extends AbstractDashboardController
         return $this->render('admin/dashboard.html.twig', [
             'chart' => $chart,
         ]);
+    }
+
+    public function configureAssets(Assets $assets): Assets
+    {
+        return $assets->addHtmlContentToHead('<style>.datagrid td img { max-height: 48px; width: auto; }</style>');
     }
 
     public function configureDashboard(): Dashboard
