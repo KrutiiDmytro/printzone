@@ -148,7 +148,7 @@ deploy:
   script:
     - echo "=== Deploying to $DEPLOY_DIR ==="
 
-    - rsync -rlpt --delete --no-owner --no-group
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
       --exclude='.git'
       --exclude='.env.local'
       --exclude='vendor'
