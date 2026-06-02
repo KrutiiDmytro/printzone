@@ -103,6 +103,9 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -hex 12)}"
 $COMPOSE run --rm php php bin/console app:create-admin "$ADMIN_EMAIL" "$ADMIN_PASSWORD"
 echo "Admin: $ADMIN_EMAIL"
 
+echo "=== 7b. Compiling frontend assets ==="
+$COMPOSE run --rm php php bin/console asset-map:compile
+
 echo "=== 8. Getting SSL certificate ==="
 chmod +x docker/nginx/init-letsencrypt.sh
 ./docker/nginx/init-letsencrypt.sh
