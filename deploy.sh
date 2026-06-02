@@ -31,6 +31,7 @@ if [ ! -f .env.local ]; then
     APP_SECRET=$(openssl rand -hex 32)
     POSTGRES_PASSWORD=$(openssl rand -hex 16)
     JWT_PASSPHRASE=$(openssl rand -hex 16)
+    ADMIN_PASSWORD=$(openssl rand -hex 12)
 
     cat > .env.local <<EOF
 APP_ENV=prod
@@ -49,8 +50,12 @@ JWT_PASSPHRASE=${JWT_PASSPHRASE}
 CORS_ALLOW_ORIGIN=^https?://e-commerce\\.it\\.com$
 
 STORAGE_TYPE=local
+
+ADMIN_EMAIL=admin@e-commerce.it.com
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
 EOF
     echo ".env.local created with generated secrets."
+    echo "IMPORTANT: Admin password set to: ${ADMIN_PASSWORD}"
 else
     echo ".env.local already exists, skipping."
 fi
@@ -91,6 +96,12 @@ $COMPOSE run --rm php php bin/console doctrine:migrations:migrate --no-interacti
 
 echo "=== 7. Generating JWT keys ==="
 $COMPOSE run --rm php php bin/console lexik:jwt:generate-keypair --overwrite --no-interaction
+
+echo "=== 7a. Ensuring admin user exists ==="
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@e-commerce.it.com}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -hex 12)}"
+$COMPOSE run --rm php php bin/console app:create-admin "$ADMIN_EMAIL" "$ADMIN_PASSWORD"
+echo "Admin: $ADMIN_EMAIL"
 
 echo "=== 8. Getting SSL certificate ==="
 chmod +x docker/nginx/init-letsencrypt.sh

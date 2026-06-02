@@ -187,8 +187,18 @@ class ProductCrudController extends AbstractCrudController
                 ->setUploadDir('var/tmp/ea-product-uploads/')
                 ->setUploadedFileNamePattern('[slug]-[timestamp].[extension]')
                 ->formatValue(function ($value, $entity) {
-                    return $this->productImageService->getUrlForDisplay($value);
+                    if ($value === null || $value === '') {
+                        return '—';
+                    }
+                    $url = htmlspecialchars(
+                        $this->productImageService->getUrlForDisplay($value),
+                        ENT_QUOTES | ENT_SUBSTITUTE,
+                        'UTF-8'
+                    );
+
+                    return '<img src="'.$url.'" alt="" class="img-thumbnail" style="max-height:48px" loading="lazy" />';
                 })
+                ->renderAsHtml()
                 ->setColumns(12);
         }
 
