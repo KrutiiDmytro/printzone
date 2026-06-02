@@ -103,7 +103,10 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -hex 12)}"
 $COMPOSE run --rm php php bin/console app:create-admin "$ADMIN_EMAIL" "$ADMIN_PASSWORD"
 echo "Admin: $ADMIN_EMAIL"
 
-echo "=== 7b. Compiling frontend assets ==="
+echo "=== 7b. Installing bundle public assets ==="
+$COMPOSE run --rm php php bin/console assets:install --symlink
+
+echo "=== 7c. Compiling frontend assets ==="
 $COMPOSE run --rm php php bin/console asset-map:compile
 
 echo "=== 8. Getting SSL certificate ==="
