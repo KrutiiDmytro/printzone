@@ -183,23 +183,30 @@ class ProductCrudController extends AbstractCrudController
                 ->renderAsHtml()
                 ->setColumns(12);
         } else {
-            $fields[] = ImageField::new('image', 'Изображение')
-                ->setUploadDir('var/tmp/ea-product-uploads/')
-                ->setUploadedFileNamePattern('[slug]-[timestamp].[extension]')
-                ->formatValue(function ($value, $entity) {
-                    if ($value === null || $value === '') {
-                        return '—';
-                    }
-                    $url = htmlspecialchars(
-                        $this->productImageService->getUrlForDisplay($value),
-                        ENT_QUOTES | ENT_SUBSTITUTE,
-                        'UTF-8'
-                    );
+            $isForm = in_array($pageName, [Crud::PAGE_NEW, Crud::PAGE_EDIT], true);
 
-                    return '<img src="'.$url.'" alt="" class="img-thumbnail" style="max-height:48px" loading="lazy" />';
-                })
-                ->renderAsHtml()
-                ->setColumns(12);
+            if ($isForm) {
+                $fields[] = ImageField::new('image', 'Изображение')
+                    ->setUploadDir('var/tmp/ea-product-uploads/')
+                    ->setUploadedFileNamePattern('[slug]-[timestamp].[extension]')
+                    ->setColumns(12);
+            } else {
+                $fields[] = TextField::new('image', 'Изображение')
+                    ->formatValue(function ($value, $entity) {
+                        if ($value === null || $value === '') {
+                            return '—';
+                        }
+                        $url = htmlspecialchars(
+                            $this->productImageService->getUrlForDisplay($value),
+                            ENT_QUOTES | ENT_SUBSTITUTE,
+                            'UTF-8'
+                        );
+
+                        return '<img src="'.$url.'" alt="" class="img-thumbnail" style="max-height:48px" loading="lazy" />';
+                    })
+                    ->renderAsHtml()
+                    ->setColumns(12);
+            }
         }
 
         $fields[] = CollectionField::new('attributes', 'Атрибуты')
