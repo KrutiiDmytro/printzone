@@ -77,9 +77,10 @@ class DashboardController extends AbstractDashboardController
         ]);
     }
 
-    public function configureAssets(Assets $assets): Assets
+    public function configureAssets(): Assets
     {
-        return $assets->addHtmlContentToHead('<style>.datagrid td img { max-height: 48px; width: auto; }</style>');
+        return parent::configureAssets()
+            ->addHtmlContentToHead('<style>.datagrid td img { max-height: 48px; width: auto; }</style>');
     }
 
     public function configureDashboard(): Dashboard
