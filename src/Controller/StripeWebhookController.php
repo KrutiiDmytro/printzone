@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Repository\OrderRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Webhook;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -19,6 +20,7 @@ class StripeWebhookController extends AbstractController
         private string $webhookSecret,
         private OrderRepository $orderRepository,
         private EntityManagerInterface $entityManager,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -30,7 +32,12 @@ class StripeWebhookController extends AbstractController
 
         try {
             $event = Webhook::constructEvent($payload, $sigHeader, $this->webhookSecret);
-        } catch (SignatureVerificationException) {
+        } catch (SignatureVerificationException $e) {
+            $this->logger->error('Stripe webhook signature verification failed', [
+                'error' => $e->getMessage(),
+                'sig_header' => $sigHeader ? substr($sigHeader, 0, 30).'...' : 'missing',
+            ]);
+
             return new Response('Invalid signature', Response::HTTP_BAD_REQUEST);
         }
 
@@ -48,10 +55,25 @@ class StripeWebhookController extends AbstractController
         $orderId = (int) ($session->metadata->order_id ?? 0);
         $order = $this->orderRepository->find($orderId);
 
-        if ($order !== null && $order->getStatus() === 'PENDING') {
-            $order->setStatus('PAID');
-            $this->entityManager->flush();
+        if ($order === null) {
+            $this->logger->warning('Stripe webhook: order not found', ['order_id' => $orderId]);
+
+            return;
         }
+
+        if ($order->getStatus() !== 'PENDING') {
+            $this->logger->info('Stripe webhook: order already processed', [
+                'order_id' => $orderId,
+                'status' => $order->getStatus(),
+            ]);
+
+            return;
+        }
+
+        $order->setStatus('PAID');
+        $this->entityManager->flush();
+
+        $this->logger->info('Stripe webhook: order marked as PAID', ['order_id' => $orderId]);
     }
 
     private function handlePaymentFailed(object $paymentIntent): void
@@ -59,9 +81,19 @@ class StripeWebhookController extends AbstractController
         $orderId = (int) ($paymentIntent->metadata->order_id ?? 0);
         $order = $this->orderRepository->find($orderId);
 
-        if ($order !== null && $order->getStatus() === 'PENDING') {
-            $order->setStatus('FAILED');
-            $this->entityManager->flush();
+        if ($order === null) {
+            $this->logger->warning('Stripe webhook: order not found', ['order_id' => $orderId]);
+
+            return;
         }
+
+        if ($order->getStatus() !== 'PENDING') {
+            return;
+        }
+
+        $order->setStatus('FAILED');
+        $this->entityManager->flush();
+
+        $this->logger->info('Stripe webhook: order marked as FAILED', ['order_id' => $orderId]);
     }
 }
