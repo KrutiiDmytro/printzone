@@ -16,7 +16,7 @@
         "doctrine/doctrine-bundle": "^2.18",
         "doctrine/doctrine-migrations-bundle": "^3.7",
         "doctrine/orm": "^3.6",
-        "easycorp/easyadmin-bundle": "^4.27",
+        "easycorp/easyadmin-bundle": "^4.29.10",
         "league/flysystem": "^3.0",
         "league/flysystem-aws-s3-v3": "^3.0",
         "league/oauth2-github": "^3.1",
