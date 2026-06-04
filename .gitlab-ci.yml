@@ -128,7 +128,7 @@ test:functional:
         -e APP_ENV=test \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
-        php bin/phpunit --testsuite Functional --colors=never --log-junit /app/reports/junit-functional.xml
+        php -d memory_limit=512M bin/phpunit --testsuite Functional --colors=never --log-junit /app/reports/junit-functional.xml
   artifacts:
     when: always
     reports:
