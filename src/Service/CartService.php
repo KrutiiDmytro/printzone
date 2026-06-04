@@ -138,7 +138,7 @@ class CartService
         }
 
         $this->upsertCartItem($cart, $product, $quantity);
-        $cart->setUpdatedAt(new \DateTime());
+        $cart->setUpdatedAt(new \DateTimeImmutable());
         $this->entityManager->flush();
     }
 
@@ -146,7 +146,7 @@ class CartService
     {
         $cart = $this->getOrCreateCart($user);
         $this->upsertCartItem($cart, $product, $quantity);
-        $cart->setUpdatedAt(new \DateTime());
+        $cart->setUpdatedAt(new \DateTimeImmutable());
         $this->entityManager->flush();
     }
 
@@ -185,7 +185,7 @@ class CartService
             }
         }
 
-        $cart->setUpdatedAt(new \DateTime());
+        $cart->setUpdatedAt(new \DateTimeImmutable());
         $this->entityManager->flush();
     }
 
@@ -208,7 +208,7 @@ class CartService
             }
         }
 
-        $cart->setUpdatedAt(new \DateTime());
+        $cart->setUpdatedAt(new \DateTimeImmutable());
         $this->entityManager->flush();
     }
 
@@ -218,7 +218,7 @@ class CartService
         
         if ($cart) {
             $cart->clear();
-            $cart->setUpdatedAt(new \DateTime());
+            $cart->setUpdatedAt(new \DateTimeImmutable());
             $this->entityManager->flush();
         }
     }

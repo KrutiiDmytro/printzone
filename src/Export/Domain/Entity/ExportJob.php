@@ -37,11 +37,11 @@ class ExportJob
     #[ORM\Column(type: Types::JSON, nullable: true)]
     private ?array $filters = null;
 
-    #[ORM\Column(type: Types::DATETIME_MUTABLE)]
-    private \DateTimeInterface $createdAt;
+    #[ORM\Column(type: Types::DATETIME_IMMUTABLE)]
+    private \DateTimeImmutable $createdAt;
 
-    #[ORM\Column(type: Types::DATETIME_MUTABLE, nullable: true)]
-    private ?\DateTimeInterface $completedAt = null;
+    #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $completedAt = null;
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $errorMessage = null;
@@ -55,7 +55,7 @@ class ExportJob
         $this->format = $format;
         $this->requestedBy = $requestedBy;
         $this->filters = $filters;
-        $this->createdAt = new \DateTime();
+        $this->createdAt = new \DateTimeImmutable();
     }
 
     public function getId(): ?int
@@ -88,12 +88,12 @@ class ExportJob
         return $this->filters;
     }
 
-    public function getCreatedAt(): \DateTimeInterface
+    public function getCreatedAt(): \DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function getCompletedAt(): ?\DateTimeInterface
+    public function getCompletedAt(): ?\DateTimeImmutable
     {
         return $this->completedAt;
     }
@@ -117,13 +117,13 @@ class ExportJob
     {
         $this->status = ExportStatus::Completed;
         $this->filePath = $filePath;
-        $this->completedAt = new \DateTime();
+        $this->completedAt = new \DateTimeImmutable();
     }
 
     public function markFailed(string $errorMessage): void
     {
         $this->status = ExportStatus::Failed;
         $this->errorMessage = $errorMessage;
-        $this->completedAt = new \DateTime();
+        $this->completedAt = new \DateTimeImmutable();
     }
 }

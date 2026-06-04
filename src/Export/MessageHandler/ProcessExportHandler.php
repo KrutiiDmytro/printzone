@@ -55,7 +55,7 @@ final class ProcessExportHandler
             $formatter = $this->resolveFormatter($job->getFormat());
             $content = $formatter->format($rows);
 
-            $timestamp = (new \DateTime())->format('Ymd-His');
+            $timestamp = (new \DateTimeImmutable())->format('Ymd-His');
             $filePath = sprintf(
                 'exports/%s/%s/%d-%s.%s',
                 $job->getType()->value,

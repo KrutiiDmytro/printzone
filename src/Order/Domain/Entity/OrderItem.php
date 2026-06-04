@@ -5,7 +5,7 @@ namespace App\Order\Domain\Entity;
 use ApiPlatform\Metadata\ApiResource;
 use App\Catalog\Domain\Entity\Product;
 use Doctrine\ORM\Mapping as ORM;
-use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'order_items')]
