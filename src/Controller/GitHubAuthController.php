@@ -10,8 +10,9 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
 
 class GitHubAuthController extends AbstractController
 {
@@ -20,6 +21,7 @@ class GitHubAuthController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $passwordHasher,
+        private Security $security,
         private string $githubClientId,
         private string $githubClientSecret,
         private string $githubRedirectUri,
@@ -79,7 +81,7 @@ class GitHubAuthController extends AbstractController
 
             $this->em->flush();
 
-            $this->loginUser($user);
+            $this->security->login($user);
 
             return $this->redirectToRoute('app_home');
         } catch (\Exception $e) {
