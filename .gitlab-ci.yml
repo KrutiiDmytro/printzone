@@ -106,6 +106,7 @@ test:unit:
         -v "composer-cache-task25:/composer-cache" \
         -w /app \
         -e APP_ENV=test \
+        -e APP_DEBUG=0 \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
         php bin/phpunit --testsuite Unit --colors=never --log-junit /app/reports/junit-unit.xml
@@ -126,6 +127,7 @@ test:functional:
         -v "composer-cache-task25:/composer-cache" \
         -w /app \
         -e APP_ENV=test \
+        -e APP_DEBUG=0 \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
         php -d memory_limit=512M bin/phpunit --testsuite Functional --colors=never --log-junit /app/reports/junit-functional.xml
