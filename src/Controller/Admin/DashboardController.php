@@ -2,12 +2,6 @@
 
 namespace App\Controller\Admin;
 
-use App\Catalog\Domain\Entity\Brand;
-use App\Catalog\Domain\Entity\Category;
-use App\Catalog\Domain\Entity\PrinterModel;
-use App\Catalog\Domain\Entity\Product;
-use App\Order\Domain\Entity\Order;
-use App\User\Domain\Entity\User;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Assets;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
@@ -95,14 +89,14 @@ class DashboardController extends AbstractDashboardController
     {
         yield MenuItem::linkToDashboard('Dashboard', 'fa fa-home');
         yield MenuItem::section('Catalogue');
-        yield MenuItem::linkToCrud('Products', 'fa fa-box', Product::class);
-        yield MenuItem::linkToCrud('Categories', 'fa fa-folder', Category::class);
-        yield MenuItem::linkToCrud('Brands', 'fa fa-tag', Brand::class);
-        yield MenuItem::linkToCrud('Printer Models', 'fa fa-print', PrinterModel::class);
+        yield MenuItem::linkTo(ProductCrudController::class, 'Products', 'fa fa-box');
+        yield MenuItem::linkTo(CategoryCrudController::class, 'Categories', 'fa fa-folder');
+        yield MenuItem::linkTo(BrandCrudController::class, 'Brands', 'fa fa-tag');
+        yield MenuItem::linkTo(PrinterModelCrudController::class, 'Printer Models', 'fa fa-print');
         yield MenuItem::section('Orders');
-        yield MenuItem::linkToCrud('Orders', 'fa fa-shopping-cart', Order::class);
+        yield MenuItem::linkTo(OrderCrudController::class, 'Orders', 'fa fa-shopping-cart');
         yield MenuItem::section('Users');
-        yield MenuItem::linkToCrud('Users', 'fa fa-users', User::class);
+        yield MenuItem::linkTo(UserCrudController::class, 'Users', 'fa fa-users');
         yield MenuItem::section('Tools');
         yield MenuItem::linkToRoute('Export', 'fa fa-download', 'admin_export');
     }
