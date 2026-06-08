@@ -8,6 +8,8 @@
          failOnWarning="true"
          bootstrap="tests/bootstrap.php"
          cacheDirectory=".phpunit.cache"
+         enforceTimeLimit="true"
+         defaultTimeLimit="30"
 >
     <php>
         <ini name="display_errors" value="1" />
