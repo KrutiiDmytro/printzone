@@ -1,5 +1,10 @@
 {% extends '@EasyAdmin/page/content.html.twig' %}
 
+{# Override content_title to break EasyAdmin's page_title <-> content_title
+   fallback cycle (templates/page/content.html.twig:9,15). Without an override
+   the two blocks call each other infinitely, spinning the CPU forever. #}
+{% block content_title %}Панель управления{% endblock %}
+
 {% block content %}
     <h1>Панель управления</h1>
     
