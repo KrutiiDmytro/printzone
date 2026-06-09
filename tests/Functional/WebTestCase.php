@@ -34,6 +34,17 @@ abstract class WebTestCase extends BaseWebTestCase
         }
     }
 
+    protected function tearDown(): void
+    {
+        try {
+            static::getContainer()
+                ->get('doctrine.orm.entity_manager')
+                ->getConnection()
+                ->close();
+        } catch (\Throwable) {}
+        parent::tearDown();
+    }
+
     protected function createSchema(): void
     {
         $container = static::getContainer();
