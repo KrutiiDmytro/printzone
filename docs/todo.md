@@ -1,3 +1,31 @@
+# Аудит і виправлення документації мікросервісів (Task 24)
+
+> Звірка наявних `docs/microservices-architecture.md`, `docs/event-catalog.md`, `README.md` з фактичним
+> кодом + виправлення розбіжностей. Лише документація — код застосунку не змінювався (3 файли).
+
+## Виправлено
+- [x] **H1** Inventory: додано таблицю `stock_reservations` + семантику HELD/COMMITTED/RELEASED; примітка в §3, чому інвентар co-located у Catalog
+- [x] **H2** Stripe: Saga (§4.4) і Payment (§4.5) переписані під redirect-модель Checkout Session + webhook (не headless-списання); узгоджено діаграму в event-catalog
+- [x] **H3** Статуси Order: enum приведено до коду — `PENDING, PAID, FAILED, PROCESSING, SHIPPED, DELIVERED, CANCELLED` (прибрано `PAYMENT_PENDING`, додано `FAILED`)
+- [x] **H4** Міграція PK `serial int → UUID` винесена явним підкроком 2.1 у §10 з позначкою ризику
+- [x] **M1** У схему Catalog додано `brands`, `printer_models`, `products.brand_id`
+- [x] **M2** У §4.1 — примітка про код-гап: сутність `User` ще не має поля `githubId`
+- [x] **M3** Додано підрозділ «Transactional Outbox» (§5) зі схемою таблиці; крос-посилання з §9
+- [x] **M4** У §1/§2 і README позначено Delivery+Notification як greenfield, решту — як витягнуті модулі
+- [x] **M5** У §4.3 — примітка, що гостьовий кошик сесія→БД є зміною поведінки
+- [x] **L1** README: «22 типи подій» → 24 (дві згадки)
+- [x] **L2** Вирівняно payload подій: `ProductCreated.categoryId`, `OrderCancelled.userId`, `PaymentRequested.{paymentId,idempotencyKey}`, `Payment*` providerTxId/providerCode
+- [x] **L3** Домен виправлено: PrintZone друкарський магазин (не «електроніка»); заголовки узгоджено
+- [x] **L4** Circuit Breaker/mTLS — додано конкретику механізму (ganesha / service mesh)
+
+## Верифікація
+- [x] `grep PAYMENT_PENDING docs/ README.md` → порожньо
+- [x] enum статусів Order == `OrderCrudController.php:69-75` (+ FAILED)
+- [x] схема Catalog містить усі 6 сутностей коду
+- [x] `grep "22 тип|електроніки"` → порожньо
+
+---
+
 # Гігієна перед мікросервісами (Трек A)
 
 > Підняти якість/відтворюваність коду перед виносом у мікросервіси. Без зміни звʼязності
