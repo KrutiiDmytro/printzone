@@ -1,0 +1,667 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Method App\\Cart\\Domain\\Entity\\Cart\:\:getItems\(\) return type with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Cart/Domain/Entity/Cart.php
+
+		-
+			message: '#^Property App\\Cart\\Domain\\Entity\\Cart\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Cart/Domain/Entity/Cart.php
+
+		-
+			message: '#^Property App\\Cart\\Domain\\Entity\\Cart\:\:\$items with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Cart/Domain/Entity/Cart.php
+
+		-
+			message: '#^Property App\\Cart\\Domain\\Entity\\CartItem\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Cart/Domain/Entity/CartItem.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Brand\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Catalog/Domain/Entity/Brand.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Brand\:\:\$products with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Catalog/Domain/Entity/Brand.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Category\:\:\$children with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Catalog/Domain/Entity/Category.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Category\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Catalog/Domain/Entity/Category.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Category\:\:\$products with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Catalog/Domain/Entity/Category.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\PrinterModel\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Catalog/Domain/Entity/PrinterModel.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Product\:\:\$attributes with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Catalog/Domain/Entity/Product.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Product\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Catalog/Domain/Entity/Product.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\Product\:\:\$stock \(int\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Catalog/Domain/Entity/Product.php
+
+		-
+			message: '#^Property App\\Catalog\\Domain\\Entity\\ProductAttribute\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Catalog/Domain/Entity/ProductAttribute.php
+
+		-
+			message: '#^Class App\\Controller\\Admin\\BrandCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/BrandCrudController.php
+
+		-
+			message: '#^Class App\\Controller\\Admin\\CategoryCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/CategoryCrudController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: src/Controller/Admin/ExportController.php
+
+		-
+			message: '#^Class App\\Controller\\Admin\\OrderCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/OrderCrudController.php
+
+		-
+			message: '#^Class App\\Controller\\Admin\\PrinterModelCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/PrinterModelCrudController.php
+
+		-
+			message: '#^Class App\\Controller\\Admin\\ProductCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/ProductCrudController.php
+
+		-
+			message: '#^Class App\\Controller\\Admin\\UserCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/UserCrudController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UserCrudController\:\:persistEntity\(\) has parameter \$entityManager with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Controller/Admin/UserCrudController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UserCrudController\:\:updateEntity\(\) has parameter \$entityManager with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Controller/Admin/UserCrudController.php
+
+		-
+			message: '#^Parameter \#1 \$user of method App\\Order\\Domain\\Entity\\Order\:\:setUser\(\) expects App\\User\\Domain\\Entity\\User\|null, Symfony\\Component\\Security\\Core\\User\\UserInterface\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Controller/CheckoutController.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between null and string will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Controller/CheckoutController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getEmail\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getName\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getNickname\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Parameter \#1 \$token of method League\\OAuth2\\Client\\Provider\\AbstractProvider\:\:getResourceOwner\(\) expects League\\OAuth2\\Client\\Token\\AccessToken, League\\OAuth2\\Client\\Token\\AccessTokenInterface given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getEmail\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GoogleAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getName\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GoogleAuthController.php
+
+		-
+			message: '#^Parameter \#1 \$token of method League\\OAuth2\\Client\\Provider\\AbstractProvider\:\:getResourceOwner\(\) expects League\\OAuth2\\Client\\Token\\AccessToken, League\\OAuth2\\Client\\Token\\AccessTokenInterface given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Controller/GoogleAuthController.php
+
+		-
+			message: '#^Method App\\Controller\\ShopController\:\:buildFilters\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Controller/ShopController.php
+
+		-
+			message: '#^Offset ''brother''\|''canon''\|''dell''\|''epson''\|''hp'' on array\{samsung\: App\\Catalog\\Domain\\Entity\\Brand, dell\: App\\Catalog\\Domain\\Entity\\Brand, sony\: App\\Catalog\\Domain\\Entity\\Brand, hp\: App\\Catalog\\Domain\\Entity\\Brand, canon\: App\\Catalog\\Domain\\Entity\\Brand, epson\: App\\Catalog\\Domain\\Entity\\Brand, brother\: App\\Catalog\\Domain\\Entity\\Brand\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: src/DataFixtures/AppFixtures.php
+
+		-
+			message: '#^Method App\\Export\\Domain\\Entity\\ExportJob\:\:__construct\(\) has parameter \$filters with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Domain/Entity/ExportJob.php
+
+		-
+			message: '#^Method App\\Export\\Domain\\Entity\\ExportJob\:\:getFilters\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Domain/Entity/ExportJob.php
+
+		-
+			message: '#^Property App\\Export\\Domain\\Entity\\ExportJob\:\:\$filters type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Domain/Entity/ExportJob.php
+
+		-
+			message: '#^Property App\\Export\\Domain\\Entity\\ExportJob\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Export/Domain/Entity/ExportJob.php
+
+		-
+			message: '#^Method App\\Export\\Extractor\\ExportExtractorInterface\:\:extract\(\) has parameter \$filters with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Extractor/ExportExtractorInterface.php
+
+		-
+			message: '#^Method App\\Export\\Extractor\\OrderExtractor\:\:extract\(\) has parameter \$filters with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Extractor/OrderExtractor.php
+
+		-
+			message: '#^Method App\\Export\\Extractor\\ProductExtractor\:\:extract\(\) has parameter \$filters with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Extractor/ProductExtractor.php
+
+		-
+			message: '#^Method App\\Export\\Extractor\\UserExtractor\:\:extract\(\) has parameter \$filters with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Extractor/UserExtractor.php
+
+		-
+			message: '#^Method App\\Export\\Formatter\\CsvFormatter\:\:format\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Formatter/CsvFormatter.php
+
+		-
+			message: '#^Method App\\Export\\Formatter\\ExportFormatterInterface\:\:format\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Formatter/ExportFormatterInterface.php
+
+		-
+			message: '#^Method App\\Export\\Formatter\\JsonFormatter\:\:format\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Formatter/JsonFormatter.php
+
+		-
+			message: '#^Method App\\Export\\Formatter\\XmlFormatter\:\:format\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Formatter/XmlFormatter.php
+
+		-
+			message: '#^Method App\\Export\\Service\\ExportService\:\:dispatch\(\) has parameter \$filters with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Export/Service/ExportService.php
+
+		-
+			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Order/Domain/Entity/Order.php
+
+		-
+			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$items with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Order/Domain/Entity/Order.php
+
+		-
+			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$status \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Order/Domain/Entity/Order.php
+
+		-
+			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$totalAmount \(int\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Order/Domain/Entity/Order.php
+
+		-
+			message: '#^Property App\\Order\\Domain\\Entity\\OrderItem\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Order/Domain/Entity/OrderItem.php
+
+		-
+			message: '#^Class App\\Repository\\CartRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Repository/CartRepository.php
+
+		-
+			message: '#^Class App\\Repository\\CategoryRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Repository/CategoryRepository.php
+
+		-
+			message: '#^Method App\\Repository\\CategoryRepository\:\:findAllRootCategories\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/CategoryRepository.php
+
+		-
+			message: '#^Class App\\Repository\\ExportJobRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Repository/ExportJobRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ExportJobRepository\:\:findRecent\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ExportJobRepository.php
+
+		-
+			message: '#^Class App\\Repository\\OrderRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Repository/OrderRepository.php
+
+		-
+			message: '#^Method App\\Repository\\OrderRepository\:\:findByUser\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/OrderRepository.php
+
+		-
+			message: '#^Method App\\Repository\\OrderRepository\:\:findRecentOrders\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/OrderRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:findAllAvailable\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:findByBrand\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:findByBrandAndCategory\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:findByCategory\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:findFeatured\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:findLatest\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:findWithFilters\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Repository\\ProductRepository\:\:getPriceRange\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Repository/ProductRepository.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:addProductToDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:addToDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:clearDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCart\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCartFromDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCartFromDatabase\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCartFromSession\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getOrCreateCart\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getSession\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:removeFromDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:updateInDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: src/Storage/FlysystemFileStorage.php
+
+		-
+			message: '#^Method App\\Twig\\BrandExtension\:\:getAllBrands\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Twig/BrandExtension.php
+
+		-
+			message: '#^Method App\\Twig\\BrandExtension\:\:getBrandModels\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Twig/BrandExtension.php
+
+		-
+			message: '#^Method App\\Twig\\CategoryExtension\:\:getCategories\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Twig/CategoryExtension.php
+
+		-
+			message: '#^Method App\\User\\Domain\\Entity\\User\:\:setRoles\(\) has parameter \$roles with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/User/Domain/Entity/User.php
+
+		-
+			message: '#^Property App\\User\\Domain\\Entity\\User\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/User/Domain/Entity/User.php
+
+		-
+			message: '#^Property App\\User\\Domain\\Entity\\User\:\:\$roles type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/User/Domain/Entity/User.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createAdminClient\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createAuthenticatedClient\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createAuthenticatedClient\(\) has parameter \$roles with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createClient\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createClient\(\) has parameter \$server with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createUserClient\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\EventListener\\LoginListenerTest\:\:\$cartService has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/EventListener/LoginListenerTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\EventListener\\LoginListenerTest\:\:\$urlGenerator has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/EventListener/LoginListenerTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\ExportJobTest\:\:makeJob\(\) has parameter \$filters with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/ExportJobTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\OrderExtractorTest\:\:makeEm\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/OrderExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\OrderExtractorTest\:\:makeQbWithExpectations\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/OrderExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\OrderExtractorTest\:\:makeQbWithExpectations\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/OrderExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\ProductExtractorTest\:\:makeEm\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/ProductExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\ProductExtractorTest\:\:makeQbWithExpectations\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/ProductExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\ProductExtractorTest\:\:makeQbWithExpectations\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/ProductExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\UserExtractorTest\:\:makeEm\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/UserExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\UserExtractorTest\:\:makeQbWithExpectations\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/UserExtractorTest.php
+
+		-
+			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\UserExtractorTest\:\:makeQbWithExpectations\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/Export/Extractor/UserExtractorTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$cartRepository has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$entityManager has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$productRepository has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$requestStack has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$security has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Twig\\CartExtensionTest\:\:\$cartService has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Twig/CartExtensionTest.php
+
+		-
+			message: '#^Call to function method_exists\(\) with ''Symfony\\\\Component\\\\Dotenv\\\\Dotenv'' and ''bootEnv'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: tests/bootstrap.php

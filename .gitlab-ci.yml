@@ -54,6 +54,21 @@ audit:composer:
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
+cs:fixer:
+  stage: validate
+  script:
+    - echo "=== PHP CS Fixer (check, no changes) ==="
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -w /app \
+        -e PHP_CS_FIXER_IGNORE_ENV=1 \
+        ghcr.io/php-cs-fixer/php-cs-fixer:3-php8.3 \
+        check --diff --show-progress=dots
+  needs: []
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
 # ─────────────────────────────────────────────────────────────
 # BUILD
 # Збираємо локальний образ паралельно з validate (needs: [])
@@ -94,6 +109,21 @@ build:image:
     - build:image
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
+
+static:analysis:
+  extends: .test_base
+  script:
+    - echo "=== PHPStan (level 6, with baseline) ==="
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task25:/composer-cache" \
+        -w /app \
+        -e APP_ENV=test \
+        -e APP_DEBUG=0 \
+        -e COMPOSER_HOME=/composer-cache \
+        $LOCAL_IMAGE \
+        sh -c "php bin/console cache:warmup --env=test && vendor/bin/phpstan analyse --no-progress"
 
 test:unit:
   extends: .test_base

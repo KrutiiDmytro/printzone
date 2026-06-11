@@ -1,3 +1,51 @@
+# Гігієна перед мікросервісами (Трек A)
+
+> Підняти якість/відтворюваність коду перед виносом у мікросервіси. Без зміни звʼязності
+> (Phase 1 не чіпаємо). Усі зміни поведінково нейтральні. Гілка `chore/hygiene-microservices-prep`.
+
+## Задача 1 — Закріпити версії залежностей
+- [x] `composer.json`: `stripe/stripe-php` `*`→`^20.2`, `doctrine/doctrine-fixtures-bundle` `*`→`^4.3.1`
+- [x] `composer update` лише цих 2 пакетів (stripe v20.1→v20.2), `composer validate` ок
+
+## Задача 2 — php-cs-fixer (єдиний стиль)
+- [x] `composer require --dev friendsofphp/php-cs-fixer` (^3.95)
+- [x] `.php-cs-fixer.dist.php` — Finder src+tests, `@Symfony` + `@PHP82Migration` (без risky)
+- [x] `php-cs-fixer fix` один раз → 88 файлів переформатовано (окремий style-коміт)
+- [x] `.gitlab-ci.yml` — job `cs:fixer` у validate (image ghcr.io/php-cs-fixer, `check`)
+
+## Задача 3 — PHPStan + symfony extension
+- [x] `composer require --dev phpstan/phpstan phpstan/phpstan-symfony phpstan/extension-installer`
+- [x] `phpstan.dist.neon` — level 6, paths src+tests, containerXmlPath, includes baseline
+- [x] згенерувати `phpstan-baseline.neon` (111 помилок у baseline)
+- [x] `.gitlab-ci.yml` — job `static:analysis` у validate (composer:2: install→warmup→analyse)
+
+## Верифікація
+- [x] `php-cs-fixer check` → 0 порушень
+- [x] `phpstan analyse` → [OK] No errors (з baseline)
+- [x] `phpunit` → OK (141 tests, 348 assertions) — поведінка не змінилась
+
+## Review
+
+### Що зроблено
+1. **Версії**: `stripe/stripe-php *`→`^20.2`, `doctrine-fixtures-bundle *`→`^4.3.1` (відтворювані білди).
+2. **php-cs-fixer** ^3.95: `@Symfony` + `@PHP82Migration` (non-risky), 88/111 файлів переформатовано.
+3. **PHPStan** 2.2 + phpstan-symfony: level 6, baseline 111 помилок (CI зелений; борг знижуємо «храповиком»).
+4. **CI**: дві нові job-и у стадії `validate` — `cs:fixer` (check) і `static:analysis` (phpstan).
+
+### Структура комітів
+- `style:` — лише переформатування `src/`+`tests/` (механічний diff, ізольований для рев'ю).
+- `chore(quality):` — тулінг, конфіги, baseline, CI, закріплення версій (composer.json/lock
+  переплетені між задачами → не діляться по файлах, тому згруповані).
+
+### Поза обсягом (свідомо, не гігієна)
+Ідемпотентність webhook, Phase 1 розв'язання FK, розбиття CartService, зняття типів з baseline.
+
+### Як знижувати PHPStan-борг далі
+`phpstan-baseline.neon` (111) — додавати типи generics (Doctrine Collections), `TEntity`
+в EasyAdmin CRUD, прибирати застарілі `int|null` на `$id`. Видаляти записи з baseline по мірі фіксу.
+
+---
+
 # Price Range Filter (euros)
 
 ## Checklist
