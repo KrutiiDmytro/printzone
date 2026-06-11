@@ -18,13 +18,14 @@ class DashboardController extends AbstractDashboardController
         private ChartBuilderInterface $chartBuilder
     ) {
     }
+
     public function index(): Response
     {
         $chart = $this->chartBuilder->createChart(Chart::TYPE_LINE);
 
         $months = [
             'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
+            'July', 'August', 'September', 'October', 'November', 'December',
         ];
 
         $chart->setData([

@@ -117,10 +117,10 @@ class ProductRepository extends ServiceEntityRepository
         }
 
         match ($filters['sort'] ?? '') {
-            'price_asc'  => $qb->orderBy('p.price', 'ASC'),
+            'price_asc' => $qb->orderBy('p.price', 'ASC'),
             'price_desc' => $qb->orderBy('p.price', 'DESC'),
-            'newest'     => $qb->orderBy('p.id', 'DESC'),
-            default      => $qb->orderBy('p.id', 'DESC'),
+            'newest' => $qb->orderBy('p.id', 'DESC'),
+            default => $qb->orderBy('p.id', 'DESC'),
         };
 
         return $qb->getQuery()->getResult();

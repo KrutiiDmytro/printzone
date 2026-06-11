@@ -33,13 +33,13 @@ final class ProductImageService
     {
         $current = $product->getImage();
 
-        if ($previousImage !== null
+        if (null !== $previousImage
             && $previousImage !== $current
             && str_starts_with($previousImage, self::PREFIX)) {
             $this->safeDelete($previousImage);
         }
 
-        if ($current === null || $current === '') {
+        if (null === $current || '' === $current) {
             return;
         }
 
@@ -74,14 +74,14 @@ final class ProductImageService
 
     public function deleteStoredImageIfAny(?string $imageKey): void
     {
-        if ($imageKey !== null && str_starts_with($imageKey, self::PREFIX)) {
+        if (null !== $imageKey && str_starts_with($imageKey, self::PREFIX)) {
             $this->safeDelete($imageKey);
         }
     }
 
     public function getUrlForDisplay(?string $image): string
     {
-        if ($image === null || $image === '') {
+        if (null === $image || '' === $image) {
             return '/img/product-1.png';
         }
 
@@ -92,7 +92,7 @@ final class ProductImageService
             }
 
             $public = $this->storage->publicUrl($image);
-            if ($public !== null) {
+            if (null !== $public) {
                 return $public;
             }
 

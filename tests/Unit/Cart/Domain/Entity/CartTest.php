@@ -4,8 +4,8 @@ namespace App\Tests\Unit\Cart\Domain\Entity;
 
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
-use App\Catalog\Domain\Entity\Product;
 use App\Catalog\Domain\Entity\Category;
+use App\Catalog\Domain\Entity\Product;
 use App\User\Domain\Entity\User;
 use PHPUnit\Framework\TestCase;
 

@@ -2,24 +2,23 @@
 
 namespace App\Tests\Functional\Controller;
 
-use App\Tests\Functional\WebTestCase;
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
 use App\Catalog\Domain\Entity\Product;
 use App\Payment\Service\StripeCheckoutService;
+use App\Tests\Functional\WebTestCase;
 use App\User\Domain\Entity\User;
-use Symfony\Component\HttpFoundation\Response;
 
 class CheckoutControllerTest extends WebTestCase
 {
     public function testCheckoutRequiresAuthentication(): void
     {
         $client = static::createClient();
-        
+
         // Створюємо схему після створення клієнта
         $this->createSchema();
         $this->loadFixtures();
-        
+
         $client->request('GET', '/checkout');
 
         $this->assertResponseRedirects('/login');
@@ -37,7 +36,7 @@ class CheckoutControllerTest extends WebTestCase
         $product->setDescription('Test Description');
         $product->setPrice(1000);
         $product->setStock(10);
-        
+
         $categoryRepository = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class);
         $category = $categoryRepository->findOneBy([]);
         if ($category) {
@@ -61,9 +60,9 @@ class CheckoutControllerTest extends WebTestCase
         $cartItem->setQuantity(1);
         $cart->addItem($cartItem); // Explicitly add to collection
         $entityManager->persist($cartItem);
-        
+
         $entityManager->flush();
-        
+
         $client->request('GET', '/checkout');
 
         $this->assertResponseIsSuccessful();

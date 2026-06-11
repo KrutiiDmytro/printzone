@@ -54,6 +54,7 @@ class OrderItem
     public function setOrderRef(?Order $orderRef): static
     {
         $this->orderRef = $orderRef;
+
         return $this;
     }
 
@@ -65,6 +66,7 @@ class OrderItem
     public function setProduct(?Product $product): static
     {
         $this->product = $product;
+
         return $this;
     }
 
@@ -76,6 +78,7 @@ class OrderItem
     public function setQuantity(int $quantity): static
     {
         $this->quantity = $quantity;
+
         return $this;
     }
 
@@ -87,6 +90,7 @@ class OrderItem
     public function setPrice(int $price): static
     {
         $this->price = $price;
+
         return $this;
     }
 

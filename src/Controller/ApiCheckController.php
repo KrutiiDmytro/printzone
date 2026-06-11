@@ -13,10 +13,10 @@ class ApiCheckController extends AbstractController
     {
         // Если запрос дошел сюда, значит JWT токен валидный (firewall пропустил)
         $user = $this->getUser();
-        
+
         return new JsonResponse([
             'message' => 'Token is valid',
-            'user' => $user ? $user->getUserIdentifier() : null
+            'user' => $user ? $user->getUserIdentifier() : null,
         ]);
     }
 }

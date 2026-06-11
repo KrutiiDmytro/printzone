@@ -16,7 +16,8 @@ final class ExportService
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly MessageBusInterface $bus,
-    ) {}
+    ) {
+    }
 
     public function dispatch(ExportType $type, ExportFormat $format, string $requestedBy, array $filters = []): ExportJob
     {

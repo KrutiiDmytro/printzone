@@ -4,8 +4,8 @@ namespace App\Controller;
 
 use App\Service\CartService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/cart')]
@@ -13,7 +13,8 @@ class CartController extends AbstractController
 {
     public function __construct(
         private CartService $cartService
-    ) {}
+    ) {
+    }
 
     #[Route('', name: 'app_cart')]
     public function index(): Response
@@ -32,8 +33,9 @@ class CartController extends AbstractController
         $this->cartService->add($id, $quantity);
 
         $this->addFlash('success', 'Product added to cart!');
-        
+
         $referer = $request->headers->get('referer');
+
         return $this->redirect($referer ?: $this->generateUrl('app_home'));
     }
 
@@ -41,8 +43,9 @@ class CartController extends AbstractController
     public function remove(int $id): Response
     {
         $this->cartService->remove($id);
-        
+
         $this->addFlash('success', 'Product removed from cart!');
+
         return $this->redirectToRoute('app_cart');
     }
 
@@ -51,7 +54,7 @@ class CartController extends AbstractController
     {
         $quantity = $request->request->getInt('quantity', 1);
         $this->cartService->update($id, $quantity);
-        
+
         return $this->redirectToRoute('app_cart');
     }
 
@@ -59,8 +62,9 @@ class CartController extends AbstractController
     public function clear(): Response
     {
         $this->cartService->clear();
-        
+
         $this->addFlash('success', 'Cart cleared!');
+
         return $this->redirectToRoute('app_cart');
     }
 }

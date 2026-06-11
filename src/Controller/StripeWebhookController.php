@@ -55,13 +55,13 @@ class StripeWebhookController extends AbstractController
         $orderId = (int) ($session->metadata->order_id ?? 0);
         $order = $this->orderRepository->find($orderId);
 
-        if ($order === null) {
+        if (null === $order) {
             $this->logger->warning('Stripe webhook: order not found', ['order_id' => $orderId]);
 
             return;
         }
 
-        if ($order->getStatus() !== 'PENDING') {
+        if ('PENDING' !== $order->getStatus()) {
             $this->logger->info('Stripe webhook: order already processed', [
                 'order_id' => $orderId,
                 'status' => $order->getStatus(),
@@ -81,13 +81,13 @@ class StripeWebhookController extends AbstractController
         $orderId = (int) ($paymentIntent->metadata->order_id ?? 0);
         $order = $this->orderRepository->find($orderId);
 
-        if ($order === null) {
+        if (null === $order) {
             $this->logger->warning('Stripe webhook: order not found', ['order_id' => $orderId]);
 
             return;
         }
 
-        if ($order->getStatus() !== 'PENDING') {
+        if ('PENDING' !== $order->getStatus()) {
             return;
         }
 

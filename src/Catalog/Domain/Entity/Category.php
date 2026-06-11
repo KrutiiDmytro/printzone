@@ -3,8 +3,8 @@
 namespace App\Catalog\Domain\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
-use Doctrine\Common\Collections\ArrayCollection;
 use App\Repository\CategoryRepository;
+use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
@@ -16,7 +16,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
     normalizationContext: ['groups' => ['category:read']],
     denormalizationContext: ['groups' => ['category:write']]
 )]
-
 class Category
 {
     #[ORM\Id]
@@ -63,6 +62,7 @@ class Category
     public function setName(string $name): static
     {
         $this->name = $name;
+
         return $this;
     }
 
@@ -74,6 +74,7 @@ class Category
     public function setSlug(string $slug): static
     {
         $this->slug = $slug;
+
         return $this;
     }
 
@@ -85,6 +86,7 @@ class Category
     public function setParent(?self $parent): static
     {
         $this->parent = $parent;
+
         return $this;
     }
 
@@ -96,7 +98,7 @@ class Category
         return $this->children;
     }
 
-        /**
+    /**
      * @return Collection<int, Product>
      */
     public function getProducts(): Collection
@@ -108,6 +110,4 @@ class Category
     {
         return $this->name ?? '';
     }
-    
-    
 }

@@ -46,6 +46,7 @@ class Cart
     public function setUser(User $user): self
     {
         $this->user = $user;
+
         return $this;
     }
 
@@ -60,6 +61,7 @@ class Cart
             $this->items[] = $item;
             $item->setCart($this);
         }
+
         return $this;
     }
 
@@ -70,6 +72,7 @@ class Cart
                 $item->setCart(null);
             }
         }
+
         return $this;
     }
 
@@ -81,6 +84,7 @@ class Cart
     public function setUpdatedAt(\DateTimeImmutable $updatedAt): self
     {
         $this->updatedAt = $updatedAt;
+
         return $this;
     }
 
@@ -90,12 +94,14 @@ class Cart
         foreach ($this->items as $item) {
             $total += $item->getTotal();
         }
+
         return $total;
     }
 
     public function clear(): self
     {
         $this->items->clear();
+
         return $this;
     }
 }

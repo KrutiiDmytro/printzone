@@ -10,7 +10,8 @@ class CategoryExtension extends AbstractExtension
 {
     public function __construct(
         private CategoryRepository $categoryRepository
-    ) {}
+    ) {
+    }
 
     public function getFunctions(): array
     {

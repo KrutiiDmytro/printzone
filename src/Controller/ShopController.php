@@ -3,8 +3,8 @@
 namespace App\Controller;
 
 use App\Repository\BrandRepository;
-use App\Repository\ProductRepository;
 use App\Repository\CategoryRepository;
+use App\Repository\ProductRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,14 +19,14 @@ class ShopController extends AbstractController
         CategoryRepository $categoryRepository
     ): Response {
         [$filters, $priceParams] = $this->buildFilters($request);
-        $products   = $productRepository->findWithFilters($filters);
+        $products = $productRepository->findWithFilters($filters);
         $priceRange = $productRepository->getPriceRange();
         $categories = $categoryRepository->findAllRootCategories();
 
         return $this->render('shop/index.html.twig', [
-            'products'    => $products,
-            'categories'  => $categories,
-            'priceRange'  => $priceRange,
+            'products' => $products,
+            'categories' => $categories,
+            'priceRange' => $priceRange,
             'priceParams' => $priceParams,
             'currentSort' => $filters['sort'] ?? '',
         ]);
@@ -46,17 +46,17 @@ class ShopController extends AbstractController
         }
 
         [$filters, $priceParams] = $this->buildFilters($request, category: $category);
-        $products   = $productRepository->findWithFilters($filters);
+        $products = $productRepository->findWithFilters($filters);
         $priceRange = $productRepository->getPriceRange();
         $categories = $categoryRepository->findAllRootCategories();
 
         return $this->render('shop/index.html.twig', [
-            'products'       => $products,
-            'categories'     => $categories,
-            'currentCategory'=> $category,
-            'priceRange'     => $priceRange,
-            'priceParams'    => $priceParams,
-            'currentSort'    => $filters['sort'] ?? '',
+            'products' => $products,
+            'categories' => $categories,
+            'currentCategory' => $category,
+            'priceRange' => $priceRange,
+            'priceParams' => $priceParams,
+            'currentSort' => $filters['sort'] ?? '',
         ]);
     }
 
@@ -75,14 +75,14 @@ class ShopController extends AbstractController
         }
 
         [$filters, $priceParams] = $this->buildFilters($request, brand: $brand);
-        $products   = $productRepository->findWithFilters($filters);
+        $products = $productRepository->findWithFilters($filters);
         $priceRange = $productRepository->getPriceRange();
 
         return $this->render('shop/index.html.twig', [
-            'products'    => $products,
-            'categories'  => $categoryRepository->findAllRootCategories(),
-            'currentBrand'=> $brand,
-            'priceRange'  => $priceRange,
+            'products' => $products,
+            'categories' => $categoryRepository->findAllRootCategories(),
+            'currentBrand' => $brand,
+            'priceRange' => $priceRange,
             'priceParams' => $priceParams,
             'currentSort' => $filters['sort'] ?? '',
         ]);
@@ -97,7 +97,7 @@ class ShopController extends AbstractController
         CategoryRepository $categoryRepository,
         ProductRepository $productRepository
     ): Response {
-        $brand    = $brandRepository->findBySlug($brandSlug);
+        $brand = $brandRepository->findBySlug($brandSlug);
         $category = $categoryRepository->findBySlug($categorySlug);
 
         if (!$brand || !$category) {
@@ -105,17 +105,17 @@ class ShopController extends AbstractController
         }
 
         [$filters, $priceParams] = $this->buildFilters($request, category: $category, brand: $brand);
-        $products   = $productRepository->findWithFilters($filters);
+        $products = $productRepository->findWithFilters($filters);
         $priceRange = $productRepository->getPriceRange();
 
         return $this->render('shop/index.html.twig', [
-            'products'        => $products,
-            'categories'      => $categoryRepository->findAllRootCategories(),
-            'currentBrand'    => $brand,
+            'products' => $products,
+            'categories' => $categoryRepository->findAllRootCategories(),
+            'currentBrand' => $brand,
             'currentCategory' => $category,
-            'priceRange'      => $priceRange,
-            'priceParams'     => $priceParams,
-            'currentSort'     => $filters['sort'] ?? '',
+            'priceRange' => $priceRange,
+            'priceParams' => $priceParams,
+            'currentSort' => $filters['sort'] ?? '',
         ]);
     }
 
@@ -141,23 +141,23 @@ class ShopController extends AbstractController
     ): array {
         $priceMinEur = $request->query->get('price_min');
         $priceMaxEur = $request->query->get('price_max');
-        $sort        = $request->query->get('sort', '');
+        $sort = $request->query->get('sort', '');
 
         $filters = [
             'category' => $category,
-            'brand'    => $brand,
-            'sort'     => $sort,
+            'brand' => $brand,
+            'sort' => $sort,
         ];
 
         $priceParams = ['min' => null, 'max' => null];
 
-        if ($priceMinEur !== null && $priceMinEur !== '') {
-            $filters['minPrice']    = (int) round((float) $priceMinEur * 100);
-            $priceParams['min']     = (float) $priceMinEur;
+        if (null !== $priceMinEur && '' !== $priceMinEur) {
+            $filters['minPrice'] = (int) round((float) $priceMinEur * 100);
+            $priceParams['min'] = (float) $priceMinEur;
         }
-        if ($priceMaxEur !== null && $priceMaxEur !== '') {
-            $filters['maxPrice']    = (int) round((float) $priceMaxEur * 100);
-            $priceParams['max']     = (float) $priceMaxEur;
+        if (null !== $priceMaxEur && '' !== $priceMaxEur) {
+            $filters['maxPrice'] = (int) round((float) $priceMaxEur * 100);
+            $priceParams['max'] = (float) $priceMaxEur;
         }
 
         return [$filters, $priceParams];

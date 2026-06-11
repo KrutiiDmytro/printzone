@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Export\Extractor;
 
 use App\Export\Extractor\UserExtractor;
-use Doctrine\ORM\Query;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -57,10 +57,10 @@ final class UserExtractorTest extends TestCase
     public function testExtractTransformsRow(): void
     {
         $row = [
-            'id'       => 1,
-            'email'    => 'admin@example.com',
+            'id' => 1,
+            'email' => 'admin@example.com',
             'fullName' => 'Admin User',
-            'roles'    => ['ROLE_USER', 'ROLE_ADMIN'],
+            'roles' => ['ROLE_USER', 'ROLE_ADMIN'],
         ];
 
         $result = (new UserExtractor($this->makeEm([$row])))->extract([]);

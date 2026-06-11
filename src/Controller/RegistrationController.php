@@ -14,8 +14,8 @@ class RegistrationController extends AbstractController
 {
     #[Route('/register', name: 'app_register')]
     public function register(
-        Request $request, 
-        UserPasswordHasherInterface $userPasswordHasher, 
+        Request $request,
+        UserPasswordHasherInterface $userPasswordHasher,
         EntityManagerInterface $entityManager
     ): Response {
         // Если пользователь уже залогинен, перенаправляем на главную
@@ -29,6 +29,7 @@ class RegistrationController extends AbstractController
         if ($request->isMethod('POST')) {
             if (!$this->isCsrfTokenValid('register', $request->request->get('_token'))) {
                 $error = 'Invalid CSRF token.';
+
                 return $this->render('registration/register.html.twig', ['error' => $error]);
             }
 
@@ -46,7 +47,7 @@ class RegistrationController extends AbstractController
             } else {
                 // Проверяем, не существует ли уже пользователь с таким email
                 $existingUser = $entityManager->getRepository(User::class)->findOneBy(['email' => $email]);
-                
+
                 if ($existingUser) {
                     $error = 'User with this email already exists.';
                 } else {
@@ -55,17 +56,18 @@ class RegistrationController extends AbstractController
                     $user->setEmail($email);
                     $user->setFullName($fullName);
                     $user->setRoles(['ROLE_USER']);
-                    
+
                     // Хешируем пароль
                     $hashedPassword = $userPasswordHasher->hashPassword($user, $password);
                     $user->setPassword($hashedPassword);
-                    
+
                     // Сохраняем в базу данных
                     $entityManager->persist($user);
                     $entityManager->flush();
-                    
+
                     // Перенаправляем на страницу входа с сообщением об успехе
                     $this->addFlash('success', 'Registration successful! Please log in.');
+
                     return $this->redirectToRoute('app_login');
                 }
             }

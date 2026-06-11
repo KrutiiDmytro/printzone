@@ -15,7 +15,7 @@ interface FileStorageInterface
     public function exists(string $key): bool;
 
     /**
-     * @return list<string> Paths to files only (directories excluded), relative to storage root.
+     * @return list<string> paths to files only (directories excluded), relative to storage root
      */
     public function listKeys(string $prefix = '', bool $deep = false): array;
 

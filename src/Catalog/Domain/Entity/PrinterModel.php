@@ -37,6 +37,7 @@ class PrinterModel
     public function setName(string $name): static
     {
         $this->name = $name;
+
         return $this;
     }
 
@@ -48,6 +49,7 @@ class PrinterModel
     public function setSlug(string $slug): static
     {
         $this->slug = $slug;
+
         return $this;
     }
 
@@ -59,6 +61,7 @@ class PrinterModel
     public function setBrand(Brand $brand): static
     {
         $this->brand = $brand;
+
         return $this;
     }
 

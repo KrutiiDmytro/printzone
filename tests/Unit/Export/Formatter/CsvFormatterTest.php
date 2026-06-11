@@ -46,7 +46,7 @@ final class CsvFormatterTest extends TestCase
     public function testLargeDataset(): void
     {
         $rows = [];
-        for ($i = 1; $i <= 1000; $i++) {
+        for ($i = 1; $i <= 1000; ++$i) {
             $rows[] = ['id' => $i, 'name' => "Product $i", 'price' => number_format($i * 9.99, 2)];
         }
 

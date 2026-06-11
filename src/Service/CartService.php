@@ -21,10 +21,11 @@ class CartService
         private CartRepository $cartRepository,
         private EntityManagerInterface $entityManager,
         private Security $security
-    ) {}
+    ) {
+    }
 
     /**
-     * Добавить товар в корзину
+     * Добавить товар в корзину.
      */
     public function add(int $productId, int $quantity = 1): void
     {
@@ -40,7 +41,7 @@ class CartService
     }
 
     /**
-     * Удалить товар из корзины
+     * Удалить товар из корзины.
      */
     public function remove(int $productId): void
     {
@@ -54,7 +55,7 @@ class CartService
     }
 
     /**
-     * Обновить количество
+     * Обновить количество.
      */
     public function update(int $productId, int $quantity): void
     {
@@ -68,7 +69,7 @@ class CartService
     }
 
     /**
-     * Очистить корзину
+     * Очистить корзину.
      */
     public function clear(): void
     {
@@ -82,7 +83,7 @@ class CartService
     }
 
     /**
-     * Получить содержимое корзины
+     * Получить содержимое корзины.
      */
     public function getCart(): array
     {
@@ -94,9 +95,9 @@ class CartService
 
         return $this->getCartFromSession();
     }
-    
+
     /**
-     * Перенести корзину из сессии в БД (при входе)
+     * Перенести корзину из сессии в БД (при входе).
      */
     public function migrateSessionToDatabase(): void
     {
@@ -173,7 +174,7 @@ class CartService
     private function removeFromDatabase($user, int $productId): void
     {
         $cart = $this->cartRepository->findOneByUser($user);
-        
+
         if (!$cart) {
             return;
         }
@@ -192,7 +193,7 @@ class CartService
     private function updateInDatabase($user, int $productId, int $quantity): void
     {
         $cart = $this->cartRepository->findOneByUser($user);
-        
+
         if (!$cart) {
             return;
         }
@@ -215,7 +216,7 @@ class CartService
     private function clearDatabase($user): void
     {
         $cart = $this->cartRepository->findOneByUser($user);
-        
+
         if ($cart) {
             $cart->clear();
             $cart->setUpdatedAt(new \DateTimeImmutable());
@@ -246,7 +247,7 @@ class CartService
             ];
             $total += $item->getTotal();
         }
-        
+
         return [
             'items' => $cartItems,
             'total' => $total,
@@ -358,6 +359,7 @@ class CartService
     public function getCount(): int
     {
         $cart = $this->getCart();
+
         return $cart['count'];
     }
 }

@@ -12,7 +12,8 @@ class BrandExtension extends AbstractExtension
     public function __construct(
         private BrandRepository $brandRepository,
         private PrinterModelRepository $printerModelRepository,
-    ) {}
+    ) {
+    }
 
     public function getFunctions(): array
     {

@@ -18,6 +18,7 @@ class StripeCheckoutService
 
     /**
      * @param array<int, array{product: \App\Catalog\Domain\Entity\Product, quantity: int, total: int}> $cartItems
+     *
      * @return array{id: string, url: string}
      */
     public function createSession(Order $order, array $cartItems): array
@@ -42,7 +43,7 @@ class StripeCheckoutService
             'app_checkout_success',
             [],
             UrlGeneratorInterface::ABSOLUTE_URL
-        ) . '?session_id={CHECKOUT_SESSION_ID}';
+        ).'?session_id={CHECKOUT_SESSION_ID}';
 
         $cancelUrl = $this->urlGenerator->generate(
             'app_checkout_cancel',

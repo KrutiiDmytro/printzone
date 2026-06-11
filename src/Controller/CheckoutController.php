@@ -29,6 +29,7 @@ class CheckoutController extends AbstractController
 
         if (empty($cart['items'])) {
             $this->addFlash('warning', 'Your cart is empty');
+
             return $this->redirectToRoute('app_cart');
         }
 
@@ -45,6 +46,7 @@ class CheckoutController extends AbstractController
 
         if (empty($cart['items'])) {
             $this->addFlash('error', 'Your cart is empty');
+
             return $this->redirectToRoute('app_cart');
         }
 
@@ -71,13 +73,15 @@ class CheckoutController extends AbstractController
             $order->setStatus('FAILED');
             $this->entityManager->flush();
             $this->addFlash('error', 'Payment service is unavailable. Please try again.');
+
             return $this->redirectToRoute('app_checkout');
         }
 
-        if ($session['url'] === null) {
+        if (null === $session['url']) {
             $order->setStatus('FAILED');
             $this->entityManager->flush();
             $this->addFlash('error', 'Could not initiate payment session. Please try again.');
+
             return $this->redirectToRoute('app_checkout');
         }
 

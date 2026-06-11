@@ -32,8 +32,8 @@ final class FileStorageFactory
         $adapter = new LocalFilesystemAdapter(
             $this->localRoot,
             PortableVisibilityConverter::fromArray([
-                'file' => ['public' => 0644, 'private' => 0600],
-                'dir'  => ['public' => 0755, 'private' => 0700],
+                'file' => ['public' => 0o644, 'private' => 0o600],
+                'dir' => ['public' => 0o755, 'private' => 0o700],
             ], 'public'),
         );
         $filesystem = new Filesystem($adapter);

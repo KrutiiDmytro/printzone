@@ -45,6 +45,7 @@ class CreateAdminUserCommand extends Command
             $existing->setPassword($this->hasher->hashPassword($existing, $password));
             $this->em->flush();
             $io->success("Updated existing user $email with ROLE_ADMIN.");
+
             return Command::SUCCESS;
         }
 
@@ -57,6 +58,7 @@ class CreateAdminUserCommand extends Command
         $this->em->flush();
 
         $io->success("Admin user $email created successfully.");
+
         return Command::SUCCESS;
     }
 }

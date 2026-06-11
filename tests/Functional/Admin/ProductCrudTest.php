@@ -3,7 +3,6 @@
 namespace App\Tests\Functional\Admin;
 
 use App\Tests\Functional\WebTestCase;
-use Symfony\Component\HttpFoundation\Response;
 
 class ProductCrudTest extends WebTestCase
 {
@@ -18,13 +17,11 @@ class ProductCrudTest extends WebTestCase
 
     public function testProductListRequiresAdminRole(): void
     {
-
-        
         // Автентифікуємо користувача для брандмауера 'main'
         $client = $this->createUserClient();
-        
+
         $client->request('GET', '/admin/product');
-        
+
         // Очікуємо редирект на /admin/login, оскільки користувач не автентифікований для брандмауера 'admin'
         $this->assertResponseRedirects('/admin/login');
     }
@@ -51,14 +48,14 @@ class ProductCrudTest extends WebTestCase
     public function testEditProduct(): void
     {
         $client = $this->createAdminClient();
-        
+
         // Спочатку отримуємо список продуктів
         $crawler = $client->request('GET', '/admin/product');
         $this->assertResponseIsSuccessful();
 
         // Знаходимо перший продукт і переходимо на редагування
         $editLink = $crawler->filter('.action-edit')->first();
-        
+
         if ($editLink->count() > 0) {
             $client->clickLink($editLink->text());
             $this->assertResponseIsSuccessful();
@@ -72,7 +69,7 @@ class ProductCrudTest extends WebTestCase
         $crawler = $client->request('GET', '/admin/product');
 
         $this->assertResponseIsSuccessful();
-        
+
         // Перевіряємо наявність фільтрів
         $this->assertSelectorExists('form[method="get"]');
     }

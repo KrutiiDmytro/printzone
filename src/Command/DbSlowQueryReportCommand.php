@@ -35,6 +35,7 @@ class DbSlowQueryReportCommand extends Command
 
         if (!$this->isPostgres()) {
             $io->warning('pg_stat_statements is only available on PostgreSQL. Skipping.');
+
             return Command::SUCCESS;
         }
 
@@ -55,6 +56,7 @@ class DbSlowQueryReportCommand extends Command
 
         if (empty($rows)) {
             $io->note('No query statistics found. Run some queries first.');
+
             return Command::SUCCESS;
         }
 
@@ -85,6 +87,7 @@ class DbSlowQueryReportCommand extends Command
     {
         try {
             $this->connection->fetchOne('SELECT 1 FROM pg_stat_statements LIMIT 1');
+
             return true;
         } catch (\Throwable) {
             return false;

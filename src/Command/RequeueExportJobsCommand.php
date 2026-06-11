@@ -29,12 +29,13 @@ final class RequeueExportJobsCommand extends Command
 
         if (empty($jobs)) {
             $output->writeln('No pending jobs found.');
+
             return Command::SUCCESS;
         }
 
         foreach ($jobs as $job) {
             $this->bus->dispatch(new ProcessExportMessage((int) $job->getId()));
-            $output->writeln('Requeued job #' . $job->getId());
+            $output->writeln('Requeued job #'.$job->getId());
         }
 
         return Command::SUCCESS;

@@ -4,9 +4,9 @@ namespace App\EventListener;
 
 use App\Service\CartService;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
-use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 
 #[AsEventListener(event: LoginSuccessEvent::class, method: 'onLoginSuccess')]
 class LoginListener
@@ -21,7 +21,7 @@ class LoginListener
     {
         // Если вход происходит через firewall 'login' (наш API для токенов),
         // то мы ничего не делаем и позволяем JWT вернуть JSON.
-        if ($event->getFirewallName() === 'login' || $event->getFirewallName() === 'api') {
+        if ('login' === $event->getFirewallName() || 'api' === $event->getFirewallName()) {
             return;
         }
 
@@ -30,7 +30,7 @@ class LoginListener
 
         // Получаем пользователя
         $user = $event->getUser();
-        
+
         // Проверяем роли и перенаправляем соответственно
         if (in_array('ROLE_ADMIN', $user->getRoles())) {
             // Администратор - перенаправляем в админ-панель

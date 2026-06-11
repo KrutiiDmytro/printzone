@@ -3,22 +3,20 @@
 namespace App\Controller\Admin;
 
 use App\Order\Domain\Entity\Order;
-use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
-use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminCrud;
-use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
-use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Actions;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
+use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Field\AssociationField;
+use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\CollectionField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\DateTimeField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\IdField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\MoneyField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
-use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
+use EasyCorp\Bundle\EasyAdminBundle\Filter\DateTimeFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\EntityFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\TextFilter;
-use EasyCorp\Bundle\EasyAdminBundle\Filter\DateTimeFilter;
 
 class OrderCrudController extends AbstractCrudController
 {
@@ -90,9 +88,9 @@ class OrderCrudController extends AbstractCrudController
                 ->formatValue(function ($value) {
                     return $value ? $value / 100 : 0;
                 }),
-             CollectionField::new('items', 'Товары в заказе')
-                ->onlyOnDetail()
-                ->setTemplatePath('admin/order/items.html.twig'),
+            CollectionField::new('items', 'Товары в заказе')
+               ->onlyOnDetail()
+               ->setTemplatePath('admin/order/items.html.twig'),
         ];
     }
 }

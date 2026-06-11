@@ -3,7 +3,6 @@
 namespace App\Tests\Functional\Admin;
 
 use App\Tests\Functional\WebTestCase;
-use Symfony\Component\HttpFoundation\Response;
 
 class UserCrudTest extends WebTestCase
 {
@@ -37,7 +36,7 @@ class UserCrudTest extends WebTestCase
         $container = static::getContainer();
         $userRepository = $container->get('doctrine')->getRepository(\App\User\Domain\Entity\User::class);
         $user = $userRepository->findOneBy(['email' => 'test@example.com']);
-        
+
         $this->assertNotNull($user);
         $this->assertNotEquals('testpassword123', $user->getPassword());
     }

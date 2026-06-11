@@ -16,8 +16,8 @@ final class FlysystemFileStorageTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tempRoot = sys_get_temp_dir() . '/flysystem_storage_test_' . bin2hex(random_bytes(8));
-        mkdir($this->tempRoot, 0777, true);
+        $this->tempRoot = sys_get_temp_dir().'/flysystem_storage_test_'.bin2hex(random_bytes(8));
+        mkdir($this->tempRoot, 0o777, true);
     }
 
     protected function tearDown(): void

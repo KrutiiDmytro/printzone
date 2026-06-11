@@ -3,18 +3,17 @@
 namespace App\Tests\Functional\Admin;
 
 use App\Tests\Functional\WebTestCase;
-use Symfony\Component\HttpFoundation\Response;
 
 class SecurityTest extends WebTestCase
 {
     public function testAdminLoginPageIsAccessible(): void
     {
         $client = static::createClient();
-        
+
         // Створюємо схему після створення клієнта
         $this->createSchema();
         $this->loadFixtures();
-        
+
         $client->request('GET', '/admin/login');
 
         $this->assertResponseIsSuccessful();
@@ -24,11 +23,11 @@ class SecurityTest extends WebTestCase
     public function testAdminDashboardRequiresAuthentication(): void
     {
         $client = static::createClient();
-        
+
         // Створюємо схему після створення клієнта
         $this->createSchema();
         $this->loadFixtures();
-        
+
         $client->request('GET', '/admin');
 
         $this->assertResponseRedirects('/admin/login');
@@ -36,9 +35,9 @@ class SecurityTest extends WebTestCase
 
     public function testAdminDashboardRequiresAdminRole(): void
     {
-        //Сама создаст клиента и подготовит БД
-        $client = $this->createUserClient(); 
-        
+        // Сама создаст клиента и подготовит БД
+        $client = $this->createUserClient();
+
         $client->request('GET', '/admin');
         $this->assertResponseRedirects('/admin/login');
     }
@@ -55,11 +54,11 @@ class SecurityTest extends WebTestCase
     public function testAdminLoginWithValidCredentials(): void
     {
         $client = static::createClient();
-        
+
         // Створюємо схему після створення клієнта
         $this->createSchema();
         $this->loadFixtures();
-        
+
         $crawler = $client->request('GET', '/admin/login');
 
         $form = $crawler->selectButton('Sign In')->form([
@@ -74,11 +73,11 @@ class SecurityTest extends WebTestCase
     public function testAdminLoginWithInvalidCredentials(): void
     {
         $client = static::createClient();
-        
+
         // Створюємо схему після створення клієнта
         $this->createSchema();
         $this->loadFixtures();
-        
+
         $crawler = $client->request('GET', '/admin/login');
 
         $form = $crawler->selectButton('Sign In')->form([
@@ -94,7 +93,7 @@ class SecurityTest extends WebTestCase
     {
         // Автентифікуємо користувача для брандмауера 'main'
         $client = $this->createUserClient();
-        
+
         $adminRoutes = [
             '/admin',
             '/admin/product',
@@ -108,7 +107,7 @@ class SecurityTest extends WebTestCase
             // Очікуємо редирект на /admin/login, оскільки користувач не автентифікований для брандмауера 'admin'
             $this->assertResponseRedirects(
                 '/admin/login',
-                null, 
+                null,
                 sprintf('Route %s should redirect to login for users from main firewall', $route)
             );
         }

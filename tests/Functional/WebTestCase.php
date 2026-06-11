@@ -2,10 +2,8 @@
 
 namespace App\Tests\Functional;
 
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase as BaseWebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 
 abstract class WebTestCase extends BaseWebTestCase
 {
@@ -13,6 +11,7 @@ abstract class WebTestCase extends BaseWebTestCase
     {
         $client = parent::createClient($options, $server);
         $client->disableReboot();
+
         return $client;
     }
 
@@ -20,11 +19,11 @@ abstract class WebTestCase extends BaseWebTestCase
     {
         $container = static::getContainer();
         $entityManager = $container->get('doctrine.orm.entity_manager');
-        
+
         // Перевіряємо, чи існує схема
         $connection = $entityManager->getConnection();
         $schemaManager = $connection->createSchemaManager();
-        
+
         try {
             $schemaManager->listTables();
         } catch (\Exception $e) {
@@ -41,7 +40,8 @@ abstract class WebTestCase extends BaseWebTestCase
                 ->get('doctrine.orm.entity_manager')
                 ->getConnection()
                 ->close();
-        } catch (\Throwable) {}
+        } catch (\Throwable) {
+        }
         parent::tearDown();
     }
 
@@ -49,9 +49,9 @@ abstract class WebTestCase extends BaseWebTestCase
     {
         $container = static::getContainer();
         $entityManager = $container->get('doctrine.orm.entity_manager');
-        
+
         $metadatas = $entityManager->getMetadataFactory()->getAllMetadata();
-        
+
         if (!empty($metadatas)) {
             $schemaTool = new \Doctrine\ORM\Tools\SchemaTool($entityManager);
             try {
@@ -68,7 +68,7 @@ abstract class WebTestCase extends BaseWebTestCase
         $container = static::getContainer();
         $entityManager = $container->get('doctrine.orm.entity_manager');
         $passwordHasher = $container->get(UserPasswordHasherInterface::class);
-        
+
         // Створюємо тестового адміністратора
         $admin = new \App\User\Domain\Entity\User();
         $admin->setEmail('admin@example.com');
@@ -105,16 +105,16 @@ abstract class WebTestCase extends BaseWebTestCase
     protected function createAuthenticatedClient(string $email, array $roles = ['ROLE_USER'], string $firewall = 'main')
     {
         $client = static::createClient();
-        
+
         // Створюємо схему після створення клієнта
         $this->createSchema();
         $this->loadFixtures();
-        
+
         $container = static::getContainer();
         $userRepository = $container->get('doctrine')->getRepository(\App\User\Domain\Entity\User::class);
-        
+
         $user = $userRepository->findOneBy(['email' => $email]);
-        
+
         if (!$user) {
             throw new \RuntimeException(sprintf('User with email "%s" not found', $email));
         }

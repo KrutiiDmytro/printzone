@@ -2,15 +2,15 @@
 
 namespace App\Controller\Admin;
 
+use App\Catalog\Domain\Entity\Product;
 use App\Service\ProductImageService;
 use Doctrine\ORM\EntityManagerInterface;
-use App\Catalog\Domain\Entity\Product;
-use EasyCorp\Bundle\EasyAdminBundle\Config\Assets;
-use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
-use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
-use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Actions;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Assets;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
+use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
 use EasyCorp\Bundle\EasyAdminBundle\Field\AssociationField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\BooleanField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\CollectionField;
@@ -20,8 +20,8 @@ use EasyCorp\Bundle\EasyAdminBundle\Field\IntegerField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\MoneyField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextareaField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
-use EasyCorp\Bundle\EasyAdminBundle\Filter\EntityFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\BooleanFilter;
+use EasyCorp\Bundle\EasyAdminBundle\Filter\EntityFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\NumericFilter;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
@@ -67,7 +67,7 @@ class ProductCrudController extends AbstractCrudController
     public function updateEntity(EntityManagerInterface $entityManager, $entityInstance): void
     {
         $previous = null;
-        if ($entityInstance instanceof Product && $entityInstance->getId() !== null) {
+        if ($entityInstance instanceof Product && null !== $entityInstance->getId()) {
             $old = $entityManager->find(Product::class, $entityInstance->getId());
             $previous = $old?->getImage();
         }
@@ -169,7 +169,7 @@ class ProductCrudController extends AbstractCrudController
                     'autocomplete' => 'off',
                 ])
                 ->formatValue(function ($value, $entity) {
-                    if ($value === null || $value === '') {
+                    if (null === $value || '' === $value) {
                         return '—';
                     }
                     $url = htmlspecialchars(
@@ -193,7 +193,7 @@ class ProductCrudController extends AbstractCrudController
             } else {
                 $fields[] = TextField::new('image', 'Изображение')
                     ->formatValue(function ($value, $entity) {
-                        if ($value === null || $value === '') {
+                        if (null === $value || '' === $value) {
                             return '—';
                         }
                         $url = htmlspecialchars(

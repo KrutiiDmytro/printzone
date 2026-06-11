@@ -19,7 +19,7 @@ final class ProductImageExtensionTest extends TestCase
 
         $urlGenerator = $this->createMock(UrlGeneratorInterface::class);
         $urlGenerator->method('generate')->willReturnCallback(
-            fn(string $route, array $params) => '/media?key=' . ($params['key'] ?? '')
+            fn (string $route, array $params) => '/media?key='.($params['key'] ?? '')
         );
 
         $service = new ProductImageService($storage, $urlGenerator, '/tmp', '/tmp/uploads', $storageType);

@@ -17,7 +17,7 @@ final class MediaController extends AbstractController
     public function __invoke(Request $request, FileStorageInterface $storage): Response
     {
         $key = (string) $request->query->get('key', '');
-        if ($key === '' || !str_starts_with($key, 'products/')) {
+        if ('' === $key || !str_starts_with($key, 'products/')) {
             throw new NotFoundHttpException();
         }
 

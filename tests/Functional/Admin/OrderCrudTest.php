@@ -3,7 +3,6 @@
 namespace App\Tests\Functional\Admin;
 
 use App\Tests\Functional\WebTestCase;
-use Symfony\Component\HttpFoundation\Response;
 
 class OrderCrudTest extends WebTestCase
 {
@@ -22,7 +21,7 @@ class OrderCrudTest extends WebTestCase
         $crawler = $client->request('GET', '/admin/order');
 
         $this->assertResponseIsSuccessful();
-        
+
         // Перевіряємо, що кнопка "Создать" відсутня
         $this->assertSelectorNotExists('a[href*="/admin/order/new"]');
     }
@@ -30,14 +29,14 @@ class OrderCrudTest extends WebTestCase
     public function testOrderStatusCanBeUpdated(): void
     {
         $client = $this->createAdminClient();
-        
+
         // Отримуємо список замовлень
         $crawler = $client->request('GET', '/admin/order');
         $this->assertResponseIsSuccessful();
 
         // Знаходимо перше замовлення
         $editLink = $crawler->filter('a[title="Редактировать"]')->first();
-        
+
         if ($editLink->count() > 0) {
             $client->clickLink($editLink->text());
             $this->assertResponseIsSuccessful();

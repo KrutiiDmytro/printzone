@@ -22,7 +22,8 @@ final class ExportController extends AbstractController
         private readonly ExportService $exportService,
         private readonly ExportJobRepository $exportJobRepository,
         private readonly FileStorageInterface $storage,
-    ) {}
+    ) {
+    }
 
     #[Route('/admin/export', name: 'admin_export', methods: ['GET'])]
     public function index(): Response
@@ -40,6 +41,7 @@ final class ExportController extends AbstractController
     {
         if (!$this->isCsrfTokenValid('export', $request->request->getString('_token'))) {
             $this->addFlash('danger', 'Невірний CSRF-токен. Спробуйте ще раз.');
+
             return $this->redirectToRoute('admin_export');
         }
 
@@ -51,6 +53,7 @@ final class ExportController extends AbstractController
 
         if (null === $type || null === $format) {
             $this->addFlash('danger', 'Невірний тип або формат експорту.');
+
             return $this->redirectToRoute('admin_export');
         }
 
@@ -87,8 +90,8 @@ final class ExportController extends AbstractController
         $filePath = $job->getFilePath();
         $content = $this->storage->read($filePath);
         $filename = basename($filePath);
-        $contentType = $job->getFormat()->value === 'csv' ? 'text/csv'
-            : ($job->getFormat()->value === 'json' ? 'application/json' : 'application/xml');
+        $contentType = 'csv' === $job->getFormat()->value ? 'text/csv'
+            : ('json' === $job->getFormat()->value ? 'application/json' : 'application/xml');
 
         $response = new Response($content);
         $response->headers->set('Content-Type', $contentType);

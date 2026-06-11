@@ -46,6 +46,7 @@ class Brand
     public function setName(string $name): static
     {
         $this->name = $name;
+
         return $this;
     }
 
@@ -57,6 +58,7 @@ class Brand
     public function setSlug(string $slug): static
     {
         $this->slug = $slug;
+
         return $this;
     }
 
@@ -68,6 +70,7 @@ class Brand
     public function setColor(?string $color): static
     {
         $this->color = $color;
+
         return $this;
     }
 

@@ -24,16 +24,16 @@ final class ProcessExportHandlerTest extends TestCase
         EntityManagerInterface $em,
         FileStorageInterface $storage,
         MailerInterface $mailer,
-        ExportExtractorInterface $productExtractor = null,
-        ExportExtractorInterface $orderExtractor = null,
-        ExportExtractorInterface $userExtractor = null,
+        ?ExportExtractorInterface $productExtractor = null,
+        ?ExportExtractorInterface $orderExtractor = null,
+        ?ExportExtractorInterface $userExtractor = null,
     ): ProcessExportHandler {
         return new ProcessExportHandler(
             $repo,
             $em,
             $productExtractor ?? $this->createMock(ExportExtractorInterface::class),
-            $orderExtractor   ?? $this->createMock(ExportExtractorInterface::class),
-            $userExtractor    ?? $this->createMock(ExportExtractorInterface::class),
+            $orderExtractor ?? $this->createMock(ExportExtractorInterface::class),
+            $userExtractor ?? $this->createMock(ExportExtractorInterface::class),
             $storage,
             $mailer,
             'admin@example.com',
@@ -49,7 +49,7 @@ final class ProcessExportHandlerTest extends TestCase
         $em->expects($this->never())->method('flush');
 
         $storage = $this->createMock(FileStorageInterface::class);
-        $mailer  = $this->createMock(MailerInterface::class);
+        $mailer = $this->createMock(MailerInterface::class);
 
         $handler = $this->makeHandler($repo, $em, $storage, $mailer);
         $handler(new ProcessExportMessage(999));
@@ -117,9 +117,9 @@ final class ProcessExportHandlerTest extends TestCase
         $repo = $this->createMock(ExportJobRepository::class);
         $repo->method('find')->willReturn($job);
 
-        $em      = $this->createMock(EntityManagerInterface::class);
+        $em = $this->createMock(EntityManagerInterface::class);
         $storage = $this->createMock(FileStorageInterface::class);
-        $mailer  = $this->createMock(MailerInterface::class);
+        $mailer = $this->createMock(MailerInterface::class);
         $mailer->method('send');
 
         $userExtractor = $this->createMock(ExportExtractorInterface::class);

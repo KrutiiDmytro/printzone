@@ -12,7 +12,7 @@ class OrderTest extends TestCase
     public function testOrderInitialization(): void
     {
         $order = new Order();
-        
+
         $this->assertInstanceOf(\DateTimeInterface::class, $order->getCreatedAt());
         $this->assertEquals('PENDING', $order->getStatus());
         $this->assertEquals(0, $order->getTotalAmount());
@@ -23,7 +23,7 @@ class OrderTest extends TestCase
     {
         $order = new Order();
         $user = new User();
-        
+
         $order->setUser($user);
         $this->assertSame($user, $order->getUser());
     }
@@ -32,17 +32,17 @@ class OrderTest extends TestCase
     {
         $order = new Order();
         $item = new OrderItem();
-        
+
         // Test adding item
         $order->addItem($item);
-        
+
         $this->assertCount(1, $order->getItems());
         $this->assertTrue($order->getItems()->contains($item));
         $this->assertSame($order, $item->getOrderRef());
-        
+
         // Test removing item
         $order->removeItem($item);
-        
+
         $this->assertCount(0, $order->getItems());
         $this->assertFalse($order->getItems()->contains($item));
         $this->assertNull($item->getOrderRef());
@@ -52,7 +52,7 @@ class OrderTest extends TestCase
     {
         $order = new Order();
         $order->setTotalAmount(5000); // 50.00
-        
+
         $this->assertEquals(5000, $order->getTotalAmount());
     }
 
@@ -60,7 +60,7 @@ class OrderTest extends TestCase
     {
         $order = new Order();
         $order->setStatus('SHIPPED');
-        
+
         $this->assertEquals('SHIPPED', $order->getStatus());
     }
 }

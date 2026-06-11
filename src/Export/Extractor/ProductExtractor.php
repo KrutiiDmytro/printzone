@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace App\Export\Extractor;
 
-use App\Repository\ProductRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
 final class ProductExtractor implements ExportExtractorInterface
 {
-    public function __construct(private readonly EntityManagerInterface $em) {}
+    public function __construct(private readonly EntityManagerInterface $em)
+    {
+    }
 
     public function extract(array $filters): array
     {
@@ -22,7 +23,7 @@ final class ProductExtractor implements ExportExtractorInterface
         if (!empty($filters['category'])) {
             $qb->andWhere('c.id = :category')->setParameter('category', (int) $filters['category']);
         }
-        if (isset($filters['isFeatured']) && $filters['isFeatured'] !== '') {
+        if (isset($filters['isFeatured']) && '' !== $filters['isFeatured']) {
             $qb->andWhere('p.isFeatured = :featured')->setParameter('featured', (bool) $filters['isFeatured']);
         }
         if (!empty($filters['priceMin'])) {

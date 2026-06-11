@@ -50,7 +50,7 @@ final class ExportControllerTest extends WebTestCase
         $csrfToken = $crawler->filter('input[name="_token"]')->attr('value');
 
         $client->request('POST', '/admin/export', [
-            'type'   => 'products',
+            'type' => 'products',
             'format' => 'csv',
             '_token' => $csrfToken,
         ]);
@@ -68,7 +68,7 @@ final class ExportControllerTest extends WebTestCase
         $csrfToken = $crawler->filter('input[name="_token"]')->attr('value');
 
         $client->request('POST', '/admin/export', [
-            'type'   => 'invalid_type',
+            'type' => 'invalid_type',
             'format' => 'csv',
             '_token' => $csrfToken,
         ]);
@@ -83,7 +83,7 @@ final class ExportControllerTest extends WebTestCase
         $client = $this->createAdminClient();
 
         $client->request('POST', '/admin/export', [
-            'type'   => 'products',
+            'type' => 'products',
             'format' => 'csv',
             '_token' => 'bad-token',
         ]);

@@ -18,6 +18,7 @@ class SecurityController extends AbstractController
             if (in_array('ROLE_ADMIN', $this->getUser()->getRoles())) {
                 return $this->redirectToRoute('admin_dashboard');
             }
+
             // Обычный пользователь - на главную
             return $this->redirectToRoute('app_home');
         }

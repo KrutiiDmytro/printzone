@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Export\MessageHandler;
 
+use App\Export\Enum\ExportFormat;
+use App\Export\Enum\ExportType;
 use App\Export\Extractor\ExportExtractorInterface;
 use App\Export\Formatter\CsvFormatter;
 use App\Export\Formatter\ExportFormatterInterface;
 use App\Export\Formatter\JsonFormatter;
 use App\Export\Formatter\XmlFormatter;
 use App\Export\Message\ProcessExportMessage;
-use App\Export\Enum\ExportFormat;
-use App\Export\Enum\ExportType;
 use App\Repository\ExportJobRepository;
 use App\Storage\FileStorageInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -31,7 +31,8 @@ final class ProcessExportHandler
         private readonly FileStorageInterface $storage,
         private readonly MailerInterface $mailer,
         private readonly string $adminEmail,
-    ) {}
+    ) {
+    }
 
     public function __invoke(ProcessExportMessage $message): void
     {
@@ -73,8 +74,8 @@ final class ProcessExportHandler
         } catch (\Throwable $e) {
             $errorMessage = $e->getMessage();
             $previous = $e->getPrevious();
-            while ($previous !== null) {
-                $errorMessage .= ' Caused by: ' . $previous->getMessage();
+            while (null !== $previous) {
+                $errorMessage .= ' Caused by: '.$previous->getMessage();
                 $previous = $previous->getPrevious();
             }
             $job->markFailed($errorMessage);

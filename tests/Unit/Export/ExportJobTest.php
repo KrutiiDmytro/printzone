@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 
 final class ExportJobTest extends TestCase
 {
-    private function makeJob(array $filters = null): ExportJob
+    private function makeJob(?array $filters = null): ExportJob
     {
         return new ExportJob(ExportType::Products, ExportFormat::Csv, 'admin@example.com', $filters);
     }

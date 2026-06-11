@@ -40,6 +40,7 @@ class CartItem
     public function setCart(?Cart $cart): self
     {
         $this->cart = $cart;
+
         return $this;
     }
 
@@ -51,6 +52,7 @@ class CartItem
     public function setProduct(Product $product): self
     {
         $this->product = $product;
+
         return $this;
     }
 
@@ -62,6 +64,7 @@ class CartItem
     public function setQuantity(int $quantity): self
     {
         $this->quantity = $quantity;
+
         return $this;
     }
 

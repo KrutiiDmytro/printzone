@@ -8,7 +8,9 @@ use Doctrine\ORM\EntityManagerInterface;
 
 final class OrderExtractor implements ExportExtractorInterface
 {
-    public function __construct(private readonly EntityManagerInterface $em) {}
+    public function __construct(private readonly EntityManagerInterface $em)
+    {
+    }
 
     public function extract(array $filters): array
     {
@@ -27,7 +29,7 @@ final class OrderExtractor implements ExportExtractorInterface
         }
         if (!empty($filters['dateTo'])) {
             $qb->andWhere('o.createdAt <= :dateTo')
-               ->setParameter('dateTo', new \DateTime($filters['dateTo'] . ' 23:59:59'));
+               ->setParameter('dateTo', new \DateTime($filters['dateTo'].' 23:59:59'));
         }
 
         $rows = $qb->getQuery()->getArrayResult();

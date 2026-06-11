@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Export\Extractor;
 
 use App\Export\Extractor\OrderExtractor;
-use Doctrine\ORM\Query;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\TestCase;
 
@@ -60,11 +60,11 @@ final class OrderExtractorTest extends TestCase
     {
         $createdAt = new \DateTime('2026-01-15 10:30:00');
         $row = [
-            'id'           => 5,
-            'status'       => 'PAID',
-            'totalAmount'  => 25000,
-            'createdAt'    => $createdAt,
-            'user_email'   => 'user@example.com',
+            'id' => 5,
+            'status' => 'PAID',
+            'totalAmount' => 25000,
+            'createdAt' => $createdAt,
+            'user_email' => 'user@example.com',
         ];
 
         $result = (new OrderExtractor($this->makeEm([$row])))->extract([]);
@@ -107,7 +107,7 @@ final class OrderExtractorTest extends TestCase
         $qb->expects($this->once())
             ->method('setParameter')
             ->with('dateTo', $this->callback(function (\DateTime $dt): bool {
-                return $dt->format('Y-m-d H:i:s') === '2026-01-31 23:59:59';
+                return '2026-01-31 23:59:59' === $dt->format('Y-m-d H:i:s');
             }))
             ->willReturnSelf();
 

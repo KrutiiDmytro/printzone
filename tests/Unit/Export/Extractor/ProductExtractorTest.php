@@ -59,14 +59,14 @@ final class ProductExtractorTest extends TestCase
     public function testExtractTransformsRow(): void
     {
         $row = [
-            'id'          => 1,
-            'name'        => 'Laptop',
+            'id' => 1,
+            'name' => 'Laptop',
             'description' => 'A laptop',
-            'price'       => 99900,
-            'stock'       => 10,
-            'isFeatured'  => true,
-            'image'       => 'products/laptop.jpg',
-            'category'    => 'Electronics',
+            'price' => 99900,
+            'stock' => 10,
+            'isFeatured' => true,
+            'image' => 'products/laptop.jpg',
+            'category' => 'Electronics',
         ];
 
         $result = (new ProductExtractor($this->makeEm([$row])))->extract([]);

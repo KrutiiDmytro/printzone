@@ -8,7 +8,9 @@ use Doctrine\ORM\EntityManagerInterface;
 
 final class UserExtractor implements ExportExtractorInterface
 {
-    public function __construct(private readonly EntityManagerInterface $em) {}
+    public function __construct(private readonly EntityManagerInterface $em)
+    {
+    }
 
     public function extract(array $filters): array
     {
@@ -19,11 +21,11 @@ final class UserExtractor implements ExportExtractorInterface
 
         if (!empty($filters['email'])) {
             $qb->andWhere('u.email LIKE :email')
-               ->setParameter('email', '%' . $filters['email'] . '%');
+               ->setParameter('email', '%'.$filters['email'].'%');
         }
         if (!empty($filters['role'])) {
             $qb->andWhere('u.roles LIKE :role')
-               ->setParameter('role', '%' . $filters['role'] . '%');
+               ->setParameter('role', '%'.$filters['role'].'%');
         }
 
         $rows = $qb->getQuery()->getArrayResult();

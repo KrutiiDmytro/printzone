@@ -2,10 +2,10 @@
 
 namespace App\Tests\Unit\Order\Domain\Entity;
 
+use App\Catalog\Domain\Entity\Category;
+use App\Catalog\Domain\Entity\Product;
 use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
-use App\Catalog\Domain\Entity\Product;
-use App\Catalog\Domain\Entity\Category;
 use App\User\Domain\Entity\User;
 use PHPUnit\Framework\TestCase;
 

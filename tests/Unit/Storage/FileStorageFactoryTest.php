@@ -15,8 +15,8 @@ final class FileStorageFactoryTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tempRoot = sys_get_temp_dir() . '/file_storage_factory_test_' . bin2hex(random_bytes(8));
-        mkdir($this->tempRoot, 0777, true);
+        $this->tempRoot = sys_get_temp_dir().'/file_storage_factory_test_'.bin2hex(random_bytes(8));
+        mkdir($this->tempRoot, 0o777, true);
     }
 
     protected function tearDown(): void
@@ -34,7 +34,7 @@ final class FileStorageFactoryTest extends TestCase
 
         $storage->write('nested/key.txt', 'hello');
 
-        $this->assertFileExists($this->tempRoot . '/nested/key.txt');
+        $this->assertFileExists($this->tempRoot.'/nested/key.txt');
         $this->assertSame('hello', $storage->read('nested/key.txt'));
         $this->assertSame(['nested/key.txt'], $storage->listKeys('nested', false));
         $this->assertNull($storage->publicUrl('nested/key.txt'));

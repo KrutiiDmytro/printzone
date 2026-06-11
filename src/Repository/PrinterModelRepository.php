@@ -22,7 +22,7 @@ class PrinterModelRepository extends ServiceEntityRepository
         return $this->createQueryBuilder('m')
             ->join('m.brand', 'b')
             ->where('LOWER(m.name) LIKE LOWER(:q) OR LOWER(b.name) LIKE LOWER(:q)')
-            ->setParameter('q', '%' . $q . '%')
+            ->setParameter('q', '%'.$q.'%')
             ->orderBy('m.name', 'ASC')
             ->setMaxResults($limit)
             ->getQuery()

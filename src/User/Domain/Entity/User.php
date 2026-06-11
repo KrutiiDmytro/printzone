@@ -53,6 +53,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setGoogleId(?string $googleId): static
     {
         $this->googleId = $googleId;
+
         return $this;
     }
 
@@ -69,6 +70,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setEmail(string $email): static
     {
         $this->email = $email;
+
         return $this;
     }
 
@@ -97,6 +99,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setRoles(array $roles): static
     {
         $this->roles = $roles;
+
         return $this;
     }
 
@@ -111,6 +114,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setPassword(string $password): static
     {
         $this->password = $password;
+
         return $this;
     }
 
@@ -131,6 +135,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setFullName(?string $fullName): static
     {
         $this->fullName = $fullName;
+
         return $this;
     }
 
@@ -138,5 +143,4 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     {
         return $this->fullName ?? $this->email ?? '';
     }
-
 }

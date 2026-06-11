@@ -21,8 +21,8 @@ final class FileStorageFactoryS3Test extends TestCase
 {
     public function testS3FullLifecycleWriteReadExistsListDelete(): void
     {
-        $tempRoot = sys_get_temp_dir() . '/s3_factory_unused_' . bin2hex(random_bytes(4));
-        mkdir($tempRoot, 0777, true);
+        $tempRoot = sys_get_temp_dir().'/s3_factory_unused_'.bin2hex(random_bytes(4));
+        mkdir($tempRoot, 0o777, true);
 
         try {
             $mock = new MockHandler([
@@ -78,8 +78,8 @@ final class FileStorageFactoryS3Test extends TestCase
 
     public function testS3PublicUrlDoesNotConsumeMockQueue(): void
     {
-        $tempRoot = sys_get_temp_dir() . '/s3_factory_url_' . bin2hex(random_bytes(4));
-        mkdir($tempRoot, 0777, true);
+        $tempRoot = sys_get_temp_dir().'/s3_factory_url_'.bin2hex(random_bytes(4));
+        mkdir($tempRoot, 0o777, true);
 
         try {
             $mock = new MockHandler([]);
@@ -105,8 +105,8 @@ final class FileStorageFactoryS3Test extends TestCase
 
     public function testS3HeadObjectMissingReturnsFalseForExists(): void
     {
-        $tempRoot = sys_get_temp_dir() . '/s3_factory_miss_' . bin2hex(random_bytes(4));
-        mkdir($tempRoot, 0777, true);
+        $tempRoot = sys_get_temp_dir().'/s3_factory_miss_'.bin2hex(random_bytes(4));
+        mkdir($tempRoot, 0o777, true);
 
         try {
             $mock = new MockHandler([

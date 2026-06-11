@@ -20,8 +20,8 @@ class SearchController extends AbstractController
 
         $models = $repo->searchByName($q);
 
-        return $this->json(array_map(fn($m) => [
-            'name'      => $m->getName(),
+        return $this->json(array_map(fn ($m) => [
+            'name' => $m->getName(),
             'brandName' => $m->getBrand()->getName(),
             'brandSlug' => $m->getBrand()->getSlug(),
         ], $models));

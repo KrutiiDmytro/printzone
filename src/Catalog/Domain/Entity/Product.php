@@ -2,8 +2,8 @@
 
 namespace App\Catalog\Domain\Entity;
 
-use App\Repository\ProductRepository;
 use ApiPlatform\Metadata\ApiResource;
+use App\Repository\ProductRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
@@ -19,7 +19,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
     normalizationContext: ['groups' => ['product:read']],
     denormalizationContext: ['groups' => ['product:write']]
 )]
-
 class Product
 {
     #[ORM\Id]
@@ -70,6 +69,7 @@ class Product
     public function setIsFeatured(bool $isFeatured): static
     {
         $this->isFeatured = $isFeatured;
+
         return $this;
     }
 
@@ -95,6 +95,7 @@ class Product
     public function setName(string $name): static
     {
         $this->name = $name;
+
         return $this;
     }
 
@@ -106,6 +107,7 @@ class Product
     public function setDescription(?string $description): static
     {
         $this->description = $description;
+
         return $this;
     }
 
@@ -117,6 +119,7 @@ class Product
     public function setPrice(int $price): static
     {
         $this->price = $price;
+
         return $this;
     }
 
@@ -128,6 +131,7 @@ class Product
     public function setStock(int $stock): static
     {
         $this->stock = $stock;
+
         return $this;
     }
 
@@ -139,6 +143,7 @@ class Product
     public function setCategory(?Category $category): static
     {
         $this->category = $category;
+
         return $this;
     }
 
@@ -150,6 +155,7 @@ class Product
     public function setBrand(?Brand $brand): static
     {
         $this->brand = $brand;
+
         return $this;
     }
 
@@ -161,6 +167,7 @@ class Product
     public function setImage(?string $image): static
     {
         $this->image = $image;
+
         return $this;
     }
 
@@ -194,7 +201,7 @@ class Product
         return $this;
     }
 
-        public function __toString(): string
+    public function __toString(): string
     {
         return $this->name ?? '';
     }

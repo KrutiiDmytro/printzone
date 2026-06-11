@@ -3,8 +3,8 @@
 namespace App\Order\Domain\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
-use App\User\Domain\Entity\User;
 use App\Repository\OrderRepository;
+use App\User\Domain\Entity\User;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
@@ -20,7 +20,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
     normalizationContext: ['groups' => ['order:read']],
     denormalizationContext: ['groups' => ['order:write']]
 )]
-
 class Order
 {
     #[ORM\Id]
@@ -72,6 +71,7 @@ class Order
     public function setUser(?User $user): static
     {
         $this->user = $user;
+
         return $this;
     }
 
@@ -83,6 +83,7 @@ class Order
     public function setCreatedAt(\DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
+
         return $this;
     }
 
@@ -94,6 +95,7 @@ class Order
     public function setStatus(string $status): static
     {
         $this->status = $status;
+
         return $this;
     }
 
@@ -105,6 +107,7 @@ class Order
     public function setTotalAmount(int $totalAmount): static
     {
         $this->totalAmount = $totalAmount;
+
         return $this;
     }
 
@@ -126,7 +129,7 @@ class Order
         return $this;
     }
 
-        public function removeItem(OrderItem $item): static
+    public function removeItem(OrderItem $item): static
     {
         if ($this->items->removeElement($item)) {
             // set the owning side to null (unless already changed)
@@ -146,6 +149,7 @@ class Order
     public function setStripeSessionId(?string $stripeSessionId): static
     {
         $this->stripeSessionId = $stripeSessionId;
+
         return $this;
     }
 
@@ -153,5 +157,4 @@ class Order
     {
         return sprintf('Заказ #%d от %s', $this->id ?? 0, $this->createdAt?->format('d.m.Y') ?? '');
     }
-
 }
