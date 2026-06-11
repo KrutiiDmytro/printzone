@@ -1,4 +1,4 @@
-# Мікросервісна Архітектура — Task-24 E-Commerce
+# Мікросервісна Архітектура — PrintZone (Task 24)
 
 ## Зміст
 
@@ -26,14 +26,15 @@
 
 ## 1. Поточний стан (As-Is)
 
-Додаток є **модульним монолітом** (Symfony 7.4), вже організованим за DDD-принципами з п'ятьма обмеженими контекстами, що спільно використовують одну базу даних PostgreSQL та один асинхронний воркер.
+Додаток PrintZone є **модульним монолітом** (Symfony 7.4), вже організованим за DDD-принципами. У коді присутні шість обмежених контекстів (+ інфраструктурний Storage), що спільно використовують одну базу даних PostgreSQL та один асинхронний воркер.
 
 ```
 Єдиний Symfony додаток
-    ├── src/Catalog/    → Продукти, Категорії, Атрибути продуктів
-    ├── src/Cart/       → Кошик, Елементи кошика (сесія + БД)
+    ├── src/Catalog/    → Продукти, Категорії, Бренди, Моделі принтерів, Атрибути
+    ├── src/Cart/       → Кошик, Елементи кошика (гість → сесія, авторизований → БД)
     ├── src/Order/      → Замовлення, Елементи замовлення
     ├── src/User/       → Користувачі, OAuth (Google, GitHub)
+    ├── src/Payment/    → Stripe Checkout (StripeCheckoutService + webhook)
     ├── src/Export/     → Завдання експорту (async CSV/JSON/XML)
     └── src/Storage/    → FileStorageInterface (S3 / Local)
 
@@ -41,6 +42,8 @@
 Єдиний Messenger Воркер (всі черги: export, mail, SMS)
 Єдиний S3 Bucket (зображення продуктів + файли експорту)
 ```
+
+> **Походження цільових сервісів.** User, Catalog, Cart, Order, Payment, Export і Storage **витягуються з наявних модулів** коду. Сервіси **Delivery** і **Notification** — **нові (greenfield)**: у поточному моноліті немає окремих доменів доставки чи сповіщень (сповіщення зараз надсилаються інлайн через Symfony Mailer, напр. у `ProcessExportHandler`). Вони включені як цільові межі, а не як витягнуті модулі.
 
 ### Точки зв'язності для усунення
 
@@ -173,6 +176,10 @@ services:
 4. Посилання між сервісами використовують лише **рядки UUID** — жодних FK constraints у БД
 5. Коли сервісу потрібні дані з іншого домену, він зберігає **знімок** (денормалізовану копію)
 
+### Інвентаризація (Inventory)
+
+Управління запасами **свідомо залишено всередині Catalog Service**, а не виділено в окремий сервіс: рівень запасу (`products.stock`) і життєвий цикл продукту змінюються разом, тож розрив тут створив би більше міжсервісних викликів, ніж користі. Проте сам **облік резервувань ведеться окремою таблицею `stock_reservations`** (див. §4.2): без неї Checkout Saga не має чим тримати стан «зарезервовано, але не оплачено», уникати гонок і виконувати компенсацію (`StockReleased`). Якщо в майбутньому інвентар потребуватиме незалежного масштабування чи окремих складів — `stock` + `stock_reservations` виносяться в окремий Inventory Service без зміни контрактів подій.
+
 ---
 
 ## 4. Дизайн сервісів
@@ -220,6 +227,8 @@ CREATE UNIQUE INDEX idx_users_email     ON users(email);
 CREATE INDEX        idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;
 CREATE INDEX        idx_users_github_id ON users(github_id) WHERE github_id IS NOT NULL;
 ```
+
+> **Код-гап.** Поточна сутність `User` (`src/User/Domain/Entity/User.php`) має лише поле `googleId`; поля `githubId` ще немає, хоча `GitHubAuthController` уже існує. Колонку `github_id` тут наведено як цільову — під час виокремлення сервісу її треба додати в модель і backfill для наявних GitHub-користувачів.
 
 **Публіковані події**
 
@@ -270,9 +279,15 @@ CREATE TABLE categories (
 CREATE INDEX idx_categories_parent ON categories(parent_id);
 CREATE INDEX idx_categories_slug   ON categories(slug);
 
+CREATE TABLE brands (
+    id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL
+);
+
 CREATE TABLE products (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    brand_id    UUID REFERENCES brands(id)     ON DELETE SET NULL,  -- nullable (Product.brand)
     name        VARCHAR(255) NOT NULL,
     description TEXT,
     price       INTEGER NOT NULL,           -- зберігається в центах
@@ -283,8 +298,16 @@ CREATE TABLE products (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_brand    ON products(brand_id);
 CREATE INDEX idx_products_featured ON products(is_featured) WHERE is_featured = TRUE;
 CREATE INDEX idx_products_stock    ON products(stock)        WHERE stock > 0;
+
+CREATE TABLE printer_models (
+    id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    brand_id UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    name     VARCHAR(255) NOT NULL
+);
+CREATE INDEX idx_printer_models_brand ON printer_models(brand_id);
 
 CREATE TABLE product_attributes (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -293,13 +316,31 @@ CREATE TABLE product_attributes (
     value      VARCHAR(500) NOT NULL
 );
 CREATE INDEX idx_product_attributes_product ON product_attributes(product_id);
+
+-- Облік резервувань запасів для Checkout Saga: тримає стан "зарезервовано, але не оплачено".
+-- Доступний запас = products.stock − SUM(stock_reservations.quantity WHERE status = 'HELD').
+CREATE TYPE reservation_status AS ENUM ('HELD', 'COMMITTED', 'RELEASED');
+
+CREATE TABLE stock_reservations (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    order_id   UUID NOT NULL,                    -- UUID посилання на Order (без FK)
+    quantity   INTEGER NOT NULL CHECK (quantity > 0),
+    status     reservation_status NOT NULL DEFAULT 'HELD',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ                        -- TTL для авто-звільнення "завислих" резервів
+);
+CREATE INDEX idx_stock_reservations_product ON stock_reservations(product_id) WHERE status = 'HELD';
+CREATE INDEX idx_stock_reservations_order   ON stock_reservations(order_id);
 ```
+
+> **Семантика резервування.** На `OrderCreated` Catalog атомарно вставляє рядки `HELD` (за умови достатнього доступного запасу) → `StockReserved`; інакше → `StockReservationFailed`. На `OrderPaid` резерв переходить у `COMMITTED` і `products.stock` зменшується; на `OrderCancelled` — у `RELEASED` (`StockReleased`). Фоновий процес звільняє резерви з простроченим `expires_at`.
 
 **Публіковані події**
 
 | Подія | Payload | Підписники |
 |---|---|---|
-| `ProductCreated` | `{productId, name, price, stock}` | — |
+| `ProductCreated` | `{productId, name, price, stock, categoryId}` | — |
 | `ProductUpdated` | `{productId, changedFields[]}` | Cart (оновлення ціни) |
 | `ProductDeleted` | `{productId}` | Cart, Notification |
 | `StockReserved` | `{productId, quantity, orderId}` | Order (крок саги 2→3) |
@@ -363,6 +404,8 @@ CREATE INDEX idx_cart_items_cart    ON cart_items(cart_id);
 CREATE INDEX idx_cart_items_product ON cart_items(product_id);
 ```
 
+> **Зміна поведінки.** Зараз гостьовий кошик зберігається у **PHP-сесії** (`CartService`, ключ `cart`), а не в БД. Цільовий дизайн робить гостьовий кошик **рядком у таблиці `carts`** з `session_id` — це дозволяє Cart Service бути stateless щодо застосунку й переживати рестарти, але є свідомою зміною поточної моделі зберігання.
+
 **Публіковані події**
 
 | Подія | Payload | Підписники |
@@ -415,8 +458,9 @@ GET    /health/ready                Readiness probe (БД + RabbitMQ)
 **Схема даних**
 
 ```sql
+-- Набір відповідає фактичним статусам у коді (OrderCrudController, StripeWebhookController):
 CREATE TYPE order_status AS ENUM (
-    'PENDING', 'PAYMENT_PENDING', 'PAID',
+    'PENDING', 'PAID', 'FAILED',
     'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'
 );
 
@@ -448,36 +492,48 @@ CREATE INDEX idx_order_items_product ON order_items(product_id);
 
 **Checkout Saga (Хореографія)**
 
+> **Узгоджено з реальною інтеграцією Stripe.** Оплата інтерактивна: Payment створює **Stripe Checkout Session** і повертає `checkoutUrl`, клієнт редиректиться на hosted-сторінку Stripe, а підтвердження приходить **webhook'ом** — це не headless-списання за подією. Order лишається в `PENDING`, поки не надійде webhook. Термінальні статуси: `PAID` (успіх) або `FAILED` (відмова оплати); `CANCELLED` — для невдалого резервування / дії адміна.
+
 ```
 Крок 1  OrderService     Створює Order (PENDING)
-        Публікує ───────► OrderCreated {orderId, userId, items[], totalAmount}
+        Публікує ───────► OrderCreated {orderId, userId, userEmail, items[], totalAmount, shippingAddress}
 
 Крок 2  CatalogService   Слухає OrderCreated
-        Резервує запаси для кожної позиції
+        Резервує запаси (вставляє stock_reservations = HELD)
         Публікує ───────► StockReserved {orderId, items[]}
-                    АБО ── StockReservationFailed {orderId, productId, reason}
+                    АБО ── StockReservationFailed {orderId, productId, requested, available, reason}
 
 Крок 3а OrderService     Слухає StockReserved
-        Order → PAYMENT_PENDING
-        Публікує ───────► PaymentRequested {orderId, amount, userId}
+        Order лишається PENDING (очікує оплату)
+        Публікує ───────► PaymentRequested {orderId, paymentId, amount, currency, userId, idempotencyKey}
 
 Крок 3б OrderService     Слухає StockReservationFailed
-        Order → CANCELLED (компенсація: запаси ще не були зарезервовані)
-        Публікує ───────► OrderCancelled {orderId, reason: 'out_of_stock'}
+        Order → CANCELLED (резерв не утримувався — компенсація не потрібна)
+        Публікує ───────► OrderCancelled {orderId, userId, reason: 'out_of_stock', items[]}
 
 Крок 4  PaymentService   Слухає PaymentRequested
-        Ініціює оплату через провайдер
+        Створює Stripe Checkout Session (mode=payment, metadata.order_id)
+        Повертає checkoutUrl → клієнт редиректиться на hosted-сторінку Stripe
 
-Крок 5а OrderService     Слухає PaymentSucceeded
+Крок 5  PaymentService   Отримує Stripe webhook (підпис + idempotency_key)
+        checkout.session.completed ─► PaymentSucceeded {paymentId, orderId, amount, currency, providerTxId}
+        expired / async_payment_failed ─► PaymentFailed {paymentId, orderId, reason, providerCode}
+
+Крок 6а OrderService     Слухає PaymentSucceeded
         Order → PAID
-        Публікує ───────► OrderPaid {orderId, userId}
+        Публікує ───────► OrderPaid {orderId, userId, paidAt}
 
-Крок 5б OrderService     Слухає PaymentFailed
-        Order → CANCELLED
-        Публікує ───────► OrderCancelled {orderId, reason: 'payment_failed'}
+Крок 6б OrderService     Слухає PaymentFailed
+        Order → FAILED
+        Публікує ───────► OrderCancelled {orderId, userId, reason: 'payment_failed', items[]}
+        * Термінальний статус замовлення = FAILED; подія OrderCancelled — це сигнал компенсації
+          для звільнення запасів (її ім'я не змінює статус Order).
 
-Крок 6  CatalogService   Слухає OrderCancelled
-        Звільняє зарезервовані запаси (компенсація)
+Крок 7а CatalogService   Слухає OrderPaid
+        Резерв → COMMITTED, products.stock зменшується
+
+Крок 7б CatalogService   Слухає OrderCancelled
+        Резерв → RELEASED (компенсація) ──► StockReleased {orderId, items[]}
 ```
 
 **Публіковані події**
@@ -485,18 +541,19 @@ CREATE INDEX idx_order_items_product ON order_items(product_id);
 | Подія | Payload |
 |---|---|
 | `OrderCreated` | `{orderId, userId, userEmail, items[], totalAmount, shippingAddress}` |
+| `PaymentRequested` | `{orderId, paymentId, amount, currency, userId, idempotencyKey}` |
 | `OrderPaid` | `{orderId, userId, paidAt}` |
-| `OrderCancelled` | `{orderId, reason, items[]}` |
+| `OrderCancelled` | `{orderId, userId, reason, items[]}` |
 | `OrderStatusChanged` | `{orderId, previousStatus, newStatus, changedAt}` |
 
 **Споживані події**
 
 | Подія | Дія |
 |---|---|
-| `StockReserved` | Просування саги: Order → PAYMENT_PENDING |
-| `StockReservationFailed` | Компенсація: Order → CANCELLED |
+| `StockReserved` | Просування саги: Order лишається PENDING, публікує `PaymentRequested` |
+| `StockReservationFailed` | Компенсація: Order → CANCELLED (`reason: out_of_stock`) |
 | `PaymentSucceeded` | Просування саги: Order → PAID |
-| `PaymentFailed` | Компенсація: Order → CANCELLED |
+| `PaymentFailed` | Компенсація: Order → FAILED, публікує `OrderCancelled` для звільнення запасів |
 
 ---
 
@@ -553,15 +610,25 @@ CREATE TABLE refunds (
 
 | Подія | Payload |
 |---|---|
-| `PaymentSucceeded` | `{paymentId, orderId, amount, currency}` |
-| `PaymentFailed` | `{paymentId, orderId, reason}` |
-| `RefundProcessed` | `{refundId, paymentId, amount}` |
+| `PaymentSucceeded` | `{paymentId, orderId, amount, currency, providerTxId}` |
+| `PaymentFailed` | `{paymentId, orderId, reason, providerCode}` |
+| `RefundProcessed` | `{refundId, paymentId, orderId, amount}` |
 
 **Споживані події**
 
 | Подія | Дія |
 |---|---|
-| `PaymentRequested` | Ініціація транзакції через провайдер |
+| `PaymentRequested` | Створити Stripe Checkout Session (`mode=payment`, `metadata.order_id`) і повернути `checkoutUrl` для редиректу клієнта |
+
+**Потік оплати (Stripe Checkout, redirect-модель):**
+
+```
+PaymentRequested → створення Checkout Session → повернення checkoutUrl
+   → редирект клієнта на hosted-сторінку Stripe → оплата на боці Stripe
+   → webhook (checkout.session.completed | expired) → PaymentSucceeded | PaymentFailed
+```
+
+Списання **не** ініціюється headless-подією — підтвердження приходить лише webhook'ом. Це відповідає наявному `StripeCheckoutService` + `StripeWebhookController` у моноліті.
 
 **Ключовий патерн**: **Idempotency Key** — кожен webhook обробляється рівно один раз завдяки унікальному обмеженню `idempotency_key`.
 
@@ -788,6 +855,25 @@ RabbitMQ використовує **topic exchanges** для кожного до
 
 Повний каталог подій зі схемами payload дивіться у [event-catalog.md](./event-catalog.md).
 
+### Transactional Outbox
+
+Щоб гарантувати, що подія публікується **тоді й лише тоді**, коли зафіксовано зміну стану (немає втрати чи «фантомних» подій при збої між commit і publish), кожен сервіс-продюсер (Order, Payment, Catalog) пише подію у локальну таблицю `outbox` **в тій самій транзакції БД**, що й зміну стану. Окремий relay-процес читає незабрані рядки й публікує їх у RabbitMQ, позначаючи `published_at`.
+
+```sql
+CREATE TABLE outbox (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aggregate     VARCHAR(100) NOT NULL,   -- 'order', 'payment', 'product'
+    event_name    VARCHAR(100) NOT NULL,   -- 'OrderCreated', ...
+    payload       JSONB NOT NULL,
+    trace_id      VARCHAR(64),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    published_at  TIMESTAMPTZ              -- NULL = ще не опубліковано
+);
+CREATE INDEX idx_outbox_unpublished ON outbox(created_at) WHERE published_at IS NULL;
+```
+
+Relay реалізується або polling-воркером, або через Debezium CDC. Споживачі мають бути **ідемпотентними** (дедуплікація за `eventId`), бо relay гарантує доставку *at-least-once*.
+
 ### Автоматичний вимикач (Circuit Breaker)
 
 Застосовується до всіх синхронних HTTP викликів, де відмова залежного сервісу не повинна поширюватися:
@@ -797,6 +883,8 @@ RabbitMQ використовує **topic exchanges** для кожного до
 | Cart → Catalog (додавання товару) | Повернути помилку: "Товар недоступний" |
 | Order → Cart (оформлення) | Повернути помилку: "Кошик недоступний, спробуйте ще раз" |
 | Export → будь-який сервіс | Позначити завдання як failed з описом помилки |
+
+> **Механізм.** У Symfony немає вбудованого circuit breaker. Рекомендований підхід: бібліотека рівня застосунку (напр. `ackintosh/ganesha`, інтегрована з `HttpClientInterface`) для retry/timeout/half-open станів; на платформенному рівні — service mesh (Istio/Linkerd), що дає circuit breaking, retry і timeouts без коду застосунку.
 
 ---
 
@@ -946,7 +1034,7 @@ public function ready(Connection $db): JsonResponse
 | **mTLS** | Між сервісами у production (Kubernetes + Istio) |
 | **Мережева ізоляція** | Payment Service недоступний з публічного інтернету; доступний лише через RabbitMQ події та внутрішню мережу |
 | **Перевірка підпису webhook** | Stripe: заголовок `Stripe-Signature`; LiqPay: HMAC-SHA512 |
-| **Патерн Outbox** | Гарантує доставку подій в рамках тієї ж DB транзакції що й зміна стану |
+| **Патерн Outbox** | Гарантує доставку подій в рамках тієї ж DB транзакції що й зміна стану (схема таблиці та relay — див. §5 «Transactional Outbox») |
 | **Обмеження швидкості** | Застосовується на рівні BFF шару для кожного типу клієнта (суворіше для Public API) |
 
 ---
@@ -972,6 +1060,16 @@ public function ready(Connection $db): JsonResponse
 - [ ] Створити окремі схеми: `users`, `catalog`, `cart`, `orders`, `payments`, `delivery`, `exports`
 - [ ] Видалити всі FK constraints між схемами
 - [ ] Додати RabbitMQ до `docker-compose.yml`, замінити DSN транспорту `doctrine://`
+
+**Підкрок 2.1 — Міграція первинних ключів `serial int` → `UUID` ⚠️ високий ризик.**
+Усі сутності зараз мають int auto-increment PK (`#[ORM\GeneratedValue]`), а цільова модель вимагає UUID (правило «посилання лише UUID»). Це найризикованіша частина — виконувати поетапно, без простою:
+
+- [ ] Додати нові колонки `uuid` (`gen_random_uuid()`) поряд з наявними `id` у кожній таблиці
+- [ ] Backfill UUID для всіх рядків; додати unique-індекси
+- [ ] Додати паралельні `*_uuid` колонки на всіх посиланнях (FK та майбутніх крос-сервісних) і backfill через JOIN за старими int
+- [ ] Перемкнути застосунок/мапінг на читання-запис UUID; зберігати int тимчасово для звірки
+- [ ] Після верифікації — зробити UUID первинним ключем, видалити старі int-колонки та int-FK
+- [ ] Зовнішні ідентифікатори (URL, Stripe `metadata.order_id`) мають бути перевипущені/зворотно сумісні на час переходу
 
 ### Фаза 3 — Виокремлення User Service
 

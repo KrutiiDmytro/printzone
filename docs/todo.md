@@ -1,3 +1,79 @@
+# Аудит і виправлення документації мікросервісів (Task 24)
+
+> Звірка наявних `docs/microservices-architecture.md`, `docs/event-catalog.md`, `README.md` з фактичним
+> кодом + виправлення розбіжностей. Лише документація — код застосунку не змінювався (3 файли).
+
+## Виправлено
+- [x] **H1** Inventory: додано таблицю `stock_reservations` + семантику HELD/COMMITTED/RELEASED; примітка в §3, чому інвентар co-located у Catalog
+- [x] **H2** Stripe: Saga (§4.4) і Payment (§4.5) переписані під redirect-модель Checkout Session + webhook (не headless-списання); узгоджено діаграму в event-catalog
+- [x] **H3** Статуси Order: enum приведено до коду — `PENDING, PAID, FAILED, PROCESSING, SHIPPED, DELIVERED, CANCELLED` (прибрано `PAYMENT_PENDING`, додано `FAILED`)
+- [x] **H4** Міграція PK `serial int → UUID` винесена явним підкроком 2.1 у §10 з позначкою ризику
+- [x] **M1** У схему Catalog додано `brands`, `printer_models`, `products.brand_id`
+- [x] **M2** У §4.1 — примітка про код-гап: сутність `User` ще не має поля `githubId`
+- [x] **M3** Додано підрозділ «Transactional Outbox» (§5) зі схемою таблиці; крос-посилання з §9
+- [x] **M4** У §1/§2 і README позначено Delivery+Notification як greenfield, решту — як витягнуті модулі
+- [x] **M5** У §4.3 — примітка, що гостьовий кошик сесія→БД є зміною поведінки
+- [x] **L1** README: «22 типи подій» → 24 (дві згадки)
+- [x] **L2** Вирівняно payload подій: `ProductCreated.categoryId`, `OrderCancelled.userId`, `PaymentRequested.{paymentId,idempotencyKey}`, `Payment*` providerTxId/providerCode
+- [x] **L3** Домен виправлено: PrintZone друкарський магазин (не «електроніка»); заголовки узгоджено
+- [x] **L4** Circuit Breaker/mTLS — додано конкретику механізму (ganesha / service mesh)
+
+## Верифікація
+- [x] `grep PAYMENT_PENDING docs/ README.md` → порожньо
+- [x] enum статусів Order == `OrderCrudController.php:69-75` (+ FAILED)
+- [x] схема Catalog містить усі 6 сутностей коду
+- [x] `grep "22 тип|електроніки"` → порожньо
+
+---
+
+# Гігієна перед мікросервісами (Трек A)
+
+> Підняти якість/відтворюваність коду перед виносом у мікросервіси. Без зміни звʼязності
+> (Phase 1 не чіпаємо). Усі зміни поведінково нейтральні. Гілка `chore/hygiene-microservices-prep`.
+
+## Задача 1 — Закріпити версії залежностей
+- [x] `composer.json`: `stripe/stripe-php` `*`→`^20.2`, `doctrine/doctrine-fixtures-bundle` `*`→`^4.3.1`
+- [x] `composer update` лише цих 2 пакетів (stripe v20.1→v20.2), `composer validate` ок
+
+## Задача 2 — php-cs-fixer (єдиний стиль)
+- [x] `composer require --dev friendsofphp/php-cs-fixer` (^3.95)
+- [x] `.php-cs-fixer.dist.php` — Finder src+tests, `@Symfony` + `@PHP82Migration` (без risky)
+- [x] `php-cs-fixer fix` один раз → 88 файлів переформатовано (окремий style-коміт)
+- [x] `.gitlab-ci.yml` — job `cs:fixer` у validate (image ghcr.io/php-cs-fixer, `check`)
+
+## Задача 3 — PHPStan + symfony extension
+- [x] `composer require --dev phpstan/phpstan phpstan/phpstan-symfony phpstan/extension-installer`
+- [x] `phpstan.dist.neon` — level 6, paths src+tests, containerXmlPath, includes baseline
+- [x] згенерувати `phpstan-baseline.neon` (111 помилок у baseline)
+- [x] `.gitlab-ci.yml` — job `static:analysis` у validate (composer:2: install→warmup→analyse)
+
+## Верифікація
+- [x] `php-cs-fixer check` → 0 порушень
+- [x] `phpstan analyse` → [OK] No errors (з baseline)
+- [x] `phpunit` → OK (141 tests, 348 assertions) — поведінка не змінилась
+
+## Review
+
+### Що зроблено
+1. **Версії**: `stripe/stripe-php *`→`^20.2`, `doctrine-fixtures-bundle *`→`^4.3.1` (відтворювані білди).
+2. **php-cs-fixer** ^3.95: `@Symfony` + `@PHP82Migration` (non-risky), 88/111 файлів переформатовано.
+3. **PHPStan** 2.2 + phpstan-symfony: level 6, baseline 111 помилок (CI зелений; борг знижуємо «храповиком»).
+4. **CI**: дві нові job-и у стадії `validate` — `cs:fixer` (check) і `static:analysis` (phpstan).
+
+### Структура комітів
+- `style:` — лише переформатування `src/`+`tests/` (механічний diff, ізольований для рев'ю).
+- `chore(quality):` — тулінг, конфіги, baseline, CI, закріплення версій (composer.json/lock
+  переплетені між задачами → не діляться по файлах, тому згруповані).
+
+### Поза обсягом (свідомо, не гігієна)
+Ідемпотентність webhook, Phase 1 розв'язання FK, розбиття CartService, зняття типів з baseline.
+
+### Як знижувати PHPStan-борг далі
+`phpstan-baseline.neon` (111) — додавати типи generics (Doctrine Collections), `TEntity`
+в EasyAdmin CRUD, прибирати застарілі `int|null` на `$id`. Видаляти записи з baseline по мірі фіксу.
+
+---
+
 # Price Range Filter (euros)
 
 ## Checklist
