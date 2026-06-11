@@ -1,3 +1,153 @@
+# Аудит і виправлення документації мікросервісів (Task 24)
+
+> Звірка наявних `docs/microservices-architecture.md`, `docs/event-catalog.md`, `README.md` з фактичним
+> кодом + виправлення розбіжностей. Лише документація — код застосунку не змінювався (3 файли).
+
+## Виправлено
+- [x] **H1** Inventory: додано таблицю `stock_reservations` + семантику HELD/COMMITTED/RELEASED; примітка в §3, чому інвентар co-located у Catalog
+- [x] **H2** Stripe: Saga (§4.4) і Payment (§4.5) переписані під redirect-модель Checkout Session + webhook (не headless-списання); узгоджено діаграму в event-catalog
+- [x] **H3** Статуси Order: enum приведено до коду — `PENDING, PAID, FAILED, PROCESSING, SHIPPED, DELIVERED, CANCELLED` (прибрано `PAYMENT_PENDING`, додано `FAILED`)
+- [x] **H4** Міграція PK `serial int → UUID` винесена явним підкроком 2.1 у §10 з позначкою ризику
+- [x] **M1** У схему Catalog додано `brands`, `printer_models`, `products.brand_id`
+- [x] **M2** У §4.1 — примітка про код-гап: сутність `User` ще не має поля `githubId`
+- [x] **M3** Додано підрозділ «Transactional Outbox» (§5) зі схемою таблиці; крос-посилання з §9
+- [x] **M4** У §1/§2 і README позначено Delivery+Notification як greenfield, решту — як витягнуті модулі
+- [x] **M5** У §4.3 — примітка, що гостьовий кошик сесія→БД є зміною поведінки
+- [x] **L1** README: «22 типи подій» → 24 (дві згадки)
+- [x] **L2** Вирівняно payload подій: `ProductCreated.categoryId`, `OrderCancelled.userId`, `PaymentRequested.{paymentId,idempotencyKey}`, `Payment*` providerTxId/providerCode
+- [x] **L3** Домен виправлено: PrintZone друкарський магазин (не «електроніка»); заголовки узгоджено
+- [x] **L4** Circuit Breaker/mTLS — додано конкретику механізму (ganesha / service mesh)
+
+## Верифікація
+- [x] `grep PAYMENT_PENDING docs/ README.md` → порожньо
+- [x] enum статусів Order == `OrderCrudController.php:69-75` (+ FAILED)
+- [x] схема Catalog містить усі 6 сутностей коду
+- [x] `grep "22 тип|електроніки"` → порожньо
+
+---
+
+# Гігієна перед мікросервісами (Трек A)
+
+> Підняти якість/відтворюваність коду перед виносом у мікросервіси. Без зміни звʼязності
+> (Phase 1 не чіпаємо). Усі зміни поведінково нейтральні. Гілка `chore/hygiene-microservices-prep`.
+
+## Задача 1 — Закріпити версії залежностей
+- [x] `composer.json`: `stripe/stripe-php` `*`→`^20.2`, `doctrine/doctrine-fixtures-bundle` `*`→`^4.3.1`
+- [x] `composer update` лише цих 2 пакетів (stripe v20.1→v20.2), `composer validate` ок
+
+## Задача 2 — php-cs-fixer (єдиний стиль)
+- [x] `composer require --dev friendsofphp/php-cs-fixer` (^3.95)
+- [x] `.php-cs-fixer.dist.php` — Finder src+tests, `@Symfony` + `@PHP82Migration` (без risky)
+- [x] `php-cs-fixer fix` один раз → 88 файлів переформатовано (окремий style-коміт)
+- [x] `.gitlab-ci.yml` — job `cs:fixer` у validate (image ghcr.io/php-cs-fixer, `check`)
+
+## Задача 3 — PHPStan + symfony extension
+- [x] `composer require --dev phpstan/phpstan phpstan/phpstan-symfony phpstan/extension-installer`
+- [x] `phpstan.dist.neon` — level 6, paths src+tests, containerXmlPath, includes baseline
+- [x] згенерувати `phpstan-baseline.neon` (111 помилок у baseline)
+- [x] `.gitlab-ci.yml` — job `static:analysis` у validate (composer:2: install→warmup→analyse)
+
+## Верифікація
+- [x] `php-cs-fixer check` → 0 порушень
+- [x] `phpstan analyse` → [OK] No errors (з baseline)
+- [x] `phpunit` → OK (141 tests, 348 assertions) — поведінка не змінилась
+
+## Review
+
+### Що зроблено
+1. **Версії**: `stripe/stripe-php *`→`^20.2`, `doctrine-fixtures-bundle *`→`^4.3.1` (відтворювані білди).
+2. **php-cs-fixer** ^3.95: `@Symfony` + `@PHP82Migration` (non-risky), 88/111 файлів переформатовано.
+3. **PHPStan** 2.2 + phpstan-symfony: level 6, baseline 111 помилок (CI зелений; борг знижуємо «храповиком»).
+4. **CI**: дві нові job-и у стадії `validate` — `cs:fixer` (check) і `static:analysis` (phpstan).
+
+### Структура комітів
+- `style:` — лише переформатування `src/`+`tests/` (механічний diff, ізольований для рев'ю).
+- `chore(quality):` — тулінг, конфіги, baseline, CI, закріплення версій (composer.json/lock
+  переплетені між задачами → не діляться по файлах, тому згруповані).
+
+### Поза обсягом (свідомо, не гігієна)
+Ідемпотентність webhook, Phase 1 розв'язання FK, розбиття CartService, зняття типів з baseline.
+
+### Як знижувати PHPStan-борг далі
+`phpstan-baseline.neon` (111) — додавати типи generics (Doctrine Collections), `TEntity`
+в EasyAdmin CRUD, прибирати застарілі `int|null` на `$id`. Видаляти записи з baseline по мірі фіксу.
+
+---
+
+# Price Range Filter (euros)
+
+## Checklist
+- [x] 1. `ProductRepository` — `findWithFilters()` + `getPriceRange()`
+- [x] 2. `ShopController` — всі 4 маршрути читають `price_min`/`price_max`, передають межі слайдера
+- [x] 3. `templates/shop/index.html.twig` — форма фільтрації, `$`→`€`, active tag
+
+## Files
+1. `src/Repository/ProductRepository.php`
+2. `src/Controller/ShopController.php`
+3. `templates/shop/index.html.twig`
+
+---
+
+# PrinterModel + Printer Finder Filter
+
+## Підзадачі
+- [x] Підзадача 1: `PrinterModel` entity + `PrinterModelRepository` (2 файли)
+- [x] Підзадача 2: Doctrine migration + fixtures з моделями для 8 брендів
+- [x] Підзадача 3: `BrandExtension` — додати `brand_models(slug)` + `PrinterModelCrudController` (2 файли)
+- [x] Підзадача 4: `home.html.twig` — блок "Printer Finder" з autocomplete + cascading dropdowns
+
+## Архітектура
+```
+Brand (1) ──► PrinterModel (many)
+              id, name, slug, brand_id
+
+Twig: brand_models('canon') → PrinterModel[]
+JS autocomplete: text input → filter all models → show dropdown
+Cascading: select brand → load models for that brand
+Search redirect: /brand/{slug}
+```
+
+---
+
+# Brand Entity — повноцінна реалізація
+
+## Підзадачі
+- [x] Підзадача 1: Brand entity (`src/Catalog/Domain/Entity/Brand.php`) + BrandRepository + міграція
+- [x] Підзадача 2: `brand` поле в Product entity + `findByBrand()` в ProductRepository + міграція
+- [x] Підзадача 3: `ShopController::showBrand()` маршрут + `BrandTwigExtension` (`all_brands()`)
+- [x] Підзадача 4: `BrandCrudController` + пункт "Бренди" в `DashboardController`
+- [x] Підзадача 5: Fixtures — 8 брендів з кольорами, прив'язка продуктів
+- [x] Підзадача 6: Шаблони — видалено хардкод у `base.html.twig` та `home.html.twig`
+
+## Результат
+- Бренди зберігаються в БД (таблиця `brands`: name, slug, color)
+- Кожен продукт має `brand_id` (nullable FK)
+- Маршрут `/brand/{slug}` повертає продукти фільтровані за брендом
+- `all_brands()` доступна у всіх Twig-шаблонах глобально
+- Адмінка має CRUD для брендів
+
+---
+
+# PrintZone — Redesign шапки сайту
+
+## План
+- [x] Записати план
+- [x] base.html.twig — назва "PrintZone", іконка принтера, нова категорійна navbar з dropdown-брендами
+- [x] home.html.twig — hero-заголовок і підзаголовок під PrintZone
+
+---
+
+# Task 25 — CI/CD & S3 Storage
+
+## CI/CD Status
+- [x] Fixed PDOException: added pdo_sqlite driver for test env
+- [x] Fixed memory_limit: raised to 256M in phpunit config
+- [x] Fixed build:image: use CI_JOB_TOKEN for GitLab registry auth
+- [x] Added SSH deployment with SSH_PRIVATE_KEY
+- [x] Added AWS S3 variables to GitLab CI
+
+---
+
 # Task 23 — Data Export Module
 
 ## Plan
@@ -107,3 +257,74 @@ Doctrine-bundle встановлює `driver: pdo_mysql` як дефолт. Бе
 - Немає автоматичного failover — при падінні primary потрібен ручний switchover.
 - Для автофailover: Patroni або PgBouncer перед Doctrine.
 - Реплікація async — можлива мінімальна втрата даних при failover.
+
+---
+
+# Stripe Checkout Integration (EUR)
+
+## Архітектура флоу
+
+```
+[Checkout form] → POST /checkout/pay
+    │
+    ▼
+CheckoutController::pay()
+    │  створює Order (status: PENDING)
+    │  зберігає stripe_session_id в Order
+    ▼
+StripeCheckoutService::createSession(Order)
+    │  line_items з cart (ціни вже в центах)
+    │  success_url: /checkout/success?session_id={CHECKOUT_SESSION_ID}
+    │  cancel_url: /checkout/cancel
+    ▼
+redirect → Stripe hosted page
+    │
+    ├─ [Успіх] → GET /checkout/success → показує сторінку подяки
+    │
+    └─ [Webhook] POST /stripe/webhook
+           │  перевіряє Stripe-Signature
+           │  checkout.session.completed event
+           ▼
+       Order.status = PAID (надійне підтвердження)
+```
+
+## Підзадачі
+
+### Фаза 1 — Setup (≤3 файли)
+- [x] 1.1 `composer require stripe/stripe-php`
+- [x] 1.2 `.env` — додати `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
+- [x] 1.3 `src/Order/Domain/Entity/Order.php` — додати поле `stripeSessionId` (nullable string)
+- [x] 1.4 Doctrine migration для нового поля
+
+### Фаза 2 — Service + Controller (≤3 файли)
+- [x] 2.1 `src/Payment/Service/StripeCheckoutService.php` — новий сервіс, створює Stripe Checkout Session
+- [x] 2.2 `src/Controller/CheckoutController.php` — переробити `placeOrder` → `pay()`, редірект на Stripe
+
+### Фаза 3 — Webhook + Security (≤2 файли)
+- [x] 3.1 `src/Controller/StripeWebhookController.php` — POST `/stripe/webhook`, верифікація підпису, Order→PAID
+- [x] 3.2 `config/packages/security.yaml` — вивести `/stripe/webhook` з-під CSRF
+
+### Фаза 4 — Шаблони (≤2 файли)
+- [x] 4.1 `templates/checkout/success.html.twig` — сторінка успішної оплати
+- [x] 4.2 `templates/checkout/cancel.html.twig` — сторінка скасування
+
+## Ключові деталі реалізації
+
+| Деталь | Рішення |
+|--------|---------|
+| Ціни | `price` в БД — вже в центах (int). Stripe теж приймає центи → конвертація не потрібна |
+| Валюта | `eur` |
+| `stripeSessionId` | зберігається в Order до редіректу; webhook шукає Order по цьому полю |
+| Webhook безпека | `Stripe::constructEvent()` з `STRIPE_WEBHOOK_SECRET` верифікує підпис |
+| CSRF | Webhook endpoint виключений (`stateless: true` або `security: false`) |
+| Локальне тестування | `stripe listen --forward-to host.docker.internal/stripe/webhook` |
+
+## Тестові картки Stripe
+- `4242 4242 4242 4242` — успішна оплата
+- `4000 0000 0000 9995` — declined
+
+## Edge cases
+- Порожній кошик → redirect на `/cart` (вже є)
+- Stripe session expired → повторний checkout (cancel_url поверне на `/cart`)
+- Webhook fires після redirect success — порядок не гарантований, тому статус PAID ставиться лише вебхуком
+- Дублювання вебхуків — ідемпотентна обробка (if Order.status !== PAID → set PAID)
