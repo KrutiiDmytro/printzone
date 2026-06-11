@@ -16,6 +16,17 @@ variables:
   GIT_CLEAN_FLAGS: -ffd
   LOCAL_IMAGE: task-25/php:latest
 
+# Пайплайн створюється на Merge Request і на гілці develop (без дублювання)
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# Спільні правила: перевірки бігають на MR (до мерджа) і на develop
+.rules_mr_develop: &rules_mr_develop
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  - if: '$CI_COMMIT_BRANCH == "develop"'
+
 # ─────────────────────────────────────────────────────────────
 # VALIDATE
 # Швидкі статичні перевірки — один docker run з PHP_IMAGE
@@ -38,8 +49,7 @@ lint:php:
         -w /app \
         composer:2 \
         sh -c "git config --global --add safe.directory /app && composer validate --no-check-publish"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  rules: *rules_mr_develop
 
 audit:composer:
   stage: validate
@@ -51,8 +61,7 @@ audit:composer:
         -w /app \
         composer:2 \
         composer audit --format=plain
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  rules: *rules_mr_develop
 
 cs:fixer:
   stage: validate
@@ -66,8 +75,7 @@ cs:fixer:
         ghcr.io/php-cs-fixer/php-cs-fixer:3-php8.3 \
         check --diff --show-progress=dots
   needs: []
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  rules: *rules_mr_develop
 
 # ─────────────────────────────────────────────────────────────
 # BUILD
@@ -85,8 +93,7 @@ build:image:
       .
     - echo "Image built task-25/php:$CI_COMMIT_SHA"
   needs: []
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  rules: *rules_mr_develop
 
 # ─────────────────────────────────────────────────────────────
 # TEST
@@ -107,8 +114,7 @@ build:image:
         sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test"
   needs:
     - build:image
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop"'
+  rules: *rules_mr_develop
 
 static:analysis:
   extends: .test_base
