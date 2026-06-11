@@ -69,6 +69,8 @@ class OrderCrudController extends AbstractCrudController
             ChoiceField::new('status', 'Статус')
                 ->setChoices([
                     'PENDING' => 'PENDING',
+                    'PAID' => 'PAID',
+                    'FAILED' => 'FAILED',
                     'PROCESSING' => 'PROCESSING',
                     'SHIPPED' => 'SHIPPED',
                     'DELIVERED' => 'DELIVERED',
