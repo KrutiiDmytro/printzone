@@ -4,7 +4,6 @@ namespace App\Tests\Unit\Domain\Entity;
 
 use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
-use App\User\Domain\Entity\User;
 use PHPUnit\Framework\TestCase;
 
 class OrderTest extends TestCase
@@ -19,13 +18,12 @@ class OrderTest extends TestCase
         $this->assertCount(0, $order->getItems());
     }
 
-    public function testSetAndGetUser(): void
+    public function testSetAndGetUserId(): void
     {
         $order = new Order();
-        $user = new User();
 
-        $order->setUser($user);
-        $this->assertSame($user, $order->getUser());
+        $order->setUserId(7);
+        $this->assertSame(7, $order->getUserId());
     }
 
     public function testAddAndRemoveItem(): void

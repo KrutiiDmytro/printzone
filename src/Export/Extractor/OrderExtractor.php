@@ -15,9 +15,8 @@ final class OrderExtractor implements ExportExtractorInterface
     public function extract(array $filters): array
     {
         $qb = $this->em->createQueryBuilder()
-            ->select('o.id, o.status, o.totalAmount, o.createdAt, u.email AS user_email')
+            ->select('o.id, o.status, o.totalAmount, o.createdAt, o.userEmail AS user_email')
             ->from('App\Order\Domain\Entity\Order', 'o')
-            ->leftJoin('o.user', 'u')
             ->orderBy('o.createdAt', 'DESC');
 
         if (!empty($filters['status'])) {

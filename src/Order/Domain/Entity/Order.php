@@ -4,7 +4,6 @@ namespace App\Order\Domain\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
 use App\Repository\OrderRepository;
-use App\User\Domain\Entity\User;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
@@ -28,10 +27,14 @@ class Order
     #[Groups(['order:read', 'user:read'])]
     private ?int $id = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
+    // Cross-service reference to the User domain (no FK). userEmail is a snapshot.
+    #[ORM\Column]
     #[Groups(['order:read', 'order:write'])]
-    private ?User $user = null;
+    private ?int $userId = null;
+
+    #[ORM\Column(length: 180)]
+    #[Groups(['order:read'])]
+    private ?string $userEmail = null;
 
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE)]
     #[Groups(['order:read'])]
@@ -63,14 +66,26 @@ class Order
         return $this->id;
     }
 
-    public function getUser(): ?User
+    public function getUserId(): ?int
     {
-        return $this->user;
+        return $this->userId;
     }
 
-    public function setUser(?User $user): static
+    public function setUserId(int $userId): static
     {
-        $this->user = $user;
+        $this->userId = $userId;
+
+        return $this;
+    }
+
+    public function getUserEmail(): ?string
+    {
+        return $this->userEmail;
+    }
+
+    public function setUserEmail(string $userEmail): static
+    {
+        $this->userEmail = $userEmail;
 
         return $this;
     }

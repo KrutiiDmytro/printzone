@@ -4,19 +4,16 @@ namespace App\Tests\Unit\Order\Domain\Entity;
 
 use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
-use App\User\Domain\Entity\User;
 use PHPUnit\Framework\TestCase;
 
 class OrderTest extends TestCase
 {
     private Order $order;
-    private User $user;
 
     protected function setUp(): void
     {
-        $this->user = $this->createMock(User::class);
         $this->order = new Order();
-        $this->order->setUser($this->user);
+        $this->order->setUserId(1);
     }
 
     private function makeItem(): OrderItem

@@ -8,14 +8,13 @@ use EasyCorp\Bundle\EasyAdminBundle\Config\Actions;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
-use EasyCorp\Bundle\EasyAdminBundle\Field\AssociationField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\CollectionField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\DateTimeField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\IdField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\MoneyField;
+use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\DateTimeFilter;
-use EasyCorp\Bundle\EasyAdminBundle\Filter\EntityFilter;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\TextFilter;
 
 class OrderCrudController extends AbstractCrudController
@@ -33,7 +32,7 @@ class OrderCrudController extends AbstractCrudController
             ->setPageTitle('index', 'Управление заказами')
             ->setPageTitle('detail', 'Детали заказа')
             ->setDefaultSort(['createdAt' => 'DESC'])
-            ->setSearchFields(['status', 'user.email'])
+            ->setSearchFields(['status', 'userEmail'])
             ->setPaginatorPageSize(20);
     }
 
@@ -50,7 +49,7 @@ class OrderCrudController extends AbstractCrudController
     public function configureFilters(Filters $filters): Filters
     {
         return $filters
-            ->add(EntityFilter::new('user', 'Пользователь'))
+            ->add(TextFilter::new('userEmail', 'Пользователь'))
             ->add(TextFilter::new('status', 'Статус'))
             ->add(DateTimeFilter::new('createdAt', 'Дата создания'));
     }
@@ -61,8 +60,7 @@ class OrderCrudController extends AbstractCrudController
             IdField::new('id', 'ID')
                 ->hideOnForm()
                 ->hideOnIndex(),
-            AssociationField::new('user', 'Пользователь')
-                ->setRequired(true)
+            TextField::new('userEmail', 'Пользователь')
                 ->setColumns(6),
             ChoiceField::new('status', 'Статус')
                 ->setChoices([

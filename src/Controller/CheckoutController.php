@@ -6,6 +6,7 @@ use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
 use App\Payment\Service\StripeCheckoutService;
 use App\Service\CartService;
+use App\User\Domain\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -50,8 +51,12 @@ class CheckoutController extends AbstractController
             return $this->redirectToRoute('app_cart');
         }
 
+        $user = $this->getUser();
+        \assert($user instanceof User);
+
         $order = new Order();
-        $order->setUser($this->getUser());
+        $order->setUserId($user->getId());
+        $order->setUserEmail($user->getEmail());
         $order->setStatus('PENDING');
         $order->setTotalAmount($cart['total']);
 

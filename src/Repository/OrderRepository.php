@@ -3,7 +3,6 @@
 namespace App\Repository;
 
 use App\Order\Domain\Entity\Order;
-use App\User\Domain\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -14,13 +13,16 @@ class OrderRepository extends ServiceEntityRepository
         parent::__construct($registry, Order::class);
     }
 
-    public function findByUser(User $user): array
+    /**
+     * @return Order[]
+     */
+    public function findByUserId(int $userId): array
     {
         return $this->createQueryBuilder('o')
             ->addSelect('i')
             ->leftJoin('o.items', 'i')
-            ->where('o.user = :user')
-            ->setParameter('user', $user)
+            ->where('o.userId = :userId')
+            ->setParameter('userId', $userId)
             ->orderBy('o.createdAt', 'DESC')
             ->getQuery()
             ->getResult();

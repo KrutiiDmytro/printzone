@@ -139,12 +139,6 @@ parameters:
 			path: src/Controller/Admin/UserCrudController.php
 
 		-
-			message: '#^Parameter \#1 \$user of method App\\Order\\Domain\\Entity\\Order\:\:setUser\(\) expects App\\User\\Domain\\Entity\\User\|null, Symfony\\Component\\Security\\Core\\User\\UserInterface\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Controller/CheckoutController.php
-
-		-
 			message: '#^Strict comparison using \=\=\= between null and string will always evaluate to false\.$#'
 			identifier: identical.alwaysFalse
 			count: 1
@@ -345,12 +339,6 @@ parameters:
 		-
 			message: '#^Class App\\Repository\\OrderRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
 			identifier: missingType.generics
-			count: 1
-			path: src/Repository/OrderRepository.php
-
-		-
-			message: '#^Method App\\Repository\\OrderRepository\:\:findByUser\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
 			count: 1
 			path: src/Repository/OrderRepository.php
 
