@@ -3,49 +3,52 @@
 namespace App\Tests\Unit\EventListener;
 
 use App\EventListener\LoginListener;
-use App\Service\CartService;
+use App\User\Domain\Entity\User;
+use App\User\Domain\Event\UserLoggedIn;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
-use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 
 class LoginListenerTest extends TestCase
 {
     private LoginListener $listener;
-    private $cartService;
+    private $eventDispatcher;
     private $urlGenerator;
 
     protected function setUp(): void
     {
-        $this->cartService = $this->createMock(CartService::class);
+        $this->eventDispatcher = $this->createMock(EventDispatcherInterface::class);
         $this->urlGenerator = $this->createMock(UrlGeneratorInterface::class);
 
         $this->listener = new LoginListener(
-            $this->cartService,
+            $this->eventDispatcher,
             $this->urlGenerator
         );
     }
 
-    public function testOnLoginSuccessMigratesCart(): void
+    public function testOnLoginSuccessDispatchesUserLoggedIn(): void
     {
-        $user = $this->createMock(UserInterface::class);
+        $user = $this->createMock(User::class);
+        $user->method('getId')->willReturn(1);
+        $user->method('getUserIdentifier')->willReturn('user@example.com');
         $user->method('getRoles')->willReturn(['ROLE_USER']);
 
         $event = $this->createMock(LoginSuccessEvent::class);
         $event->method('getUser')->willReturn($user);
 
-        $this->cartService
+        $this->eventDispatcher
             ->expects($this->once())
-            ->method('migrateSessionToDatabase');
+            ->method('dispatch')
+            ->with($this->isInstanceOf(UserLoggedIn::class));
 
         $this->urlGenerator
             ->method('generate')
             ->with('app_home')
             ->willReturn('/');
 
-        $response = new RedirectResponse('/');
-        $event->method('setResponse')->willReturnCallback(function ($response) {
+        $event->method('setResponse')->willReturnCallback(function ($response): void {
             $this->assertInstanceOf(RedirectResponse::class, $response);
         });
 
@@ -54,7 +57,9 @@ class LoginListenerTest extends TestCase
 
     public function testOnLoginSuccessRedirectsAdminToAdminDashboard(): void
     {
-        $user = $this->createMock(UserInterface::class);
+        $user = $this->createMock(User::class);
+        $user->method('getId')->willReturn(2);
+        $user->method('getUserIdentifier')->willReturn('admin@example.com');
         $user->method('getRoles')->willReturn(['ROLE_ADMIN', 'ROLE_USER']);
 
         $event = $this->createMock(LoginSuccessEvent::class);
@@ -65,7 +70,6 @@ class LoginListenerTest extends TestCase
             ->with('admin_dashboard')
             ->willReturn('/admin');
 
-        $response = new RedirectResponse('/admin');
         $event->expects($this->once())
             ->method('setResponse')
             ->with($this->isInstanceOf(RedirectResponse::class));

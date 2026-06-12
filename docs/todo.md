@@ -18,17 +18,21 @@
 - [x] `templates/admin/order/items.html.twig`: `item.productName`
 - [x] Міграція + тести (`OrderTest`) — `phpunit` (141) + `phpstan` зелені
 
-## Під-задача 3 — Order/Cart ⟂ User
-- [ ] `Order`: `user` → `userId:int` + `userEmail` (знімок); `Cart`: `user` → `userId:int`
-- [ ] `CheckoutController`, `CartService`, `CartRepository::findOneByUserId`, `OrderRepository::findByUserId`
-- [ ] `OrderExtractor`: прибрати `leftJoin('o.user')` → знімок `o.userEmail`
-- [ ] `OrderCrudController`: `AssociationField('user')`/`EntityFilter` → текст на `userEmail`
-- [ ] Міграція + тести
+## Під-задача 3 — Order/Cart ⟂ User ✅
+- [x] **3a** `Cart`: `user` → `userId:int` (unique); `CartRepository::findOneByUserId`; CartService — коміт `05581d3`
+- [x] **3b** `Order`: `user` → `userId:int` + `userEmail` (знімок); CheckoutController; `OrderRepository::findByUserId`
+- [x] **3b** `OrderExtractor`: прибрано `leftJoin('o.user')` → знімок `o.userEmail`
+- [x] **3b** `OrderCrudController`: `AssociationField('user')`/`EntityFilter` → текст на `userEmail`
+- [x] Міграції `carts`/`orders` + тести; baseline 111→109 — коміт `fb98664`
 
-## Під-задача 4 — LoginListener → подія UserLoggedIn
-- [ ] Подія `UserLoggedIn` (User) + диспатч із `LoginListener` (замість прямого виклику CartService)
-- [ ] Слухач у модулі Cart → міграція кошика
-- [ ] Тести: `LoginListenerTest` + тест слухача
+## Під-задача 4 — LoginListener → подія UserLoggedIn ✅
+- [x] Подія `UserLoggedIn` (`src/User/Domain/Event/`) + диспатч із `LoginListener` (замість прямого CartService)
+- [x] Слухач `MigrateGuestCartOnLogin` (`src/Cart/Application/EventListener/`) → міграція кошика
+- [x] Тести: `LoginListenerTest` (диспатч) + `MigrateGuestCartOnLoginTest`; `phpunit` (142) + `phpstan` зелені
+
+## Підсумок Фази 1
+Усі міждоменні Doctrine FK розв'язані (Cart/Order ⟂ Catalog/User), синхронний виклик при вході →
+подія. Моноліт цілий, поведінка незмінна. UUID — Фаза 2.1.
 
 ---
 

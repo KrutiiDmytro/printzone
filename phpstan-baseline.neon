@@ -541,7 +541,7 @@ parameters:
 			path: tests/Functional/WebTestCase.php
 
 		-
-			message: '#^Property App\\Tests\\Unit\\EventListener\\LoginListenerTest\:\:\$cartService has no type specified\.$#'
+			message: '#^Property App\\Tests\\Unit\\EventListener\\LoginListenerTest\:\:\$eventDispatcher has no type specified\.$#'
 			identifier: missingType.property
 			count: 1
 			path: tests/Unit/EventListener/LoginListenerTest.php

@@ -2,8 +2,10 @@
 
 namespace App\EventListener;
 
-use App\Service\CartService;
+use App\User\Domain\Entity\User;
+use App\User\Domain\Event\UserLoggedIn;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
@@ -12,8 +14,8 @@ use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
 class LoginListener
 {
     public function __construct(
-        private CartService $cartService,
-        private UrlGeneratorInterface $urlGenerator
+        private EventDispatcherInterface $eventDispatcher,
+        private UrlGeneratorInterface $urlGenerator,
     ) {
     }
 
@@ -25,21 +27,18 @@ class LoginListener
             return;
         }
 
-        // Переносим гостевую корзину из сессии в БД для залогиненного пользователя
-        $this->cartService->migrateSessionToDatabase();
-
-        // Получаем пользователя
         $user = $event->getUser();
+
+        // Оповещаем другие модули о входе (Cart переносит гостевую корзину в БД).
+        if ($user instanceof User) {
+            $this->eventDispatcher->dispatch(new UserLoggedIn((int) $user->getId(), $user->getUserIdentifier()));
+        }
 
         // Проверяем роли и перенаправляем соответственно
         if (in_array('ROLE_ADMIN', $user->getRoles())) {
-            // Администратор - перенаправляем в админ-панель
-            $response = new RedirectResponse($this->urlGenerator->generate('admin_dashboard'));
-            $event->setResponse($response);
+            $event->setResponse(new RedirectResponse($this->urlGenerator->generate('admin_dashboard')));
         } else {
-            // Обычный пользователь - перенаправляем на главную
-            $response = new RedirectResponse($this->urlGenerator->generate('app_home'));
-            $event->setResponse($response);
+            $event->setResponse(new RedirectResponse($this->urlGenerator->generate('app_home')));
         }
     }
 }
