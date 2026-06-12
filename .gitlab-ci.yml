@@ -120,13 +120,16 @@ static:analysis:
   extends: .test_base
   script:
     - echo "=== PHPStan (level 6, with baseline) ==="
+    # APP_DEBUG=1 is required: phpstan-symfony reads the container XML dump
+    # (App_KernelTestDebugContainer.xml), which Symfony only writes in debug mode.
+    # With APP_DEBUG=0 no *Container.xml is produced and the analysis fails.
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -v "composer-cache-task25:/composer-cache" \
         -w /app \
         -e APP_ENV=test \
-        -e APP_DEBUG=0 \
+        -e APP_DEBUG=1 \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
         sh -c "php bin/console cache:warmup --env=test && vendor/bin/phpstan analyse --no-progress"
