@@ -102,6 +102,7 @@ class CartServiceTest extends TestCase
     public function testAddToDatabaseCreatesNewCartIfNotExists(): void
     {
         $user = $this->createMock(User::class);
+        $user->method('getId')->willReturn(1);
         $category = new Category();
         $category->setName('Test Category');
         $category->setSlug('test-category');
@@ -117,7 +118,7 @@ class CartServiceTest extends TestCase
         $idProperty->setValue($product, 1);
 
         $this->security->method('getUser')->willReturn($user);
-        $this->cartRepository->method('findOneByUser')->willReturn(null);
+        $this->cartRepository->method('findOneByUserId')->willReturn(null);
         $this->productRepository->method('find')->with(1)->willReturn($product);
 
         $this->entityManager->expects($this->once())->method('persist');
@@ -129,6 +130,7 @@ class CartServiceTest extends TestCase
     public function testAddToDatabaseUpdatesExistingItem(): void
     {
         $user = $this->createMock(User::class);
+        $user->method('getId')->willReturn(1);
         $category = new Category();
         $category->setName('Test Category');
         $category->setSlug('test-category');
@@ -144,7 +146,7 @@ class CartServiceTest extends TestCase
         $idProperty->setValue($product, 1);
 
         $cart = new Cart();
-        $cart->setUser($user);
+        $cart->setUserId(1);
 
         $existingItem = new CartItem();
         $existingItem->setProductId(1);
@@ -154,7 +156,7 @@ class CartServiceTest extends TestCase
         $cart->addItem($existingItem);
 
         $this->security->method('getUser')->willReturn($user);
-        $this->cartRepository->method('findOneByUser')->willReturn($cart);
+        $this->cartRepository->method('findOneByUserId')->willReturn($cart);
         $this->productRepository->method('find')->with(1)->willReturn($product);
 
         $this->entityManager->expects($this->once())->method('flush');
@@ -167,6 +169,7 @@ class CartServiceTest extends TestCase
     public function testMigrateSessionToDatabase(): void
     {
         $user = $this->createMock(User::class);
+        $user->method('getId')->willReturn(1);
         $session = new Session(new MockArraySessionStorage());
         $session->set('cart', [1 => 2, 2 => 3]);
 
@@ -195,12 +198,12 @@ class CartServiceTest extends TestCase
         $idProperty2->setValue($product2, 2);
 
         $cart = new Cart();
-        $cart->setUser($user);
+        $cart->setUserId(1);
 
         $this->security->method('getUser')->willReturn($user);
         $this->requestStack->method('getSession')->willReturn($session);
 
-        $this->cartRepository->method('findOneByUser')
+        $this->cartRepository->method('findOneByUserId')
             ->willReturnOnConsecutiveCalls(null, $cart);
 
         $this->productRepository->expects($this->once())

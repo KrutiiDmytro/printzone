@@ -118,7 +118,7 @@ class CheckoutControllerTest extends WebTestCase
     private function persistCartWithItem(object $entityManager, User $user, Product $product, int $quantity): void
     {
         $cart = new Cart();
-        $cart->setUser($user);
+        $cart->setUserId($user->getId());
         $entityManager->persist($cart);
 
         $cartItem = new CartItem();

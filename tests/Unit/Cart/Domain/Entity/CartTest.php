@@ -4,19 +4,16 @@ namespace App\Tests\Unit\Cart\Domain\Entity;
 
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
-use App\User\Domain\Entity\User;
 use PHPUnit\Framework\TestCase;
 
 class CartTest extends TestCase
 {
     private Cart $cart;
-    private User $user;
 
     protected function setUp(): void
     {
-        $this->user = $this->createMock(User::class);
         $this->cart = new Cart();
-        $this->cart->setUser($this->user);
+        $this->cart->setUserId(1);
     }
 
     private function makeItem(int $productId, string $name, int $price, int $quantity): CartItem

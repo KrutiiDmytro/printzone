@@ -175,7 +175,7 @@ class CartService
 
     private function removeFromDatabase($user, int $productId): void
     {
-        $cart = $this->cartRepository->findOneByUser($user);
+        $cart = $this->cartRepository->findOneByUserId($user->getId());
 
         if (!$cart) {
             return;
@@ -194,7 +194,7 @@ class CartService
 
     private function updateInDatabase($user, int $productId, int $quantity): void
     {
-        $cart = $this->cartRepository->findOneByUser($user);
+        $cart = $this->cartRepository->findOneByUserId($user->getId());
 
         if (!$cart) {
             return;
@@ -217,7 +217,7 @@ class CartService
 
     private function clearDatabase($user): void
     {
-        $cart = $this->cartRepository->findOneByUser($user);
+        $cart = $this->cartRepository->findOneByUserId($user->getId());
 
         if ($cart) {
             $cart->clear();
@@ -228,7 +228,7 @@ class CartService
 
     private function getCartFromDatabase($user): array
     {
-        $cart = $this->cartRepository->findOneByUser($user);
+        $cart = $this->cartRepository->findOneByUserId($user->getId());
 
         if (!$cart) {
             return [
@@ -275,11 +275,11 @@ class CartService
 
     private function getOrCreateCart($user): Cart
     {
-        $cart = $this->cartRepository->findOneByUser($user);
+        $cart = $this->cartRepository->findOneByUserId($user->getId());
 
         if (!$cart) {
             $cart = new Cart();
-            $cart->setUser($user);
+            $cart->setUserId($user->getId());
             $this->entityManager->persist($cart);
             $this->entityManager->flush();
         }

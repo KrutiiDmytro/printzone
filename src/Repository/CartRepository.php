@@ -3,7 +3,6 @@
 namespace App\Repository;
 
 use App\Cart\Domain\Entity\Cart;
-use App\User\Domain\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -14,13 +13,13 @@ class CartRepository extends ServiceEntityRepository
         parent::__construct($registry, Cart::class);
     }
 
-    public function findOneByUser(User $user): ?Cart
+    public function findOneByUserId(int $userId): ?Cart
     {
         return $this->createQueryBuilder('c')
             ->addSelect('i')
             ->leftJoin('c.items', 'i')
-            ->where('c.user = :user')
-            ->setParameter('user', $user)
+            ->where('c.userId = :userId')
+            ->setParameter('userId', $userId)
             ->getQuery()
             ->getOneOrNullResult();
     }
