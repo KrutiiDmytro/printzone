@@ -56,11 +56,13 @@ class CheckoutController extends AbstractController
         $order->setTotalAmount($cart['total']);
 
         foreach ($cart['items'] as $cartItem) {
+            $product = $cartItem['product'];
             $orderItem = new OrderItem();
             $orderItem->setOrderRef($order);
-            $orderItem->setProduct($cartItem['product']);
+            $orderItem->setProductId($product->getId());
+            $orderItem->setProductName($product->getName());
             $orderItem->setQuantity($cartItem['quantity']);
-            $orderItem->setPrice($cartItem['product']->getPrice());
+            $orderItem->setPrice($product->getPrice());
             $order->getItems()->add($orderItem);
         }
 

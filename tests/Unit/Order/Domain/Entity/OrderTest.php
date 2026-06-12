@@ -2,8 +2,6 @@
 
 namespace App\Tests\Unit\Order\Domain\Entity;
 
-use App\Catalog\Domain\Entity\Category;
-use App\Catalog\Domain\Entity\Product;
 use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
 use App\User\Domain\Entity\User;
@@ -21,21 +19,20 @@ class OrderTest extends TestCase
         $this->order->setUser($this->user);
     }
 
-    public function testAddItemAddsItemToOrder(): void
+    private function makeItem(): OrderItem
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product = new Product();
-        $product->setName('Product');
-        $product->setPrice(10000);
-        $product->setCategory($category);
-
         $item = new OrderItem();
-        $item->setProduct($product);
+        $item->setProductId(1);
+        $item->setProductName('Product');
         $item->setQuantity(2);
         $item->setPrice(10000);
+
+        return $item;
+    }
+
+    public function testAddItemAddsItemToOrder(): void
+    {
+        $item = $this->makeItem();
 
         $this->order->addItem($item);
 
@@ -46,19 +43,7 @@ class OrderTest extends TestCase
 
     public function testRemoveItemRemovesItemFromOrder(): void
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product = new Product();
-        $product->setName('Product');
-        $product->setPrice(10000);
-        $product->setCategory($category);
-
-        $item = new OrderItem();
-        $item->setProduct($product);
-        $item->setQuantity(2);
-        $item->setPrice(10000);
+        $item = $this->makeItem();
 
         $this->order->addItem($item);
         $this->order->removeItem($item);

@@ -4,19 +4,19 @@
 > поведінка незмінна. UUID відкладено на Фазу 2.1. Гілка `feat/phase1-decouple-modules`.
 > Кожна під-задача — окремий коміт, між ними `phpunit` + `phpstan` зелені.
 
-## Під-задача 1 — CartItem ⟂ Catalog
-- [ ] `CartItem`: прибрати `product` ManyToOne → `productId:int` + знімки `productName`,`price`; `getTotal()` зі `price`
-- [ ] `CartService`: знімки на `add`; зіставлення за `productId`; `getCartFromDatabase()` масово вантажить продукти
-- [ ] `CartRepository::findOneByUser`: прибрати `leftJoin('i.product')`
-- [ ] Тести: `CartItemTest`, `CartTest`, `CartServiceTest`, `CheckoutControllerTest`
-- [ ] Міграція: `cart_items` +`product_name`,`price`, drop FK на `products`
-- [ ] Верифікація: `phpunit` + `phpstan` зелені
+## Під-задача 1 — CartItem ⟂ Catalog ✅
+- [x] `CartItem`: прибрати `product` ManyToOne → `productId:int` + знімки `productName`,`price`; `getTotal()` зі `price`
+- [x] `CartService`: знімки на `add`; зіставлення за `productId`; `getCartFromDatabase()` масово вантажить продукти
+- [x] `CartRepository::findOneByUser`: прибрати `leftJoin('i.product')`
+- [x] Тести: `CartItemTest`, `CartTest`, `CartServiceTest`, `CheckoutControllerTest`
+- [x] Міграція: `cart_items` +`product_name`,`price`, drop FK на `products`
+- [x] Верифікація: `phpunit` (141) + `phpstan` зелені — коміт `48ecb81`
 
-## Під-задача 2 — OrderItem ⟂ Catalog
-- [ ] `OrderItem`: `product` ManyToOne → `productId:int` + `productName` (price вже є); `__toString` через `productName`
-- [ ] `CheckoutController`: `setProductId/setProductName` зі знімка кошика
-- [ ] `templates/admin/order/items.html.twig`: `item.productName`
-- [ ] Міграція + тести (`OrderTest`)
+## Під-задача 2 — OrderItem ⟂ Catalog ✅
+- [x] `OrderItem`: `product` ManyToOne → `productId:int` + `productName` (price вже є); `__toString` через `productName`
+- [x] `CheckoutController`: `setProductId/setProductName` зі знімка кошика
+- [x] `templates/admin/order/items.html.twig`: `item.productName`
+- [x] Міграція + тести (`OrderTest`) — `phpunit` (141) + `phpstan` зелені
 
 ## Під-задача 3 — Order/Cart ⟂ User
 - [ ] `Order`: `user` → `userId:int` + `userEmail` (знімок); `Cart`: `user` → `userId:int`

@@ -3,7 +3,6 @@
 namespace App\Order\Domain\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
-use App\Catalog\Domain\Entity\Product;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
 
@@ -28,10 +27,14 @@ class OrderItem
     #[Groups(['order_item:write'])]
     private ?Order $orderRef = null;
 
-    #[ORM\ManyToOne]
-    #[ORM\JoinColumn(nullable: false)]
+    // Cross-service reference to Catalog (no FK). Name + price are snapshots at order time.
+    #[ORM\Column]
     #[Groups(['order_item:read', 'order:read', 'order:write'])]
-    private ?Product $product = null;
+    private ?int $productId = null;
+
+    #[ORM\Column(length: 255)]
+    #[Groups(['order_item:read', 'order:read', 'order:write'])]
+    private ?string $productName = null;
 
     #[ORM\Column]
     #[Groups(['order_item:read', 'order:read', 'order:write'])]
@@ -58,14 +61,26 @@ class OrderItem
         return $this;
     }
 
-    public function getProduct(): ?Product
+    public function getProductId(): ?int
     {
-        return $this->product;
+        return $this->productId;
     }
 
-    public function setProduct(?Product $product): static
+    public function setProductId(int $productId): static
     {
-        $this->product = $product;
+        $this->productId = $productId;
+
+        return $this;
+    }
+
+    public function getProductName(): ?string
+    {
+        return $this->productName;
+    }
+
+    public function setProductName(string $productName): static
+    {
+        $this->productName = $productName;
 
         return $this;
     }
@@ -96,6 +111,6 @@ class OrderItem
 
     public function __toString(): string
     {
-        return sprintf('%s (x%d)', $this->product?->getName() ?? 'Unknown Product', $this->quantity ?? 0);
+        return sprintf('%s (x%d)', $this->productName ?? 'Unknown Product', $this->quantity ?? 0);
     }
 }
