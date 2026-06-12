@@ -1,3 +1,37 @@
+# Фаза 1 декомпозиції — розв'язати міждоменну зв'язність (моноліт)
+
+> Замінити міждоменні Doctrine FK на скалярні int-посилання + знімки + подію. Один застосунок,
+> поведінка незмінна. UUID відкладено на Фазу 2.1. Гілка `feat/phase1-decouple-modules`.
+> Кожна під-задача — окремий коміт, між ними `phpunit` + `phpstan` зелені.
+
+## Під-задача 1 — CartItem ⟂ Catalog
+- [ ] `CartItem`: прибрати `product` ManyToOne → `productId:int` + знімки `productName`,`price`; `getTotal()` зі `price`
+- [ ] `CartService`: знімки на `add`; зіставлення за `productId`; `getCartFromDatabase()` масово вантажить продукти
+- [ ] `CartRepository::findOneByUser`: прибрати `leftJoin('i.product')`
+- [ ] Тести: `CartItemTest`, `CartTest`, `CartServiceTest`, `CheckoutControllerTest`
+- [ ] Міграція: `cart_items` +`product_name`,`price`, drop FK на `products`
+- [ ] Верифікація: `phpunit` + `phpstan` зелені
+
+## Під-задача 2 — OrderItem ⟂ Catalog
+- [ ] `OrderItem`: `product` ManyToOne → `productId:int` + `productName` (price вже є); `__toString` через `productName`
+- [ ] `CheckoutController`: `setProductId/setProductName` зі знімка кошика
+- [ ] `templates/admin/order/items.html.twig`: `item.productName`
+- [ ] Міграція + тести (`OrderTest`)
+
+## Під-задача 3 — Order/Cart ⟂ User
+- [ ] `Order`: `user` → `userId:int` + `userEmail` (знімок); `Cart`: `user` → `userId:int`
+- [ ] `CheckoutController`, `CartService`, `CartRepository::findOneByUserId`, `OrderRepository::findByUserId`
+- [ ] `OrderExtractor`: прибрати `leftJoin('o.user')` → знімок `o.userEmail`
+- [ ] `OrderCrudController`: `AssociationField('user')`/`EntityFilter` → текст на `userEmail`
+- [ ] Міграція + тести
+
+## Під-задача 4 — LoginListener → подія UserLoggedIn
+- [ ] Подія `UserLoggedIn` (User) + диспатч із `LoginListener` (замість прямого виклику CartService)
+- [ ] Слухач у модулі Cart → міграція кошика
+- [ ] Тести: `LoginListenerTest` + тест слухача
+
+---
+
 # Аудит і виправлення документації мікросервісів (Task 24)
 
 > Звірка наявних `docs/microservices-architecture.md`, `docs/event-catalog.md`, `README.md` з фактичним

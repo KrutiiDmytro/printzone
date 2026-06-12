@@ -30,38 +30,9 @@ class CheckoutControllerTest extends WebTestCase
         $container = static::getContainer();
         $entityManager = $container->get('doctrine.orm.entity_manager');
 
-        // Створюємо продукт
-        $product = new Product();
-        $product->setName('Checkout Test Product');
-        $product->setDescription('Test Description');
-        $product->setPrice(1000);
-        $product->setStock(10);
-
-        $categoryRepository = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class);
-        $category = $categoryRepository->findOneBy([]);
-        if ($category) {
-            $product->setCategory($category);
-        }
-        $entityManager->persist($product);
-
-        // Отримуємо користувача
-        $userRepository = $entityManager->getRepository(User::class);
-        $user = $userRepository->findOneBy(['email' => 'user@example.com']);
-
-        // Створюємо кошик
-        $cart = new Cart();
-        $cart->setUser($user);
-        $entityManager->persist($cart);
-
-        // Додаємо товар до кошика
-        $cartItem = new CartItem();
-        $cartItem->setCart($cart);
-        $cartItem->setProduct($product);
-        $cartItem->setQuantity(1);
-        $cart->addItem($cartItem); // Explicitly add to collection
-        $entityManager->persist($cartItem);
-
-        $entityManager->flush();
+        $product = $this->persistProduct($entityManager, 'Checkout Test Product', 1000, 10);
+        $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
+        $this->persistCartWithItem($entityManager, $user, $product, 1);
 
         $client->request('GET', '/checkout');
 
@@ -91,31 +62,9 @@ class CheckoutControllerTest extends WebTestCase
         $container = static::getContainer();
         $entityManager = $container->get('doctrine.orm.entity_manager');
 
-        $product = new Product();
-        $product->setName('Stripe Test Product');
-        $product->setDescription('Test');
-        $product->setPrice(2000);
-        $product->setStock(5);
-        $category = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class)->findOneBy([]);
-        if ($category) {
-            $product->setCategory($category);
-        }
-        $entityManager->persist($product);
-
+        $product = $this->persistProduct($entityManager, 'Stripe Test Product', 2000, 5);
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
-
-        $cart = new Cart();
-        $cart->setUser($user);
-        $entityManager->persist($cart);
-
-        $cartItem = new CartItem();
-        $cartItem->setCart($cart);
-        $cartItem->setProduct($product);
-        $cartItem->setQuantity(1);
-        $cart->addItem($cartItem);
-        $entityManager->persist($cartItem);
-
-        $entityManager->flush();
+        $this->persistCartWithItem($entityManager, $user, $product, 1);
 
         $stripeUrl = 'https://checkout.stripe.com/c/pay/cs_test_123';
 
@@ -134,31 +83,9 @@ class CheckoutControllerTest extends WebTestCase
         $container = static::getContainer();
         $entityManager = $container->get('doctrine.orm.entity_manager');
 
-        $product = new Product();
-        $product->setName('Stripe Fail Product');
-        $product->setDescription('Test');
-        $product->setPrice(1500);
-        $product->setStock(5);
-        $category = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class)->findOneBy([]);
-        if ($category) {
-            $product->setCategory($category);
-        }
-        $entityManager->persist($product);
-
+        $product = $this->persistProduct($entityManager, 'Stripe Fail Product', 1500, 5);
         $user = $entityManager->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
-
-        $cart = new Cart();
-        $cart->setUser($user);
-        $entityManager->persist($cart);
-
-        $cartItem = new CartItem();
-        $cartItem->setCart($cart);
-        $cartItem->setProduct($product);
-        $cartItem->setQuantity(1);
-        $cart->addItem($cartItem);
-        $entityManager->persist($cartItem);
-
-        $entityManager->flush();
+        $this->persistCartWithItem($entityManager, $user, $product, 1);
 
         $mock = $this->createMock(StripeCheckoutService::class);
         $mock->method('createSession')->willThrowException(new \RuntimeException('Stripe API error'));
@@ -167,5 +94,42 @@ class CheckoutControllerTest extends WebTestCase
         $client->request('POST', '/checkout/place-order');
 
         $this->assertResponseRedirects('/checkout');
+    }
+
+    private function persistProduct(object $entityManager, string $name, int $price, int $stock): Product
+    {
+        $product = new Product();
+        $product->setName($name);
+        $product->setDescription('Test Description');
+        $product->setPrice($price);
+        $product->setStock($stock);
+
+        $category = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class)->findOneBy([]);
+        if ($category) {
+            $product->setCategory($category);
+        }
+
+        $entityManager->persist($product);
+        $entityManager->flush(); // flush so the product gets an id for the cart-item snapshot
+
+        return $product;
+    }
+
+    private function persistCartWithItem(object $entityManager, User $user, Product $product, int $quantity): void
+    {
+        $cart = new Cart();
+        $cart->setUser($user);
+        $entityManager->persist($cart);
+
+        $cartItem = new CartItem();
+        $cartItem->setCart($cart);
+        $cartItem->setProductId($product->getId());
+        $cartItem->setProductName($product->getName());
+        $cartItem->setPrice($product->getPrice());
+        $cartItem->setQuantity($quantity);
+        $cart->addItem($cartItem);
+        $entityManager->persist($cartItem);
+
+        $entityManager->flush();
     }
 }

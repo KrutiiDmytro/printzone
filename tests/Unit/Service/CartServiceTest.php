@@ -111,6 +111,11 @@ class CartServiceTest extends TestCase
         $product->setPrice(10000);
         $product->setCategory($category);
 
+        $reflection = new \ReflectionClass($product);
+        $idProperty = $reflection->getProperty('id');
+        $idProperty->setAccessible(true);
+        $idProperty->setValue($product, 1);
+
         $this->security->method('getUser')->willReturn($user);
         $this->cartRepository->method('findOneByUser')->willReturn(null);
         $this->productRepository->method('find')->with(1)->willReturn($product);
@@ -142,7 +147,9 @@ class CartServiceTest extends TestCase
         $cart->setUser($user);
 
         $existingItem = new CartItem();
-        $existingItem->setProduct($product);
+        $existingItem->setProductId(1);
+        $existingItem->setProductName('Product');
+        $existingItem->setPrice(10000);
         $existingItem->setQuantity(2);
         $cart->addItem($existingItem);
 

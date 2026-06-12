@@ -155,7 +155,7 @@ class CartService
     {
         $existingItem = null;
         foreach ($cart->getItems() as $item) {
-            if ($item->getProduct()->getId() === $product->getId()) {
+            if ($item->getProductId() === $product->getId()) {
                 $existingItem = $item;
                 break;
             }
@@ -165,7 +165,9 @@ class CartService
             $existingItem->setQuantity($existingItem->getQuantity() + $quantity);
         } else {
             $cartItem = new CartItem();
-            $cartItem->setProduct($product);
+            $cartItem->setProductId($product->getId());
+            $cartItem->setProductName($product->getName());
+            $cartItem->setPrice($product->getPrice());
             $cartItem->setQuantity($quantity);
             $cart->addItem($cartItem);
         }
@@ -180,7 +182,7 @@ class CartService
         }
 
         foreach ($cart->getItems() as $item) {
-            if ($item->getProduct()->getId() === $productId) {
+            if ($item->getProductId() === $productId) {
                 $cart->removeItem($item);
                 break;
             }
@@ -199,7 +201,7 @@ class CartService
         }
 
         foreach ($cart->getItems() as $item) {
-            if ($item->getProduct()->getId() === $productId) {
+            if ($item->getProductId() === $productId) {
                 if ($quantity <= 0) {
                     $cart->removeItem($item);
                 } else {
@@ -236,12 +238,28 @@ class CartService
             ];
         }
 
+        $productIds = [];
+        foreach ($cart->getItems() as $item) {
+            $productIds[] = $item->getProductId();
+        }
+
+        $productMap = [];
+        foreach ($this->productRepository->findBy(['id' => $productIds]) as $product) {
+            $productMap[$product->getId()] = $product;
+        }
+
         $cartItems = [];
         $total = 0;
 
         foreach ($cart->getItems() as $item) {
+            $product = $productMap[$item->getProductId()] ?? null;
+            if (null === $product) {
+                // Product no longer exists in Catalog — skip the orphaned line.
+                continue;
+            }
+
             $cartItems[] = [
-                'product' => $item->getProduct(),
+                'product' => $product,
                 'quantity' => $item->getQuantity(),
                 'total' => $item->getTotal(),
             ];

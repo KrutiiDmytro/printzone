@@ -4,8 +4,6 @@ namespace App\Tests\Unit\Cart\Domain\Entity;
 
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
-use App\Catalog\Domain\Entity\Category;
-use App\Catalog\Domain\Entity\Product;
 use App\User\Domain\Entity\User;
 use PHPUnit\Framework\TestCase;
 
@@ -21,6 +19,17 @@ class CartTest extends TestCase
         $this->cart->setUser($this->user);
     }
 
+    private function makeItem(int $productId, string $name, int $price, int $quantity): CartItem
+    {
+        $item = new CartItem();
+        $item->setProductId($productId);
+        $item->setProductName($name);
+        $item->setPrice($price);
+        $item->setQuantity($quantity);
+
+        return $item;
+    }
+
     public function testGetTotalReturnsZeroWhenEmpty(): void
     {
         $this->assertEquals(0, $this->cart->getTotal());
@@ -28,30 +37,8 @@ class CartTest extends TestCase
 
     public function testGetTotalCalculatesCorrectly(): void
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product1 = new Product();
-        $product1->setName('Product 1');
-        $product1->setPrice(10000); // 100.00 EUR
-        $product1->setCategory($category);
-
-        $product2 = new Product();
-        $product2->setName('Product 2');
-        $product2->setPrice(5000); // 50.00 EUR
-        $product2->setCategory($category);
-
-        $item1 = new CartItem();
-        $item1->setProduct($product1);
-        $item1->setQuantity(2);
-
-        $item2 = new CartItem();
-        $item2->setProduct($product2);
-        $item2->setQuantity(3);
-
-        $this->cart->addItem($item1);
-        $this->cart->addItem($item2);
+        $this->cart->addItem($this->makeItem(1, 'Product 1', 10000, 2));
+        $this->cart->addItem($this->makeItem(2, 'Product 2', 5000, 3));
 
         // 2 * 10000 + 3 * 5000 = 20000 + 15000 = 35000
         $this->assertEquals(35000, $this->cart->getTotal());
@@ -59,18 +46,7 @@ class CartTest extends TestCase
 
     public function testAddItemAddsItemToCart(): void
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product = new Product();
-        $product->setName('Product');
-        $product->setPrice(10000);
-        $product->setCategory($category);
-
-        $item = new CartItem();
-        $item->setProduct($product);
-        $item->setQuantity(1);
+        $item = $this->makeItem(1, 'Product', 10000, 1);
 
         $this->cart->addItem($item);
 
@@ -81,18 +57,7 @@ class CartTest extends TestCase
 
     public function testAddItemDoesNotAddDuplicate(): void
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product = new Product();
-        $product->setName('Product');
-        $product->setPrice(10000);
-        $product->setCategory($category);
-
-        $item = new CartItem();
-        $item->setProduct($product);
-        $item->setQuantity(1);
+        $item = $this->makeItem(1, 'Product', 10000, 1);
 
         $this->cart->addItem($item);
         $this->cart->addItem($item);
@@ -102,18 +67,7 @@ class CartTest extends TestCase
 
     public function testRemoveItemRemovesItemFromCart(): void
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product = new Product();
-        $product->setName('Product');
-        $product->setPrice(10000);
-        $product->setCategory($category);
-
-        $item = new CartItem();
-        $item->setProduct($product);
-        $item->setQuantity(1);
+        $item = $this->makeItem(1, 'Product', 10000, 1);
 
         $this->cart->addItem($item);
         $this->cart->removeItem($item);
@@ -124,30 +78,8 @@ class CartTest extends TestCase
 
     public function testClearRemovesAllItems(): void
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product1 = new Product();
-        $product1->setName('Product 1');
-        $product1->setPrice(10000);
-        $product1->setCategory($category);
-
-        $product2 = new Product();
-        $product2->setName('Product 2');
-        $product2->setPrice(5000);
-        $product2->setCategory($category);
-
-        $item1 = new CartItem();
-        $item1->setProduct($product1);
-        $item1->setQuantity(1);
-
-        $item2 = new CartItem();
-        $item2->setProduct($product2);
-        $item2->setQuantity(1);
-
-        $this->cart->addItem($item1);
-        $this->cart->addItem($item2);
+        $this->cart->addItem($this->makeItem(1, 'Product 1', 10000, 1));
+        $this->cart->addItem($this->makeItem(2, 'Product 2', 5000, 1));
 
         $this->cart->clear();
 

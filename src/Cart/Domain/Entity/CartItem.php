@@ -2,7 +2,6 @@
 
 namespace App\Cart\Domain\Entity;
 
-use App\Catalog\Domain\Entity\Product;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
@@ -20,9 +19,15 @@ class CartItem
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private ?Cart $cart = null;
 
-    #[ORM\ManyToOne(targetEntity: Product::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private Product $product;
+    // Cross-service reference to Catalog (no FK). Name + price are snapshots taken when added.
+    #[ORM\Column(type: 'integer')]
+    private int $productId;
+
+    #[ORM\Column(type: 'string', length: 255)]
+    private string $productName;
+
+    #[ORM\Column(type: 'integer')]
+    private int $price;
 
     #[ORM\Column(type: 'integer')]
     private int $quantity;
@@ -44,14 +49,38 @@ class CartItem
         return $this;
     }
 
-    public function getProduct(): Product
+    public function getProductId(): int
     {
-        return $this->product;
+        return $this->productId;
     }
 
-    public function setProduct(Product $product): self
+    public function setProductId(int $productId): self
     {
-        $this->product = $product;
+        $this->productId = $productId;
+
+        return $this;
+    }
+
+    public function getProductName(): string
+    {
+        return $this->productName;
+    }
+
+    public function setProductName(string $productName): self
+    {
+        $this->productName = $productName;
+
+        return $this;
+    }
+
+    public function getPrice(): int
+    {
+        return $this->price;
+    }
+
+    public function setPrice(int $price): self
+    {
+        $this->price = $price;
 
         return $this;
     }
@@ -70,6 +99,6 @@ class CartItem
 
     public function getTotal(): int
     {
-        return $this->product->getPrice() * $this->quantity;
+        return $this->price * $this->quantity;
     }
 }
