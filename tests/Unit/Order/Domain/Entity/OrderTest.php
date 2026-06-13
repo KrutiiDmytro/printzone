@@ -48,4 +48,38 @@ class OrderTest extends TestCase
         $this->assertCount(0, $this->order->getItems());
         $this->assertNull($item->getOrderRef());
     }
+
+    public function testOrderInitialization(): void
+    {
+        $order = new Order();
+
+        $this->assertInstanceOf(\DateTimeInterface::class, $order->getCreatedAt());
+        $this->assertEquals('PENDING', $order->getStatus());
+        $this->assertEquals(0, $order->getTotalAmount());
+        $this->assertCount(0, $order->getItems());
+    }
+
+    public function testSetAndGetUserId(): void
+    {
+        $order = new Order();
+
+        $order->setUserId(7);
+        $this->assertSame(7, $order->getUserId());
+    }
+
+    public function testSetTotalAmount(): void
+    {
+        $order = new Order();
+        $order->setTotalAmount(5000); // 50.00
+
+        $this->assertEquals(5000, $order->getTotalAmount());
+    }
+
+    public function testStatusChange(): void
+    {
+        $order = new Order();
+        $order->setStatus('SHIPPED');
+
+        $this->assertEquals('SHIPPED', $order->getStatus());
+    }
 }
