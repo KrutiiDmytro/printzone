@@ -21,10 +21,15 @@
 - [x] `app:outbox:relay` command (--time-limit loop) + сервіс `relay` у compose/prod; routing `IntegrationEvent→events`
 - [x] `OutboxRelayTest`; `phpunit` (146) + `phpstan` [OK]; E2E: relay → exchange `events` у RabbitMQ, рядок published
 
-## Під-задача 4 — Emit OrderPaid + consumer
-- [ ] `StripeWebhookController`: на PAID `outboxRecorder->record('order','OrderPaid',...)` (атомарно)
-- [ ] `IntegrationEventHandler` → email через Mailpit; worker consume `events`
-- [ ] Тести; E2E
+## Під-задача 4 — Emit OrderPaid + consumer ✅
+- [x] `StripeWebhookController`: на PAID `outboxRecorder->record('order','OrderPaid',...)` перед flush (атомарно)
+- [x] `IntegrationEventHandler` (#[AsMessageHandler]) → email `order_paid.html.twig`; worker consume `async events`; queue `events_all` binding `#`
+- [x] `IntegrationEventHandlerTest`; `phpunit` (149) + `phpstan` [OK] + `cs-fixer` 0
+- [x] **E2E підтверджено**: outbox→relay→RabbitMQ→consumer→лист у Mailpit (To: e2e@printzone.test)
+
+## Підсумок Фази 2
+Event backbone готовий: RabbitMQ + Transactional Outbox + relay + consumer. Атомарна публікація
+(закрито dual-write вікно). Адитивно, поведінка синхронних потоків незмінна. Тести на `in-memory`.
 
 ---
 

@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Messaging\Application\OutboxRecorder;
 use App\Repository\OrderRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -21,6 +22,7 @@ class StripeWebhookController extends AbstractController
         private OrderRepository $orderRepository,
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
+        private OutboxRecorder $outboxRecorder,
     ) {
     }
 
@@ -71,6 +73,17 @@ class StripeWebhookController extends AbstractController
         }
 
         $order->setStatus('PAID');
+
+        // Transactional outbox: the OrderPaid event commits atomically with the
+        // status change in the single flush below, then the relay ships it to RabbitMQ.
+        $this->outboxRecorder->record('order', 'OrderPaid', [
+            'orderId' => $order->getId(),
+            'userId' => $order->getUserId(),
+            'userEmail' => $order->getUserEmail(),
+            'totalAmount' => $order->getTotalAmount(),
+            'paidAt' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
+        ]);
+
         $this->entityManager->flush();
 
         $this->logger->info('Stripe webhook: order marked as PAID', ['order_id' => $orderId]);

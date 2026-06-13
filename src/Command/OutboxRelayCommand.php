@@ -35,7 +35,7 @@ final class OutboxRelayCommand extends Command
         $sleep = max(1, (int) $input->getOption('sleep'));
         $deadline = $timeLimit > 0 ? time() + $timeLimit : null;
 
-        do {
+        while (true) {
             $relayed = $this->relay->relayBatch();
             if ($relayed > 0) {
                 $output->writeln(sprintf('[outbox] relayed %d event(s)', $relayed));
@@ -46,6 +46,6 @@ final class OutboxRelayCommand extends Command
             }
 
             sleep($sleep);
-        } while (true);
+        }
     }
 }

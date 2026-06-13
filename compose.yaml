@@ -81,10 +81,13 @@ services:
     volumes:
       - .:/var/www/html
     working_dir: /var/www/html
-    command: php bin/console messenger:consume async --time-limit=3600
+    command: php bin/console messenger:consume async events --time-limit=3600
     restart: unless-stopped
     depends_on:
-      - database
+      database:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
 
   relay:
     image: task-25/php:latest

@@ -20,6 +20,11 @@ framework:
                     exchange:
                         name: events
                         type: topic
+                    # Single catch-all queue for the monolith consumer. Future services
+                    # bind their own queues with specific keys (e.g. order.*).
+                    queues:
+                        events_all:
+                            binding_keys: ['#']
                     auto_setup: true
                 retry_strategy:
                     max_retries: 3
