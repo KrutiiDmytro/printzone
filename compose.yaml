@@ -86,6 +86,22 @@ services:
     depends_on:
       - database
 
+  relay:
+    image: task-25/php:latest
+    env_file:
+      - path: .env.local
+        required: false
+    volumes:
+      - .:/var/www/html
+    working_dir: /var/www/html
+    command: php bin/console app:outbox:relay --time-limit=3600
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
   nginx:
     image: nginx:alpine
     ports:

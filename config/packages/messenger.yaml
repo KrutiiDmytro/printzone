@@ -38,3 +38,6 @@ framework:
             Symfony\Component\Notifier\Message\SmsMessage: async
 
             App\Export\Message\ProcessExportMessage: async
+
+            # Outbound domain events published by the outbox relay → RabbitMQ.
+            App\Messaging\Domain\IntegrationEvent: events

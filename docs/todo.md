@@ -16,10 +16,10 @@
 - [x] `OutboxRecorder` (persist без flush) + `OutboxMessageRepository::findUnpublished` (`@extends`)
 - [x] Тести (`OutboxMessageTest`,`OutboxRecorderTest`); `phpunit` (144) + `phpstan` [OK] (baseline 109→110); mapping [OK]
 
-## Під-задача 3 — Relay (outbox → RabbitMQ)
-- [ ] `IntegrationEvent` DTO + `OutboxRelay` (FOR UPDATE SKIP LOCKED → bus→events, mark published)
-- [ ] `app:outbox:relay` command + сервіс `relay` у compose; routing `IntegrationEvent→events`
-- [ ] Тести
+## Під-задача 3 — Relay (outbox → RabbitMQ) ✅
+- [x] `IntegrationEvent` DTO + `OutboxRelay` (publish→mark published, at-least-once; AmqpStamp routing key)
+- [x] `app:outbox:relay` command (--time-limit loop) + сервіс `relay` у compose/prod; routing `IntegrationEvent→events`
+- [x] `OutboxRelayTest`; `phpunit` (146) + `phpstan` [OK]; E2E: relay → exchange `events` у RabbitMQ, рядок published
 
 ## Під-задача 4 — Emit OrderPaid + consumer
 - [ ] `StripeWebhookController`: на PAID `outboxRecorder->record('order','OrderPaid',...)` (атомарно)
