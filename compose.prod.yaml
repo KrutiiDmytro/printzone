@@ -9,6 +9,10 @@ services:
   mailer:
     ports: []
 
+  # Do not expose the broker / management UI publicly in production.
+  rabbitmq:
+    ports: []
+
   php:
     environment:
       APP_ENV: prod
@@ -16,6 +20,7 @@ services:
       APP_SECRET: ${APP_SECRET}
       DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
       DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
@@ -34,6 +39,7 @@ services:
       APP_SECRET: ${APP_SECRET}
       DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
       DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}

@@ -12,6 +12,18 @@ framework:
                 retry_strategy:
                     max_retries: 3
                     multiplier: 2
+            # Outbound domain (integration) events → RabbitMQ topic exchange. Published by the
+            # outbox relay; the routing key is set per-message (e.g. order.OrderPaid).
+            events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
             failed: 'doctrine://default?queue_name=failed'
             # sync: 'sync://'
 

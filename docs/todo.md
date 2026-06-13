@@ -1,3 +1,33 @@
+# Фаза 2 — RabbitMQ + Transactional Outbox (event backbone)
+
+> Адитивна інфраструктура: брокер RabbitMQ + outbox (атомарна публікація доменних подій).
+> Демо: OrderPaid round-trip (webhook→outbox→relay→RabbitMQ→email). Гілка `feat/phase2-rabbitmq-outbox`.
+> UUID НЕ чіпаємо (відкладено). Тести — `in-memory` транспорт (без брокера).
+
+## Під-задача 1 — Інфраструктура RabbitMQ ✅
+- [x] `Dockerfile.php`: `ext-amqp`; `symfony/amqp-messenger` (v7.4.11)
+- [x] `compose.yaml`: сервіс `rabbitmq` (3.13-management) + volume; `compose.prod.yaml`: env + ports:[]
+- [x] `.env`: `MESSENGER_EVENTS_DSN`; `messenger.yaml`: транспорт `events` (amqp topic)
+- [x] `config/packages/test/messenger.yaml`: `async`+`events`→`in-memory`
+- [x] Верифікація: rabbitmq healthy; `phpunit` (141) зелений
+
+## Під-задача 2 — Outbox: таблиця + entity + recorder
+- [ ] `OutboxMessage` entity + `Messaging` мапінг + міграція `outbox`
+- [ ] `OutboxRecorder` (persist без flush) + `OutboxMessageRepository::findUnpublished`
+- [ ] Тести; `schema:validate`
+
+## Під-задача 3 — Relay (outbox → RabbitMQ)
+- [ ] `IntegrationEvent` DTO + `OutboxRelay` (FOR UPDATE SKIP LOCKED → bus→events, mark published)
+- [ ] `app:outbox:relay` command + сервіс `relay` у compose; routing `IntegrationEvent→events`
+- [ ] Тести
+
+## Під-задача 4 — Emit OrderPaid + consumer
+- [ ] `StripeWebhookController`: на PAID `outboxRecorder->record('order','OrderPaid',...)` (атомарно)
+- [ ] `IntegrationEventHandler` → email через Mailpit; worker consume `events`
+- [ ] Тести; E2E
+
+---
+
 # Фаза 1 декомпозиції — розв'язати міждоменну зв'язність (моноліт)
 
 > Замінити міждоменні Doctrine FK на скалярні int-посилання + знімки + подію. Один застосунок,
