@@ -41,6 +41,9 @@ services:
       DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
       MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+      # The worker delivers queued emails (SendEmailMessage on the async transport),
+      # so it needs the real mailer DSN — otherwise it falls back to null:// and drops them.
+      MAILER_DSN: ${MAILER_DSN}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
