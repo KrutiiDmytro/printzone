@@ -277,6 +277,12 @@ parameters:
 			path: src/Export/Service/ExportService.php
 
 		-
+			message: '#^Property App\\Messaging\\Domain\\Entity\\OutboxMessage\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: src/Messaging/Domain/Entity/OutboxMessage.php
+
+		-
 			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$id \(int\|null\) is never assigned int so it can be removed from the property type\.$#'
 			identifier: property.unusedType
 			count: 1

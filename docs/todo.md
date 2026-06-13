@@ -11,10 +11,10 @@
 - [x] `config/packages/test/messenger.yaml`: `async`+`events`→`in-memory`
 - [x] Верифікація: rabbitmq healthy; `phpunit` (141) зелений
 
-## Під-задача 2 — Outbox: таблиця + entity + recorder
-- [ ] `OutboxMessage` entity + `Messaging` мапінг + міграція `outbox`
-- [ ] `OutboxRecorder` (persist без flush) + `OutboxMessageRepository::findUnpublished`
-- [ ] Тести; `schema:validate`
+## Під-задача 2 — Outbox: таблиця + entity + recorder ✅
+- [x] `OutboxMessage` entity + `Messaging` мапінг + міграція `outbox` (INT identity, index unpublished)
+- [x] `OutboxRecorder` (persist без flush) + `OutboxMessageRepository::findUnpublished` (`@extends`)
+- [x] Тести (`OutboxMessageTest`,`OutboxRecorderTest`); `phpunit` (144) + `phpstan` [OK] (baseline 109→110); mapping [OK]
 
 ## Під-задача 3 — Relay (outbox → RabbitMQ)
 - [ ] `IntegrationEvent` DTO + `OutboxRelay` (FOR UPDATE SKIP LOCKED → bus→events, mark published)

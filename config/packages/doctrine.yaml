@@ -47,6 +47,12 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Export/Domain/Entity'
                 prefix: 'App\Export\Domain\Entity'
                 alias: Export
+            Messaging:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Messaging/Domain/Entity'
+                prefix: 'App\Messaging\Domain\Entity'
+                alias: Messaging
         controller_resolver:
             auto_mapping: false
 
