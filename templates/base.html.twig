@@ -175,6 +175,27 @@
             .header-btn .btn-label { display: inline; }
         }
 
+        /* Logged-in user info */
+        .header-user {
+            display: none;
+            flex-direction: column;
+            line-height: 1.2;
+            text-align: right;
+            margin-right: 4px;
+        }
+        @media (min-width: 992px) {
+            .header-user { display: flex; }
+        }
+        .header-user .user-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #212529;
+        }
+        .header-user .user-email {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+
         /* Cart badge */
         .cart-badge {
             background: #ef4444;
@@ -550,6 +571,12 @@
             <!-- Actions -->
             <div class="header-actions">
                 {% if app.user %}
+                    <span class="header-user">
+                        {% if app.user.fullName %}
+                            <span class="user-name">{{ app.user.fullName }}</span>
+                        {% endif %}
+                        <span class="user-email">{{ app.user.email }}</span>
+                    </span>
                     <a href="{{ path('app_logout') }}" class="header-btn">
                         <i class="fas fa-sign-out-alt btn-icon"></i>
                         <span class="btn-label">Logout</span>
