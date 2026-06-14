@@ -25,6 +25,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       MAILER_DSN: ${MAILER_DSN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
@@ -44,6 +45,9 @@ services:
       # The worker delivers queued emails (SendEmailMessage on the async transport),
       # so it needs the real mailer DSN — otherwise it falls back to null:// and drops them.
       MAILER_DSN: ${MAILER_DSN}
+      # From-address for the receipt email; must be a verified identity in SES (sandbox
+      # rejects unverified senders), otherwise the send fails and the email is dropped.
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
