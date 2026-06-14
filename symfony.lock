@@ -136,6 +136,15 @@
             "ref": "d6829c693e3927a8972c7671d74a1a5c505712b0"
         }
     },
+    "symfony/amazon-mailer": {
+        "version": "7.4",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "4.4",
+            "ref": "9648db3ecae5c8a6b1a5f74715d3907124348815"
+        }
+    },
     "symfony/asset-mapper": {
         "version": "7.4",
         "recipe": {
