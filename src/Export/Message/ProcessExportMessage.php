@@ -6,7 +6,7 @@ namespace App\Export\Message;
 
 final readonly class ProcessExportMessage
 {
-    public function __construct(public int $exportJobId)
+    public function __construct(public string $exportJobId)
     {
     }
 }

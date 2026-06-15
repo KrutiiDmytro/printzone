@@ -32,7 +32,7 @@ final class UserExtractor implements ExportExtractorInterface
 
         return array_map(function (array $row): array {
             return [
-                'id' => $row['id'],
+                'id' => (string) $row['id'],
                 'email' => $row['email'],
                 'full_name' => $row['fullName'] ?? '',
                 'roles' => implode(', ', $row['roles']),

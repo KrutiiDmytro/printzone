@@ -5,6 +5,7 @@ namespace App\Repository;
 use App\Cart\Domain\Entity\Cart;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Symfony\Component\Uid\Uuid;
 
 class CartRepository extends ServiceEntityRepository
 {
@@ -13,13 +14,13 @@ class CartRepository extends ServiceEntityRepository
         parent::__construct($registry, Cart::class);
     }
 
-    public function findOneByUserId(int $userId): ?Cart
+    public function findOneByUserId(Uuid $userId): ?Cart
     {
         return $this->createQueryBuilder('c')
             ->addSelect('i')
             ->leftJoin('c.items', 'i')
             ->where('c.userId = :userId')
-            ->setParameter('userId', $userId)
+            ->setParameter('userId', $userId, 'uuid')
             ->getQuery()
             ->getOneOrNullResult();
     }

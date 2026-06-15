@@ -66,7 +66,7 @@ final class UserExtractorTest extends TestCase
         $result = (new UserExtractor($this->makeEm([$row])))->extract([]);
 
         $this->assertCount(1, $result);
-        $this->assertSame(1, $result[0]['id']);
+        $this->assertSame('1', $result[0]['id']);
         $this->assertSame('admin@example.com', $result[0]['email']);
         $this->assertSame('Admin User', $result[0]['full_name']);
         $this->assertSame('ROLE_USER, ROLE_ADMIN', $result[0]['roles']);

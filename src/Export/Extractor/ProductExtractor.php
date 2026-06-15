@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Export\Extractor;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Uid\Uuid;
 
 final class ProductExtractor implements ExportExtractorInterface
 {
@@ -20,8 +21,8 @@ final class ProductExtractor implements ExportExtractorInterface
             ->leftJoin('p.category', 'c')
             ->orderBy('p.id', 'ASC');
 
-        if (!empty($filters['category'])) {
-            $qb->andWhere('c.id = :category')->setParameter('category', (int) $filters['category']);
+        if (!empty($filters['category']) && Uuid::isValid((string) $filters['category'])) {
+            $qb->andWhere('c.id = :category')->setParameter('category', Uuid::fromString((string) $filters['category']), 'uuid');
         }
         if (isset($filters['isFeatured']) && '' !== $filters['isFeatured']) {
             $qb->andWhere('p.isFeatured = :featured')->setParameter('featured', (bool) $filters['isFeatured']);
@@ -43,7 +44,7 @@ final class ProductExtractor implements ExportExtractorInterface
 
         return array_map(function (array $row): array {
             return [
-                'id' => $row['id'],
+                'id' => (string) $row['id'],
                 'name' => $row['name'],
                 'description' => $row['description'] ?? '',
                 'price' => number_format($row['price'] / 100, 2),

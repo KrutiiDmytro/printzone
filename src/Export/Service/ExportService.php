@@ -25,7 +25,7 @@ final class ExportService
         $this->em->persist($job);
         $this->em->flush();
 
-        $this->bus->dispatch(new ProcessExportMessage((int) $job->getId()));
+        $this->bus->dispatch(new ProcessExportMessage((string) $job->getId()));
 
         return $job;
     }

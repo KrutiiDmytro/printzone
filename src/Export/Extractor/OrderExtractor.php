@@ -35,7 +35,7 @@ final class OrderExtractor implements ExportExtractorInterface
 
         return array_map(function (array $row): array {
             return [
-                'id' => $row['id'],
+                'id' => (string) $row['id'],
                 'user_email' => $row['user_email'] ?? '',
                 'status' => $row['status'],
                 'total_amount' => number_format($row['totalAmount'] / 100, 2),

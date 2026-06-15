@@ -9,6 +9,7 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: OrderRepository::class)]
 #[ORM\Table(name: 'orders')]
@@ -22,15 +23,14 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class Order
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
+    #[ORM\Column(type: 'uuid', unique: true)]
     #[Groups(['order:read', 'user:read'])]
-    private ?int $id = null;
+    private Uuid $id;
 
     // Cross-service reference to the User domain (no FK). userEmail is a snapshot.
-    #[ORM\Column]
+    #[ORM\Column(type: 'uuid')]
     #[Groups(['order:read', 'order:write'])]
-    private ?int $userId = null;
+    private ?Uuid $userId = null;
 
     #[ORM\Column(length: 180)]
     #[Groups(['order:read'])]
@@ -57,21 +57,22 @@ class Order
 
     public function __construct()
     {
+        $this->id = Uuid::v4();
         $this->items = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
     }
 
-    public function getId(): ?int
+    public function getId(): ?Uuid
     {
         return $this->id;
     }
 
-    public function getUserId(): ?int
+    public function getUserId(): ?Uuid
     {
         return $this->userId;
     }
 
-    public function setUserId(int $userId): static
+    public function setUserId(Uuid $userId): static
     {
         $this->userId = $userId;
 
@@ -170,6 +171,6 @@ class Order
 
     public function __toString(): string
     {
-        return sprintf('Заказ #%d от %s', $this->id ?? 0, $this->createdAt?->format('d.m.Y') ?? '');
+        return sprintf('Заказ #%s от %s', $this->id, $this->createdAt?->format('d.m.Y') ?? '');
     }
 }

@@ -31,7 +31,7 @@ class LoginListener
 
         // Оповещаем другие модули о входе (Cart переносит гостевую корзину в БД).
         if ($user instanceof User) {
-            $this->eventDispatcher->dispatch(new UserLoggedIn((int) $user->getId(), $user->getUserIdentifier()));
+            $this->eventDispatcher->dispatch(new UserLoggedIn((string) $user->getId(), $user->getUserIdentifier()));
         }
 
         // Проверяем роли и перенаправляем соответственно

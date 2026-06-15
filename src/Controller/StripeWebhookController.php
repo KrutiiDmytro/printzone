@@ -13,6 +13,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Uid\Uuid;
 
 class StripeWebhookController extends AbstractController
 {
@@ -54,8 +55,14 @@ class StripeWebhookController extends AbstractController
 
     private function handleSessionCompleted(object $session): void
     {
-        $orderId = (int) ($session->metadata->order_id ?? 0);
-        $order = $this->orderRepository->find($orderId);
+        $orderId = (string) ($session->metadata->order_id ?? '');
+        if (!Uuid::isValid($orderId)) {
+            $this->logger->warning('Stripe webhook: invalid order id', ['order_id' => $orderId]);
+
+            return;
+        }
+
+        $order = $this->orderRepository->find(Uuid::fromString($orderId));
 
         if (null === $order) {
             $this->logger->warning('Stripe webhook: order not found', ['order_id' => $orderId]);
@@ -77,8 +84,8 @@ class StripeWebhookController extends AbstractController
         // Transactional outbox: the OrderPaid event commits atomically with the
         // status change in the single flush below, then the relay ships it to RabbitMQ.
         $this->outboxRecorder->record('order', 'OrderPaid', [
-            'orderId' => $order->getId(),
-            'userId' => $order->getUserId(),
+            'orderId' => (string) $order->getId(),
+            'userId' => (string) $order->getUserId(),
             'userEmail' => $order->getUserEmail(),
             'totalAmount' => $order->getTotalAmount(),
             'paidAt' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
@@ -91,8 +98,14 @@ class StripeWebhookController extends AbstractController
 
     private function handlePaymentFailed(object $paymentIntent): void
     {
-        $orderId = (int) ($paymentIntent->metadata->order_id ?? 0);
-        $order = $this->orderRepository->find($orderId);
+        $orderId = (string) ($paymentIntent->metadata->order_id ?? '');
+        if (!Uuid::isValid($orderId)) {
+            $this->logger->warning('Stripe webhook: invalid order id', ['order_id' => $orderId]);
+
+            return;
+        }
+
+        $order = $this->orderRepository->find(Uuid::fromString($orderId));
 
         if (null === $order) {
             $this->logger->warning('Stripe webhook: order not found', ['order_id' => $orderId]);

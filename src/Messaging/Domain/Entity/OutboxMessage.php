@@ -7,6 +7,7 @@ namespace App\Messaging\Domain\Entity;
 use App\Repository\OutboxMessageRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * Transactional outbox row. Written in the same DB transaction as a domain state
@@ -18,9 +19,8 @@ use Doctrine\ORM\Mapping as ORM;
 class OutboxMessage
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
-    private ?int $id = null;
+    #[ORM\Column(type: 'uuid', unique: true)]
+    private Uuid $id;
 
     #[ORM\Column(length: 100)]
     private string $aggregate;
@@ -48,6 +48,7 @@ class OutboxMessage
      */
     public function __construct(string $aggregate, string $eventName, array $payload, ?string $traceId = null)
     {
+        $this->id = Uuid::v4();
         $this->aggregate = $aggregate;
         $this->eventName = $eventName;
         $this->payload = $payload;
@@ -55,7 +56,7 @@ class OutboxMessage
         $this->createdAt = new \DateTimeImmutable();
     }
 
-    public function getId(): ?int
+    public function getId(): ?Uuid
     {
         return $this->id;
     }

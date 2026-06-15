@@ -14,6 +14,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\Uid\Uuid;
 
 #[IsGranted('ROLE_ADMIN')]
 final class ExportController extends AbstractController
@@ -64,7 +65,7 @@ final class ExportController extends AbstractController
         $job = $this->exportService->dispatch($type, $format, $user->getEmail(), $filters);
 
         $this->addFlash('success', sprintf(
-            'Завдання #%d на експорт %s (%s) поставлено в чергу.',
+            'Завдання #%s на експорт %s (%s) поставлено в чергу.',
             $job->getId(),
             $type->value,
             $format->value
@@ -74,9 +75,12 @@ final class ExportController extends AbstractController
     }
 
     #[Route('/admin/export/download/{id}', name: 'admin_export_download', methods: ['GET'])]
-    public function download(int $id): Response
+    public function download(string $id): Response
     {
-        $job = $this->exportJobRepository->find($id);
+        if (!Uuid::isValid($id)) {
+            throw $this->createNotFoundException('Файл не знайдено.');
+        }
+        $job = $this->exportJobRepository->find(Uuid::fromString($id));
         if (null === $job || null === $job->getFilePath()) {
             throw $this->createNotFoundException('Файл не знайдено.');
         }

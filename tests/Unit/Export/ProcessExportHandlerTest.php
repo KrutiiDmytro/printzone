@@ -16,6 +16,7 @@ use App\Storage\FileStorageInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Mailer\MailerInterface;
+use Symfony\Component\Uid\Uuid;
 
 final class ProcessExportHandlerTest extends TestCase
 {
@@ -52,7 +53,7 @@ final class ProcessExportHandlerTest extends TestCase
         $mailer = $this->createMock(MailerInterface::class);
 
         $handler = $this->makeHandler($repo, $em, $storage, $mailer);
-        $handler(new ProcessExportMessage(999));
+        $handler(new ProcessExportMessage((string) Uuid::v4()));
     }
 
     public function testSuccessfulExportCompletesJob(): void
@@ -77,7 +78,7 @@ final class ProcessExportHandlerTest extends TestCase
         $mailer->expects($this->once())->method('send');
 
         $handler = $this->makeHandler($repo, $em, $storage, $mailer, $productExtractor);
-        $handler(new ProcessExportMessage(1));
+        $handler(new ProcessExportMessage((string) Uuid::v4()));
 
         $this->assertSame(ExportStatus::Completed, $job->getStatus());
         $this->assertNotNull($job->getFilePath());
@@ -103,7 +104,7 @@ final class ProcessExportHandlerTest extends TestCase
         $mailer->expects($this->once())->method('send');
 
         $handler = $this->makeHandler($repo, $em, $storage, $mailer, null, $orderExtractor);
-        $handler(new ProcessExportMessage(2));
+        $handler(new ProcessExportMessage((string) Uuid::v4()));
 
         $this->assertSame(ExportStatus::Failed, $job->getStatus());
         $this->assertStringContainsString('DB error', (string) $job->getErrorMessage());
@@ -128,7 +129,7 @@ final class ProcessExportHandlerTest extends TestCase
         ]);
 
         $handler = $this->makeHandler($repo, $em, $storage, $mailer, null, null, $userExtractor);
-        $handler(new ProcessExportMessage(3));
+        $handler(new ProcessExportMessage((string) Uuid::v4()));
 
         $this->assertSame(ExportStatus::Completed, $job->getStatus());
     }

@@ -27,7 +27,7 @@ final class ExportServiceTest extends TestCase
         $bus->expects($this->once())
             ->method('dispatch')
             ->with($this->isInstanceOf(ProcessExportMessage::class))
-            ->willReturn(new Envelope(new ProcessExportMessage(0)));
+            ->willReturn(new Envelope(new ProcessExportMessage('00000000-0000-0000-0000-000000000000')));
 
         $service = new ExportService($em, $bus);
         $job = $service->dispatch(ExportType::Products, ExportFormat::Csv, 'admin@example.com');
@@ -42,7 +42,7 @@ final class ExportServiceTest extends TestCase
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $bus = $this->createMock(MessageBusInterface::class);
-        $bus->method('dispatch')->willReturn(new Envelope(new ProcessExportMessage(0)));
+        $bus->method('dispatch')->willReturn(new Envelope(new ProcessExportMessage('00000000-0000-0000-0000-000000000000')));
 
         $filters = ['status' => 'PENDING', 'dateFrom' => '2026-01-01'];
         $service = new ExportService($em, $bus);
@@ -55,7 +55,7 @@ final class ExportServiceTest extends TestCase
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $bus = $this->createMock(MessageBusInterface::class);
-        $bus->method('dispatch')->willReturn(new Envelope(new ProcessExportMessage(0)));
+        $bus->method('dispatch')->willReturn(new Envelope(new ProcessExportMessage('00000000-0000-0000-0000-000000000000')));
 
         $service = new ExportService($em, $bus);
         $job = $service->dispatch(ExportType::Users, ExportFormat::Xml, 'admin@example.com', []);

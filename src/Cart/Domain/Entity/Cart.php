@@ -5,6 +5,7 @@ namespace App\Cart\Domain\Entity;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'carts')]
@@ -12,13 +13,12 @@ use Doctrine\ORM\Mapping as ORM;
 class Cart
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column(type: 'integer')]
-    private ?int $id = null;
+    #[ORM\Column(type: 'uuid', unique: true)]
+    private Uuid $id;
 
     // Cross-service reference to the User domain (no FK). One cart per user.
-    #[ORM\Column(type: 'integer', unique: true)]
-    private int $userId;
+    #[ORM\Column(type: 'uuid', unique: true)]
+    private Uuid $userId;
 
     #[ORM\OneToMany(targetEntity: CartItem::class, mappedBy: 'cart', cascade: ['persist', 'remove'], orphanRemoval: true)]
     private Collection $items;
@@ -28,21 +28,22 @@ class Cart
 
     public function __construct()
     {
+        $this->id = Uuid::v4();
         $this->items = new ArrayCollection();
         $this->updatedAt = new \DateTimeImmutable();
     }
 
-    public function getId(): ?int
+    public function getId(): ?Uuid
     {
         return $this->id;
     }
 
-    public function getUserId(): int
+    public function getUserId(): Uuid
     {
         return $this->userId;
     }
 
-    public function setUserId(int $userId): self
+    public function setUserId(Uuid $userId): self
     {
         $this->userId = $userId;
 

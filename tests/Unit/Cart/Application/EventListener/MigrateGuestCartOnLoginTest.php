@@ -17,6 +17,6 @@ class MigrateGuestCartOnLoginTest extends TestCase
             ->method('migrateSessionToDatabase');
 
         $listener = new MigrateGuestCartOnLogin($cartService);
-        $listener(new UserLoggedIn(1, 'user@example.com'));
+        $listener(new UserLoggedIn('00000000-0000-0000-0000-000000000001', 'user@example.com'));
     }
 }

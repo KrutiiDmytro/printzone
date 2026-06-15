@@ -9,6 +9,7 @@ use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: ProductRepository::class)]
 #[ORM\Table(name: 'products')]
@@ -22,10 +23,9 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class Product
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
+    #[ORM\Column(type: 'uuid', unique: true)]
     #[Groups(['product:read', 'category:read'])]
-    private ?int $id = null;
+    private Uuid $id;
 
     #[ORM\Column(length: 255)]
     #[Groups(['product:read', 'product:write', 'category:read'])]
@@ -79,10 +79,11 @@ class Product
 
     public function __construct()
     {
+        $this->id = Uuid::v4();
         $this->attributes = new ArrayCollection();
     }
 
-    public function getId(): ?int
+    public function getId(): ?Uuid
     {
         return $this->id;
     }

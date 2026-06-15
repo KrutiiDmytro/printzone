@@ -5,6 +5,7 @@ namespace App\Tests\Unit\Order\Domain\Entity;
 use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Uid\Uuid;
 
 class OrderTest extends TestCase
 {
@@ -13,13 +14,13 @@ class OrderTest extends TestCase
     protected function setUp(): void
     {
         $this->order = new Order();
-        $this->order->setUserId(1);
+        $this->order->setUserId(Uuid::v4());
     }
 
     private function makeItem(): OrderItem
     {
         $item = new OrderItem();
-        $item->setProductId(1);
+        $item->setProductId(Uuid::v4());
         $item->setProductName('Product');
         $item->setQuantity(2);
         $item->setPrice(10000);
@@ -63,8 +64,9 @@ class OrderTest extends TestCase
     {
         $order = new Order();
 
-        $order->setUserId(7);
-        $this->assertSame(7, $order->getUserId());
+        $userId = Uuid::v4();
+        $order->setUserId($userId);
+        $this->assertSame($userId, $order->getUserId());
     }
 
     public function testSetTotalAmount(): void
