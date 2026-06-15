@@ -62,6 +62,15 @@
 4. **Прод втрата даних** — cutover дропає поточні тестові замовлення (свідомо прийнято).
 5. **EasyAdmin IdField** на uuid — не робити editable.
 
+## Review (виконано)
+- ✅ Усі 12 сутностей + крос-посилання на `Uuid` (генерація `Uuid::v4()` у конструкторах).
+- ✅ Споживачі: CartService (`->equals()`, рядкові ключі сесії), StripeWebhook (`Uuid::fromString`),
+  репозиторії (`'uuid'`-тип), Export (рядкові message-id), маршрути (без `\d+`), екстрактори/ключі картинок.
+- ✅ Тести оновлено; **phpunit 149 OK**, **phpstan [OK]** (baseline 111→98), cs-fixer 0.
+- ✅ Cutover-міграція `Version20260615211500`: повний ланцюг (30 міграцій) + fixtures + `schema:validate` в синхроні на реальному Postgres; `orders.id`/`user_id` = нативний `uuid`.
+- ⚠️ Деплой на прод **видалить прод-дані** і лишить таблиці порожніми (migrate не вантажить фікстури) — потрібен повторний `fixtures:load` на проді або сидінг.
+- Комміти: `feffbe8` (тулінг), `c26852c` (ядро+тести), `e8f4218` (міграція).
+
 ---
 
 # Фаза 2 — RabbitMQ + Transactional Outbox (event backbone)
