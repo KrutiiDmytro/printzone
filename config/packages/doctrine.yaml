@@ -2,6 +2,8 @@ doctrine:
     dbal:
         url: '%env(resolve:DATABASE_URL)%'
         driver: pdo_pgsql
+        types:
+            uuid: Symfony\Bridge\Doctrine\Types\UuidType
         replicas:
             replica1:
                 url: '%env(resolve:DATABASE_REPLICA_URL)%'
