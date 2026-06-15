@@ -26,8 +26,8 @@ class CartController extends AbstractController
         ]);
     }
 
-    #[Route('/add/{id}', name: 'app_cart_add', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function add(int $id, Request $request): Response
+    #[Route('/add/{id}', name: 'app_cart_add', methods: ['POST'])]
+    public function add(string $id, Request $request): Response
     {
         $quantity = $request->request->getInt('quantity', 1);
         $this->cartService->add($id, $quantity);
@@ -39,8 +39,8 @@ class CartController extends AbstractController
         return $this->redirect($referer ?: $this->generateUrl('app_home'));
     }
 
-    #[Route('/remove/{id}', name: 'app_cart_remove', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function remove(int $id): Response
+    #[Route('/remove/{id}', name: 'app_cart_remove', methods: ['POST'])]
+    public function remove(string $id): Response
     {
         $this->cartService->remove($id);
 
@@ -49,8 +49,8 @@ class CartController extends AbstractController
         return $this->redirectToRoute('app_cart');
     }
 
-    #[Route('/update/{id}', name: 'app_cart_update', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function update(int $id, Request $request): Response
+    #[Route('/update/{id}', name: 'app_cart_update', methods: ['POST'])]
+    public function update(string $id, Request $request): Response
     {
         $quantity = $request->request->getInt('quantity', 1);
         $this->cartService->update($id, $quantity);

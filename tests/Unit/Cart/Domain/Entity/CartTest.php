@@ -5,6 +5,7 @@ namespace App\Tests\Unit\Cart\Domain\Entity;
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Uid\Uuid;
 
 class CartTest extends TestCase
 {
@@ -13,10 +14,10 @@ class CartTest extends TestCase
     protected function setUp(): void
     {
         $this->cart = new Cart();
-        $this->cart->setUserId(1);
+        $this->cart->setUserId(Uuid::v4());
     }
 
-    private function makeItem(int $productId, string $name, int $price, int $quantity): CartItem
+    private function makeItem(Uuid $productId, string $name, int $price, int $quantity): CartItem
     {
         $item = new CartItem();
         $item->setProductId($productId);
@@ -34,8 +35,8 @@ class CartTest extends TestCase
 
     public function testGetTotalCalculatesCorrectly(): void
     {
-        $this->cart->addItem($this->makeItem(1, 'Product 1', 10000, 2));
-        $this->cart->addItem($this->makeItem(2, 'Product 2', 5000, 3));
+        $this->cart->addItem($this->makeItem(Uuid::v4(), 'Product 1', 10000, 2));
+        $this->cart->addItem($this->makeItem(Uuid::v4(), 'Product 2', 5000, 3));
 
         // 2 * 10000 + 3 * 5000 = 20000 + 15000 = 35000
         $this->assertEquals(35000, $this->cart->getTotal());
@@ -43,7 +44,7 @@ class CartTest extends TestCase
 
     public function testAddItemAddsItemToCart(): void
     {
-        $item = $this->makeItem(1, 'Product', 10000, 1);
+        $item = $this->makeItem(Uuid::v4(), 'Product', 10000, 1);
 
         $this->cart->addItem($item);
 
@@ -54,7 +55,7 @@ class CartTest extends TestCase
 
     public function testAddItemDoesNotAddDuplicate(): void
     {
-        $item = $this->makeItem(1, 'Product', 10000, 1);
+        $item = $this->makeItem(Uuid::v4(), 'Product', 10000, 1);
 
         $this->cart->addItem($item);
         $this->cart->addItem($item);
@@ -64,7 +65,7 @@ class CartTest extends TestCase
 
     public function testRemoveItemRemovesItemFromCart(): void
     {
-        $item = $this->makeItem(1, 'Product', 10000, 1);
+        $item = $this->makeItem(Uuid::v4(), 'Product', 10000, 1);
 
         $this->cart->addItem($item);
         $this->cart->removeItem($item);
@@ -75,8 +76,8 @@ class CartTest extends TestCase
 
     public function testClearRemovesAllItems(): void
     {
-        $this->cart->addItem($this->makeItem(1, 'Product 1', 10000, 1));
-        $this->cart->addItem($this->makeItem(2, 'Product 2', 5000, 1));
+        $this->cart->addItem($this->makeItem(Uuid::v4(), 'Product 1', 10000, 1));
+        $this->cart->addItem($this->makeItem(Uuid::v4(), 'Product 2', 5000, 1));
 
         $this->cart->clear();
 

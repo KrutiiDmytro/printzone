@@ -1,3 +1,78 @@
+# Фаза 2.1 — Міграція PK: serial int → UUID (варіант А: чистий cutover)
+
+> **Мета:** усі сутності переходять з int auto-increment на UUID PK, генерований у коді
+> (передумова для розподілених БД у мікросервісах). Дані — фікстури, тож **чистий cutover**:
+> змінюємо мапінг → пересоздаємо схему → перезаливаємо фікстури. Без поетапної міграції живих даних.
+> Гілка: `feat/phase2.1-uuid-pk`. Інструмент: `symfony/uid` (вже встановлено) + `UuidType` (Doctrine bridge).
+> **⚠️ Cutover дропає поточні дані прода (тестові замовлення) — прийнятно для навчального проєкту.**
+
+## Карта впливу
+- **12 сутностей** (всі int PK): `User`, `Cart`, `CartItem`, `Order`, `OrderItem`, `Product`, `Category`,
+  `Brand`, `PrinterModel`, `ProductAttribute`, `ExportJob`, `OutboxMessage`.
+- **Крос-доменні скалярні посилання** (стають `Uuid`): `Cart.userId`, `Order.userId`,
+  `CartItem.productId`, `OrderItem.productId`.
+- **Зовнішні дотики (критично):** Stripe `metadata.order_id` + `StripeWebhookController` (`(int)` cast),
+  EasyAdmin CRUD (`IdField`), API Platform identifiers, Twig URL `path(..., {id})`.
+
+## Під-задача 0 — Тулінг (1 коміт, green одразу)
+- [ ] `config/packages/doctrine.yaml` → `dbal.types: uuid: Symfony\Bridge\Doctrine\Types\UuidType`
+- [ ] Прибрати `identity_generation_preferences` (стане непотрібним для UUID; перевірити, що нічого не ламає)
+- [ ] Верифікація: `cache:clear` ок, `phpunit` зелений (поведінка не змінилась)
+
+## Під-задача 1 — Ядро: всі PK + посилання → Uuid
+> Це **один атомарний** семантичний крок (крос-модульні посилання не дають розбити на ≤3 файли);
+> розбиваю на логічні під-кроки, але **green-чекпоінт — наприкінці** під-задачі 2.
+- [ ] Кожна entity: `id` → `#[ORM\Id] #[ORM\Column(type: 'uuid', unique: true)] private Uuid $id;`
+      у конструкторі `$this->id = Uuid::v4();`, прибрати `#[ORM\GeneratedValue]`, `getId(): ?Uuid`
+- [ ] Скалярні посилання `userId`/`productId` → тип `Uuid` (колонка `uuid`), сеттери/геттери оновити
+- [ ] Інтра-Catalog асоціації (`Product.category/brand`, `PrinterModel.brand`, `ProductAttribute.product`)
+      підхоплять UUID PK автоматично (Doctrine association) — перевірити мапінг
+
+## Під-задача 2 — Споживачі (завершує green-чекпоінт)
+- [ ] **`CartService`** ⚠️ зіставлення за `productId`: `Uuid` не порівнювати через `==` —
+      використати `->equals()` або ключі `->toRfc4122()` (інакше кошик «загубить» товари)
+- [ ] **`StripeWebhookController`** ⚠️: `(int) metadata.order_id` → `Uuid::fromString(...)`,
+      `orderRepository->find($uuid)`; у `CheckoutController` metadata `order_id` = `(string) $order->getId()`
+- [ ] Репозиторії (`findByUserId`, `findOneByUserId`, тощо): сигнатури `int` → `Uuid`
+- [ ] Шаблони/контролери з `{id}` — `Uuid` має `__toString` (rfc4122), перевірити URL-и
+- [ ] Верифікація: `phpunit` + `phpstan` зелені
+
+## Під-задача 3 — Адмінка / API Platform / фікстури
+- [ ] EasyAdmin CRUD: `IdField` для uuid → read-only (не редагується; генерується в конструкторі)
+- [ ] API Platform: identifier = uuid (перевірити GET/collection)
+- [ ] Фікстури: посилання через обʼєкти лишаються валідні; перевірити `fixtures:load`
+- [ ] Верифікація: адмінка відкривається, `/api` віддає uuid
+
+## Під-задача 4 — Міграція схеми (cutover)
+- [ ] Згенерувати міграцію (`doctrine:migrations:diff`); зміна PK int→uuid з FK — деструктивна,
+      тож якщо diff дає небезпечні ALTER — замінити на **drop & create** таблиць з uuid
+- [ ] Перевірити uuid-тип у тестах на **SQLite** (in-memory) — `UuidType` має коректно зберігатись
+- [ ] `migrate` на чистій БД + `fixtures:load` → дані з UUID
+
+## Під-задача 5 — Верифікація E2E
+- [ ] `phpunit` (усі) + `phpstan` [OK] + `cs-fixer` 0
+- [ ] Локально: реєстрація → каталог → кошик → оплата `4242` → лист у Mailpit (увесь ланцюг на UUID)
+- [ ] `doctrine:schema:validate` [OK]
+- [ ] Деплой на `develop`; ⚠️ прод-БД пересоздається — перезалити фікстури на проді за потреби
+
+## Ризики / підводні камені
+1. **Uuid equality** у CartService — головний баг-ризик (порівняння обʼєктів).
+2. **Stripe (int) cast** — зламає webhook → замовлення не стане PAID (ловили схоже раніше).
+3. **SQLite uuid** у тестах — перевірити, бо прод Postgres має нативний `uuid`, а тести — SQLite.
+4. **Прод втрата даних** — cutover дропає поточні тестові замовлення (свідомо прийнято).
+5. **EasyAdmin IdField** на uuid — не робити editable.
+
+## Review (виконано)
+- ✅ Усі 12 сутностей + крос-посилання на `Uuid` (генерація `Uuid::v4()` у конструкторах).
+- ✅ Споживачі: CartService (`->equals()`, рядкові ключі сесії), StripeWebhook (`Uuid::fromString`),
+  репозиторії (`'uuid'`-тип), Export (рядкові message-id), маршрути (без `\d+`), екстрактори/ключі картинок.
+- ✅ Тести оновлено; **phpunit 149 OK**, **phpstan [OK]** (baseline 111→98), cs-fixer 0.
+- ✅ Cutover-міграція `Version20260615211500`: повний ланцюг (30 міграцій) + fixtures + `schema:validate` в синхроні на реальному Postgres; `orders.id`/`user_id` = нативний `uuid`.
+- ⚠️ Деплой на прод **видалить прод-дані** і лишить таблиці порожніми (migrate не вантажить фікстури) — потрібен повторний `fixtures:load` на проді або сидінг.
+- Комміти: `feffbe8` (тулінг), `c26852c` (ядро+тести), `e8f4218` (міграція).
+
+---
+
 # Фаза 2 — RabbitMQ + Transactional Outbox (event backbone)
 
 > Адитивна інфраструктура: брокер RabbitMQ + outbox (атомарна публікація доменних подій).

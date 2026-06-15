@@ -5,6 +5,7 @@ namespace App\Repository;
 use App\Order\Domain\Entity\Order;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Symfony\Component\Uid\Uuid;
 
 class OrderRepository extends ServiceEntityRepository
 {
@@ -16,13 +17,13 @@ class OrderRepository extends ServiceEntityRepository
     /**
      * @return Order[]
      */
-    public function findByUserId(int $userId): array
+    public function findByUserId(Uuid $userId): array
     {
         return $this->createQueryBuilder('o')
             ->addSelect('i')
             ->leftJoin('o.items', 'i')
             ->where('o.userId = :userId')
-            ->setParameter('userId', $userId)
+            ->setParameter('userId', $userId, 'uuid')
             ->orderBy('o.createdAt', 'DESC')
             ->getQuery()
             ->getResult();

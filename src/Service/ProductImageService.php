@@ -65,7 +65,7 @@ final class ProductImageService
         }
 
         $mime = mime_content_type($localPath) ?: 'application/octet-stream';
-        $key = sprintf('%s%d-%s', self::PREFIX, $product->getId(), $safeName);
+        $key = sprintf('%s%s-%s', self::PREFIX, $product->getId(), $safeName);
 
         $this->storage->write($key, $contents, $mime);
         unlink($localPath);

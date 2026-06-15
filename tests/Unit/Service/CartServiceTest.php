@@ -16,6 +16,7 @@ use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use Symfony\Component\Uid\Uuid;
 
 class CartServiceTest extends TestCase
 {
@@ -43,53 +44,77 @@ class CartServiceTest extends TestCase
         );
     }
 
+    private function makeProduct(Uuid $id, string $name, int $price, int $stock = 0): Product
+    {
+        $category = new Category();
+        $category->setName('Test Category');
+        $category->setSlug('test-category');
+
+        $product = new Product();
+        $product->setName($name);
+        $product->setPrice($price);
+        $product->setStock($stock);
+        $product->setCategory($category);
+
+        $reflection = new \ReflectionClass($product);
+        $idProperty = $reflection->getProperty('id');
+        $idProperty->setAccessible(true);
+        $idProperty->setValue($product, $id);
+
+        return $product;
+    }
+
     public function testRemoveFromSession(): void
     {
+        $keep = (string) Uuid::v4();
+        $drop = (string) Uuid::v4();
         $session = new Session(new MockArraySessionStorage());
-        $session->set('cart', [1 => 2, 2 => 1]);
+        $session->set('cart', [$drop => 2, $keep => 1]);
 
         $this->requestStack->method('getSession')->willReturn($session);
         $this->security->method('getUser')->willReturn(null);
 
-        $this->cartService->remove(1);
+        $this->cartService->remove($drop);
 
         $cart = $session->get('cart', []);
-        $this->assertArrayNotHasKey(1, $cart);
-        $this->assertArrayHasKey(2, $cart);
+        $this->assertArrayNotHasKey($drop, $cart);
+        $this->assertArrayHasKey($keep, $cart);
     }
 
     public function testUpdateInSession(): void
     {
+        $id = (string) Uuid::v4();
         $session = new Session(new MockArraySessionStorage());
-        $session->set('cart', [1 => 2]);
+        $session->set('cart', [$id => 2]);
 
         $this->requestStack->method('getSession')->willReturn($session);
         $this->security->method('getUser')->willReturn(null);
 
-        $this->cartService->update(1, 5);
+        $this->cartService->update($id, 5);
 
         $cart = $session->get('cart', []);
-        $this->assertEquals(5, $cart[1]);
+        $this->assertEquals(5, $cart[$id]);
     }
 
     public function testUpdateInSessionRemovesItemWhenQuantityIsZero(): void
     {
+        $id = (string) Uuid::v4();
         $session = new Session(new MockArraySessionStorage());
-        $session->set('cart', [1 => 2]);
+        $session->set('cart', [$id => 2]);
 
         $this->requestStack->method('getSession')->willReturn($session);
         $this->security->method('getUser')->willReturn(null);
 
-        $this->cartService->update(1, 0);
+        $this->cartService->update($id, 0);
 
         $cart = $session->get('cart', []);
-        $this->assertArrayNotHasKey(1, $cart);
+        $this->assertArrayNotHasKey($id, $cart);
     }
 
     public function testClearSession(): void
     {
         $session = new Session(new MockArraySessionStorage());
-        $session->set('cart', [1 => 2, 2 => 1]);
+        $session->set('cart', [(string) Uuid::v4() => 2, (string) Uuid::v4() => 1]);
 
         $this->requestStack->method('getSession')->willReturn($session);
         $this->security->method('getUser')->willReturn(null);
@@ -101,55 +126,35 @@ class CartServiceTest extends TestCase
 
     public function testAddToDatabaseCreatesNewCartIfNotExists(): void
     {
+        $productId = Uuid::v4();
         $user = $this->createMock(User::class);
-        $user->method('getId')->willReturn(1);
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
+        $user->method('getId')->willReturn(Uuid::v4());
 
-        $product = new Product();
-        $product->setName('Product');
-        $product->setPrice(10000);
-        $product->setCategory($category);
-
-        $reflection = new \ReflectionClass($product);
-        $idProperty = $reflection->getProperty('id');
-        $idProperty->setAccessible(true);
-        $idProperty->setValue($product, 1);
+        $product = $this->makeProduct($productId, 'Product', 10000);
 
         $this->security->method('getUser')->willReturn($user);
         $this->cartRepository->method('findOneByUserId')->willReturn(null);
-        $this->productRepository->method('find')->with(1)->willReturn($product);
+        $this->productRepository->method('find')->with($productId)->willReturn($product);
 
         $this->entityManager->expects($this->once())->method('persist');
         $this->entityManager->expects($this->exactly(2))->method('flush');
 
-        $this->cartService->add(1, 2);
+        $this->cartService->add((string) $productId, 2);
     }
 
     public function testAddToDatabaseUpdatesExistingItem(): void
     {
+        $productId = Uuid::v4();
         $user = $this->createMock(User::class);
-        $user->method('getId')->willReturn(1);
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
+        $user->method('getId')->willReturn(Uuid::v4());
 
-        $product = new Product();
-        $product->setName('Product');
-        $product->setPrice(10000);
-        $product->setCategory($category);
-
-        $reflection = new \ReflectionClass($product);
-        $idProperty = $reflection->getProperty('id');
-        $idProperty->setAccessible(true);
-        $idProperty->setValue($product, 1);
+        $product = $this->makeProduct($productId, 'Product', 10000);
 
         $cart = new Cart();
-        $cart->setUserId(1);
+        $cart->setUserId(Uuid::v4());
 
         $existingItem = new CartItem();
-        $existingItem->setProductId(1);
+        $existingItem->setProductId($productId);
         $existingItem->setProductName('Product');
         $existingItem->setPrice(10000);
         $existingItem->setQuantity(2);
@@ -157,48 +162,29 @@ class CartServiceTest extends TestCase
 
         $this->security->method('getUser')->willReturn($user);
         $this->cartRepository->method('findOneByUserId')->willReturn($cart);
-        $this->productRepository->method('find')->with(1)->willReturn($product);
+        $this->productRepository->method('find')->with($productId)->willReturn($product);
 
         $this->entityManager->expects($this->once())->method('flush');
 
-        $this->cartService->add(1, 3);
+        $this->cartService->add((string) $productId, 3);
 
         $this->assertEquals(5, $existingItem->getQuantity());
     }
 
     public function testMigrateSessionToDatabase(): void
     {
+        $id1 = Uuid::v4();
+        $id2 = Uuid::v4();
         $user = $this->createMock(User::class);
-        $user->method('getId')->willReturn(1);
+        $user->method('getId')->willReturn(Uuid::v4());
         $session = new Session(new MockArraySessionStorage());
-        $session->set('cart', [1 => 2, 2 => 3]);
+        $session->set('cart', [(string) $id1 => 2, (string) $id2 => 3]);
 
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product1 = new Product();
-        $product1->setName('Product 1');
-        $product1->setPrice(10000);
-        $product1->setCategory($category);
-
-        $reflection1 = new \ReflectionClass($product1);
-        $idProperty1 = $reflection1->getProperty('id');
-        $idProperty1->setAccessible(true);
-        $idProperty1->setValue($product1, 1);
-
-        $product2 = new Product();
-        $product2->setName('Product 2');
-        $product2->setPrice(5000);
-        $product2->setCategory($category);
-
-        $reflection2 = new \ReflectionClass($product2);
-        $idProperty2 = $reflection2->getProperty('id');
-        $idProperty2->setAccessible(true);
-        $idProperty2->setValue($product2, 2);
+        $product1 = $this->makeProduct($id1, 'Product 1', 10000);
+        $product2 = $this->makeProduct($id2, 'Product 2', 5000);
 
         $cart = new Cart();
-        $cart->setUserId(1);
+        $cart->setUserId(Uuid::v4());
 
         $this->security->method('getUser')->willReturn($user);
         $this->requestStack->method('getSession')->willReturn($session);
@@ -208,7 +194,7 @@ class CartServiceTest extends TestCase
 
         $this->productRepository->expects($this->once())
             ->method('findBy')
-            ->with(['id' => [1, 2]])
+            ->with(['id' => [(string) $id1, (string) $id2]])
             ->willReturn([$product1, $product2]);
 
         // persist: 1× (create cart); flush: 3× (create cart + 2× addProductToDatabase)
@@ -222,39 +208,18 @@ class CartServiceTest extends TestCase
 
     public function testGetCountReturnsCorrectCount(): void
     {
+        $id1 = Uuid::v4();
+        $id2 = Uuid::v4();
         $session = new Session(new MockArraySessionStorage());
-        $session->set('cart', [1 => 2, 2 => 1]);
+        $session->set('cart', [(string) $id1 => 2, (string) $id2 => 1]);
 
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product1 = new Product();
-        $product1->setName('Product 1');
-        $product1->setPrice(10000);
-        $product1->setStock(10);
-        $product1->setCategory($category);
-
-        $reflection1 = new \ReflectionClass($product1);
-        $idProp1 = $reflection1->getProperty('id');
-        $idProp1->setAccessible(true);
-        $idProp1->setValue($product1, 1);
-
-        $product2 = new Product();
-        $product2->setName('Product 2');
-        $product2->setPrice(5000);
-        $product2->setStock(5);
-        $product2->setCategory($category);
-
-        $reflection2 = new \ReflectionClass($product2);
-        $idProp2 = $reflection2->getProperty('id');
-        $idProp2->setAccessible(true);
-        $idProp2->setValue($product2, 2);
+        $product1 = $this->makeProduct($id1, 'Product 1', 10000, 10);
+        $product2 = $this->makeProduct($id2, 'Product 2', 5000, 5);
 
         $this->requestStack->method('getSession')->willReturn($session);
         $this->security->method('getUser')->willReturn(null);
         $this->productRepository->method('findBy')
-            ->with(['id' => [1, 2]])
+            ->with(['id' => [(string) $id1, (string) $id2]])
             ->willReturn([$product1, $product2]);
 
         $this->assertEquals(2, $this->cartService->getCount());

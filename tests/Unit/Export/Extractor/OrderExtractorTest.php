@@ -70,7 +70,7 @@ final class OrderExtractorTest extends TestCase
         $result = (new OrderExtractor($this->makeEm([$row])))->extract([]);
 
         $this->assertCount(1, $result);
-        $this->assertSame(5, $result[0]['id']);
+        $this->assertSame('5', $result[0]['id']);
         $this->assertSame('user@example.com', $result[0]['user_email']);
         $this->assertSame('PAID', $result[0]['status']);
         $this->assertSame('250.00', $result[0]['total_amount']);

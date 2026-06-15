@@ -4,15 +4,15 @@ namespace App\Catalog\Domain\Entity;
 
 use App\Repository\PrinterModelRepository;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: PrinterModelRepository::class)]
 #[ORM\Table(name: 'printer_models')]
 class PrinterModel
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
-    private ?int $id = null;
+    #[ORM\Column(type: 'uuid', unique: true)]
+    private Uuid $id;
 
     #[ORM\Column(length: 255)]
     private string $name;
@@ -24,7 +24,12 @@ class PrinterModel
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private Brand $brand;
 
-    public function getId(): ?int
+    public function __construct()
+    {
+        $this->id = Uuid::v4();
+    }
+
+    public function getId(): ?Uuid
     {
         return $this->id;
     }

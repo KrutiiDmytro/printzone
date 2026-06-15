@@ -12,7 +12,7 @@ namespace App\User\Domain\Event;
 final readonly class UserLoggedIn
 {
     public function __construct(
-        public int $userId,
+        public string $userId,
         public string $email,
     ) {
     }

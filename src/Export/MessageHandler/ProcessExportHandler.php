@@ -18,6 +18,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Symfony\Component\Uid\Uuid;
 
 #[AsMessageHandler]
 final class ProcessExportHandler
@@ -36,7 +37,10 @@ final class ProcessExportHandler
 
     public function __invoke(ProcessExportMessage $message): void
     {
-        $job = $this->repository->find($message->exportJobId);
+        if (!Uuid::isValid($message->exportJobId)) {
+            return;
+        }
+        $job = $this->repository->find(Uuid::fromString($message->exportJobId));
         if (null === $job) {
             return;
         }
@@ -58,7 +62,7 @@ final class ProcessExportHandler
 
             $timestamp = (new \DateTimeImmutable())->format('Ymd-His');
             $filePath = sprintf(
-                'exports/%s/%s/%d-%s.%s',
+                'exports/%s/%s/%s-%s.%s',
                 $job->getType()->value,
                 $job->getFormat()->value,
                 $job->getId(),
@@ -70,7 +74,7 @@ final class ProcessExportHandler
             $job->markCompleted($filePath);
             $this->em->flush();
 
-            $this->sendNotification($job->getRequestedBy(), $job->getId(), $job->getType()->value, $job->getFormat()->value, true);
+            $this->sendNotification($job->getRequestedBy(), (string) $job->getId(), $job->getType()->value, $job->getFormat()->value, true);
         } catch (\Throwable $e) {
             $errorMessage = $e->getMessage();
             $previous = $e->getPrevious();
@@ -80,7 +84,7 @@ final class ProcessExportHandler
             }
             $job->markFailed($errorMessage);
             $this->em->flush();
-            $this->sendNotification($job->getRequestedBy(), $job->getId(), $job->getType()->value, $job->getFormat()->value, false, $errorMessage);
+            $this->sendNotification($job->getRequestedBy(), (string) $job->getId(), $job->getType()->value, $job->getFormat()->value, false, $errorMessage);
         }
     }
 
@@ -93,14 +97,14 @@ final class ProcessExportHandler
         };
     }
 
-    private function sendNotification(string $to, ?int $jobId, string $type, string $format, bool $success, string $error = ''): void
+    private function sendNotification(string $to, string $jobId, string $type, string $format, bool $success, string $error = ''): void
     {
         $subject = $success
             ? sprintf('Експорт %s (%s) завершено', $type, $format)
             : sprintf('Помилка експорту %s (%s)', $type, $format);
 
         $message = $success
-            ? sprintf('Ваш експорт готовий. <a href="/admin/export/download/%d">Завантажити файл</a>', $jobId)
+            ? sprintf('Ваш експорт готовий. <a href="/admin/export/download/%s">Завантажити файл</a>', $jobId)
             : sprintf('Під час експорту сталася помилка: %s', htmlspecialchars($error, ENT_QUOTES, 'UTF-8'));
 
         $email = (new TemplatedEmail())

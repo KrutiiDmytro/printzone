@@ -5,6 +5,7 @@ namespace App\Tests\Unit\Domain\Entity;
 use App\Catalog\Domain\Entity\Category;
 use App\Catalog\Domain\Entity\Product;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Uid\Uuid;
 
 class ProductTest extends TestCase
 {
@@ -12,7 +13,7 @@ class ProductTest extends TestCase
     {
         $product = new Product();
 
-        $this->assertNull($product->getId());
+        $this->assertInstanceOf(Uuid::class, $product->getId());
         $this->assertNull($product->getName());
         $this->assertEquals(0, $product->getStock());
         $this->assertFalse($product->isFeatured());

@@ -6,6 +6,7 @@ use App\Repository\ProductRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Uid\Uuid;
 
 class ProductController extends AbstractController
 {
@@ -19,10 +20,14 @@ class ProductController extends AbstractController
         ]);
     }
 
-    #[Route('/product/{id}', name: 'app_product_show', requirements: ['id' => '\d+'])]
-    public function show(int $id, ProductRepository $productRepository): Response
+    #[Route('/product/{id}', name: 'app_product_show')]
+    public function show(string $id, ProductRepository $productRepository): Response
     {
-        $product = $productRepository->find($id);
+        if (!Uuid::isValid($id)) {
+            throw $this->createNotFoundException('Product not found');
+        }
+
+        $product = $productRepository->find(Uuid::fromString($id));
 
         if (!$product) {
             throw $this->createNotFoundException('Product not found');

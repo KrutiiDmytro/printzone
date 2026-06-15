@@ -34,7 +34,7 @@ final class RequeueExportJobsCommand extends Command
         }
 
         foreach ($jobs as $job) {
-            $this->bus->dispatch(new ProcessExportMessage((int) $job->getId()));
+            $this->bus->dispatch(new ProcessExportMessage((string) $job->getId()));
             $output->writeln('Requeued job #'.$job->getId());
         }
 

@@ -10,6 +10,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
+use Symfony\Component\Uid\Uuid;
 
 class LoginListenerTest extends TestCase
 {
@@ -31,7 +32,7 @@ class LoginListenerTest extends TestCase
     public function testOnLoginSuccessDispatchesUserLoggedIn(): void
     {
         $user = $this->createMock(User::class);
-        $user->method('getId')->willReturn(1);
+        $user->method('getId')->willReturn(Uuid::v4());
         $user->method('getUserIdentifier')->willReturn('user@example.com');
         $user->method('getRoles')->willReturn(['ROLE_USER']);
 
@@ -58,7 +59,7 @@ class LoginListenerTest extends TestCase
     public function testOnLoginSuccessRedirectsAdminToAdminDashboard(): void
     {
         $user = $this->createMock(User::class);
-        $user->method('getId')->willReturn(2);
+        $user->method('getId')->willReturn(Uuid::v4());
         $user->method('getUserIdentifier')->willReturn('admin@example.com');
         $user->method('getRoles')->willReturn(['ROLE_ADMIN', 'ROLE_USER']);
 

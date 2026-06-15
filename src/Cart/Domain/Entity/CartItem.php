@@ -3,6 +3,7 @@
 namespace App\Cart\Domain\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'cart_items')]
@@ -11,17 +12,16 @@ use Doctrine\ORM\Mapping as ORM;
 class CartItem
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column(type: 'integer')]
-    private ?int $id = null;
+    #[ORM\Column(type: 'uuid', unique: true)]
+    private Uuid $id;
 
     #[ORM\ManyToOne(targetEntity: Cart::class, inversedBy: 'items')]
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private ?Cart $cart = null;
 
     // Cross-service reference to Catalog (no FK). Name + price are snapshots taken when added.
-    #[ORM\Column(type: 'integer')]
-    private int $productId;
+    #[ORM\Column(type: 'uuid')]
+    private Uuid $productId;
 
     #[ORM\Column(type: 'string', length: 255)]
     private string $productName;
@@ -32,7 +32,12 @@ class CartItem
     #[ORM\Column(type: 'integer')]
     private int $quantity;
 
-    public function getId(): ?int
+    public function __construct()
+    {
+        $this->id = Uuid::v4();
+    }
+
+    public function getId(): ?Uuid
     {
         return $this->id;
     }
@@ -49,12 +54,12 @@ class CartItem
         return $this;
     }
 
-    public function getProductId(): int
+    public function getProductId(): Uuid
     {
         return $this->productId;
     }
 
-    public function setProductId(int $productId): self
+    public function setProductId(Uuid $productId): self
     {
         $this->productId = $productId;
 

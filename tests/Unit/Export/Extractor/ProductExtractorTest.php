@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Uid\Uuid;
 
 final class ProductExtractorTest extends TestCase
 {
@@ -72,7 +73,7 @@ final class ProductExtractorTest extends TestCase
         $result = (new ProductExtractor($this->makeEm([$row])))->extract([]);
 
         $this->assertCount(1, $result);
-        $this->assertSame(1, $result[0]['id']);
+        $this->assertSame('1', $result[0]['id']);
         $this->assertSame('Laptop', $result[0]['name']);
         $this->assertSame('999.00', $result[0]['price']);
         $this->assertSame(10, $result[0]['stock']);
@@ -99,11 +100,12 @@ final class ProductExtractorTest extends TestCase
 
     public function testExtractAppliesCategoryFilter(): void
     {
+        $categoryId = Uuid::v4();
         [$qb, $em] = $this->makeQbWithExpectations([]);
         $qb->expects($this->once())->method('andWhere')->with('c.id = :category')->willReturnSelf();
-        $qb->expects($this->once())->method('setParameter')->with('category', 3)->willReturnSelf();
+        $qb->expects($this->once())->method('setParameter')->with('category', $categoryId, 'uuid')->willReturnSelf();
 
-        (new ProductExtractor($em))->extract(['category' => '3']);
+        (new ProductExtractor($em))->extract(['category' => (string) $categoryId]);
     }
 
     public function testExtractAppliesIsFeaturedFilter(): void

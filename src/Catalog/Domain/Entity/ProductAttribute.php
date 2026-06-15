@@ -5,6 +5,7 @@ namespace App\Catalog\Domain\Entity;
 use ApiPlatform\Metadata\ApiResource;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'product_attributes')]
@@ -16,10 +17,9 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class ProductAttribute
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
+    #[ORM\Column(type: 'uuid', unique: true)]
     #[Groups(['product_attribute:read', 'product:read'])]
-    private ?int $id = null;
+    private Uuid $id;
 
     #[ORM\Column(length: 255)]
     #[Groups(['product_attribute:read', 'product_attribute:write', 'product:read', 'product:write'])]
@@ -34,7 +34,12 @@ class ProductAttribute
     #[Groups(['product_attribute:read', 'product_attribute:write'])]
     private ?Product $product = null;
 
-    public function getId(): ?int
+    public function __construct()
+    {
+        $this->id = Uuid::v4();
+    }
+
+    public function getId(): ?Uuid
     {
         return $this->id;
     }

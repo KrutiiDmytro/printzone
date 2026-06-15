@@ -5,6 +5,7 @@ namespace App\Order\Domain\Entity;
 use ApiPlatform\Metadata\ApiResource;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Serializer\Attribute\Groups;
+use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'order_items')]
@@ -17,10 +18,9 @@ use Symfony\Component\Serializer\Attribute\Groups;
 class OrderItem
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column]
+    #[ORM\Column(type: 'uuid', unique: true)]
     #[Groups(['order_item:read', 'order:read'])]
-    private ?int $id = null;
+    private Uuid $id;
 
     #[ORM\ManyToOne(inversedBy: 'items')]
     #[ORM\JoinColumn(nullable: false)]
@@ -28,9 +28,9 @@ class OrderItem
     private ?Order $orderRef = null;
 
     // Cross-service reference to Catalog (no FK). Name + price are snapshots at order time.
-    #[ORM\Column]
+    #[ORM\Column(type: 'uuid')]
     #[Groups(['order_item:read', 'order:read', 'order:write'])]
-    private ?int $productId = null;
+    private ?Uuid $productId = null;
 
     #[ORM\Column(length: 255)]
     #[Groups(['order_item:read', 'order:read', 'order:write'])]
@@ -44,7 +44,12 @@ class OrderItem
     #[Groups(['order_item:read', 'order:read', 'order_item:write', 'order:write'])]
     private ?int $price = null; // Snapshot of price at purchase time
 
-    public function getId(): ?int
+    public function __construct()
+    {
+        $this->id = Uuid::v4();
+    }
+
+    public function getId(): ?Uuid
     {
         return $this->id;
     }
@@ -61,12 +66,12 @@ class OrderItem
         return $this;
     }
 
-    public function getProductId(): ?int
+    public function getProductId(): ?Uuid
     {
         return $this->productId;
     }
 
-    public function setProductId(int $productId): static
+    public function setProductId(Uuid $productId): static
     {
         $this->productId = $productId;
 
