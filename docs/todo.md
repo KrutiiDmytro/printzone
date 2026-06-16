@@ -1,3 +1,78 @@
+# Фаза 2.2 — Database-per-service: розділення схем PostgreSQL
+
+> **Мета:** завершити Фазу 2 з §10 architecture — кожен модуль отримує власну PostgreSQL-схему
+> (namespace) в одній БД. Передумова фізичного database-per-service. UUID (2.1) і RabbitMQ (Фаза 2)
+> вже зроблені; крос-доменні FK прибрані ще в Фазі 1 — тож **крос-схемних FK немає**.
+> Гілка: `feat/phase2.2-db-schemas`. Підхід **data-preserving** (`ALTER TABLE ... SET SCHEMA`, НЕ cutover).
+
+## Карта призначення схем
+| Модуль | Схема | Таблиці |
+|---|---|---|
+| User | `users` | `users` (→ `users.users`) |
+| Catalog | `catalog` | `categories`, `brands`, `products`, `printer_models`, `product_attributes` |
+| Cart | `cart` | `carts`, `cart_items` |
+| Order | `orders` | `orders`, `order_items` |
+| Export | `exports` | `export_jobs` |
+| Messaging | `messaging` | `outbox` |
+| *(інфра — лишається в `public`)* | `public` | `messenger_messages`, `doctrine_migration_versions` |
+
+> Схеми `payments`/`delivery` — НЕ створюємо: у моноліті немає їхніх сутностей (Payment слабко
+> зв'язаний через `Order.stripeSessionId`+webhook). Створяться при виокремленні цих сервісів.
+
+## Ключове відкриття (розвідка)
+- **SQLite-емуляція схем увімкнена** (DBAL 3.10 `SQLitePlatform::emulateSchemaNamespacing`):
+  `catalog.products` → `catalog__products`. Тести (`SchemaTool::createSchema` на SQLite) працюють
+  прозоро — і DDL, і запити проходять однакову трансформацію. **Окрема гілка для тестів не потрібна.**
+- Сирого SQL з іменами бізнес-таблиць немає (лише `pg_stat_statements_reset()`). Репозиторії — DQL.
+- UUID PK → жодних сиквенсів (нема що переносити окремо; `SET SCHEMA` і так тягне owned-об'єкти).
+
+## Під-задача 1 — Призначити схеми сутностям (атомарна; 12 файлів, 1 green-чекпоінт) ✅
+> Один семантичний крок (як 2.1 під-задача 1): атрибут + міграція мусять лягти разом, інакше
+> Postgres-схема розсинхронена. Перевищує правило «≤3 файли» — тому винесено в план на апрув.
+- [x] Додати `schema: '<name>'` у `#[ORM\Table(...)]` усіх 12 сутностей за картою вище
+- [x] Перевірити, що інтра-доменні асоціації (всі — у межах однієї схеми) лишаються валідні
+
+## Під-задача 2 — Міграція (data-preserving, Postgres) ✅
+- [x] Рукописна `Version20260616120000`: `CREATE SCHEMA IF NOT EXISTS` (×6) + `ALTER TABLE … SET SCHEMA`
+- [x] `down()` реверсує: `SET SCHEMA public` (×12) + `DROP SCHEMA` (×6)
+- [x] ⚠️ **НЕ** запускали `migrations:diff` — пишемо вручну (diff дав би деструктивний DROP/CREATE)
+- [x] Інфра-таблиці (`messenger_messages`, `doctrine_migration_versions`) лишилися в `public`
+- [x] **+8 `ALTER INDEX … RENAME`**: авто-імена індексів стали schema-qualified → diff хотів rename;
+      додано в up()/down(), інакше `schema:validate` не в синхроні
+
+## Під-задача 3 — Верифікація E2E ✅
+- [x] `phpunit` зелений (149 OK, 369 assert) — SQLite через кастомний QuoteStrategy (див. нижче)
+- [x] `phpstan` [OK] + `cs-fixer` 0 (новий файл LF)
+- [x] Postgres: `migrate` → `schema:validate` [OK]; 6 схем (`\dn`); таблиці переїхали (catalog:5, cart:2,
+      orders:2, users:1, exports:1, messaging:1); public лишив лише 2 інфра-таблиці
+- [x] down→up roundtrip коректний; `fixtures:load` ок (products 10, users 2 у схемах)
+- [ ] Manual E2E (каталог→кошик→`4242`→лист): покрито функціональним `CheckoutControllerTest`;
+      повний ручний Stripe-прогін лишаю користувачу (інтерактивний redirect+webhook)
+
+## ⚠️ Re-plan під час реалізації (workflow 1.2): SQLite-розрив ORM 3.6
+**Проблема:** `no such table: users.users` у тестах. DBAL емулює схеми лише в DDL (`SchemaTool`
+створює `users__users`), а **ORM 3.6 прибрав** емуляцію з DML — `DefaultQuoteStrategy::getTableName`
+повертає `users.users`, що SQLite читає як `database.table`. DDL і DML розійшлися.
+**Фікс:** `src/Doctrine/SchemaEmulatingQuoteStrategy.php` (extends Default) — на платформах без
+`supportsSchemas()` (SQLite) повертає `schema__table`; на Postgres no-op. Реєстрація:
+`doctrine.yaml → orm.quote_strategy`. Це відновлює нативну поведінку ORM 2.x.
+
+## Ризики / підводні камені (підсумок)
+1. **ORM 3.6 SQLite-schema gap** (головний, спіймали) — кастомний QuoteStrategy.
+2. **diff деструктивний** для schema-move — тільки рукописна `SET SCHEMA`.
+3. **Авто-імена індексів** schema-qualified → 8 `ALTER INDEX RENAME` у міграції.
+4. **search_path / репліка / EasyAdmin / API Platform** — усе через schema-qualified метадані → ок.
+
+## Review (виконано)
+- ✅ 12 сутностей → 6 схем (`users`/`catalog`/`cart`/`orders`/`exports`/`messaging`); інфра в `public`.
+- ✅ Data-preserving міграція (`SET SCHEMA`, не cutover) + 8 index-rename; up/down roundtrip зелений.
+- ✅ Крос-схемних FK немає (спадок Фази 1) — нічого дропати.
+- ✅ SQLite-тести: кастомний `SchemaEmulatingQuoteStrategy` (ORM 3.6 gap). phpunit 149 OK, phpstan [OK].
+- ✅ `schema:validate` [OK] на реальному Postgres; репліка читає schema-qualified без змін.
+- Схеми `payments`/`delivery` НЕ створені — нема сутностей у моноліті (створяться при виносі сервісів).
+
+---
+
 # Фаза 2.1 — Міграція PK: serial int → UUID (варіант А: чистий cutover)
 
 > **Мета:** усі сутності переходять з int auto-increment на UUID PK, генерований у коді
