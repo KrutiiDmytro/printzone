@@ -6,7 +6,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
-#[ORM\Table(name: 'cart_items')]
+#[ORM\Table(name: 'cart_items', schema: 'cart')]
 #[ORM\Index(columns: ['cart_id'], name: 'idx_cart_items_cart_id')]
 #[ORM\Index(columns: ['product_id'], name: 'idx_cart_items_product_id')]
 class CartItem

@@ -9,7 +9,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: BrandRepository::class)]
-#[ORM\Table(name: 'brands')]
+#[ORM\Table(name: 'brands', schema: 'catalog')]
 class Brand
 {
     #[ORM\Id]

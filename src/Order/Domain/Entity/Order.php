@@ -12,7 +12,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: OrderRepository::class)]
-#[ORM\Table(name: 'orders')]
+#[ORM\Table(name: 'orders', schema: 'orders')]
 #[ORM\Index(columns: ['created_at'], name: 'idx_orders_created_at')]
 #[ORM\Index(columns: ['status'], name: 'idx_orders_status')]
 #[ORM\Index(columns: ['user_id'], name: 'idx_orders_user_id')]

@@ -14,7 +14,7 @@ use Symfony\Component\Uid\Uuid;
  * change, then published to RabbitMQ by the outbox relay and marked as published.
  */
 #[ORM\Entity(repositoryClass: OutboxMessageRepository::class)]
-#[ORM\Table(name: 'outbox')]
+#[ORM\Table(name: 'outbox', schema: 'messaging')]
 #[ORM\Index(columns: ['published_at', 'created_at'], name: 'idx_outbox_unpublished')]
 class OutboxMessage
 {

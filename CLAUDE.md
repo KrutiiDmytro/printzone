@@ -47,6 +47,8 @@ Services: `php` (PHP 8.2-FPM), `database` (PostgreSQL 16 primary), `database-rep
 
 After adding a new Twig extension, run `php bin/console cache:clear` — otherwise the function won't be visible in templates even though the service is registered.
 
+After any `composer update` that touches a bundle shipping frontend assets (EasyAdmin, API Platform), run `php bin/console assets:install public`. EasyAdmin loads its CSS/JS via AssetMapper at digest paths (`/bundles/easyadmin/app.<hash>.css`). Updating the bundle changes the asset content → new hash, but `public/bundles/easyadmin/` keeps the stale copy, so the page requests a hash that 404s → admin renders with no CSS (giant unstyled images). `assets:install` re-copies fresh assets matching the current digests.
+
 ## Testing
 
 ```bash
@@ -124,6 +126,10 @@ mappings:
 ```
 
 When adding a new entity in a new module, add it here. Entities in existing modules are picked up automatically.
+
+**Per-service schemas (Phase 2.2).** Each module's tables live in their own PostgreSQL schema, set via `#[ORM\Table(name: '...', schema: '...')]`: `users`, `catalog`, `cart`, `orders`, `exports`, `messaging`. Infra tables (`messenger_messages`, `doctrine_migration_versions`) stay in `public`. There are no cross-schema FKs. A new entity must declare the `schema:` matching its module.
+
+⚠️ **SQLite tests + schemas:** ORM 3.6 dropped schema emulation from `DefaultQuoteStrategy::getTableName` (it emits `catalog.products`, which SQLite reads as `database.table` → "no such table"), while DBAL's SchemaTool still emulates DDL as `catalog__products`. `src/Doctrine/SchemaEmulatingQuoteStrategy.php` (wired via `orm.quote_strategy`) re-aligns DML on platforms without native schema support; it is a no-op on PostgreSQL. Don't remove it or schema-qualified entities break in tests.
 
 ### Storage Module (`src/Storage/`)
 
