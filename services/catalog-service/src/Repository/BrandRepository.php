@@ -15,4 +15,17 @@ class BrandRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Brand::class);
     }
+
+    public function findBySlug(string $slug): ?Brand
+    {
+        return $this->findOneBy(['slug' => $slug]);
+    }
+
+    /**
+     * @return Brand[]
+     */
+    public function findAllOrdered(): array
+    {
+        return $this->findBy([], ['name' => 'ASC']);
+    }
 }

@@ -1,3 +1,37 @@
+# Фаза 4.5 — Catalog storefront cutover (catalog = джерело правди) — розблоковує Phase 5
+
+> **Мета:** вітрина + кошик моноліту читають каталог із **catalog-service** (а не локального Doctrine).
+> Кроки 1–4 зараз (розблоковують Saga: cart items нестимуть catalog-UUID). Адмінка (write-API + проксі) —
+> крок 5, окремо. Гілка: `feat/phase4.5-catalog-cutover`. PrinterModel/printer-finder лишаються в моноліті.
+
+## Звʼязність (з розвідки)
+Вітрина (`ShopController` ×5 маршрутів, storefront `ProductController`, `SearchController`, Twig
+`Brand/Category/ProductImage`) + `CartService` усі тримаються на Doctrine-каталозі. Вітрина+кошик мусять
+перейти **разом** (інакше `CartService.add` не знайде продукт). Адмінка-write → крок 5.
+
+## Крок 1 — catalog-service: канонічні дані + повний read-API
+- [ ] Фікстури → канонічний набір (4 root + 10 child категорій, 7 брендів, 10 продуктів; slug-и = монолітні)
+- [ ] `CategoryRepository` (findBySlug, findAllRoot), `BrandRepository` (findBySlug, findAll)
+- [ ] `ProductRepository.findByFilters`: + `categorySlug, brandSlug, q (search), sort, availableOnly(stock>0)`;
+      `getPriceRange()`; `findByIds()` (для кошика). `availableOnly` за замовч. false → Export (Phase 4) не ламається
+- [ ] `ProductController`: розширити список (slug-фільтри, sort, q, availableOnly, featured, ids, priceRange у відповіді);
+      `CategoryController` (?root=1); новий `BrandController` (list). Без зміни схеми (міграція не потрібна)
+- [ ] ✅ Verify: fixtures:load; ендпоінти віддають дані; Export (Phase 4) усе ще зелений
+
+## Крок 2 — Моноліт: CatalogClient + view-DTO
+- [ ] `CatalogClient` (HttpClient + сервісний JWT) + `ProductView/CategoryView/BrandView` під геттери шаблонів
+
+## Крок 3 — Cutover вітрини
+- [ ] `ShopController`, storefront `ProductController`, `SearchController`, Twig `Brand/Category` → клієнт
+
+## Крок 4 — Cutover CartService
+- [ ] `CartService` (add + рендер) → клієнт; cart items несуть catalog-UUID ⇒ розблоковано Saga
+
+## Крок 5 (окремо) — Адмінка write-API + проксі (А)
+- [ ] catalog-service write-API; 4 CRUD-контролери моноліту пишуть через HTTP; дроп каталог-таблиць моноліту
+
+---
+
 # Фаза 4 — Виокремлення Catalog Service (MVP, Strangler Fig крок 2) — ПЛАН, очікує апрув
 
 > **Мета:** другий мікросервіс — Catalog. Окремий Symfony 7.4 застосунок `services/catalog-service/`

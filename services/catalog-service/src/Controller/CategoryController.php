@@ -5,6 +5,8 @@ namespace App\Controller;
 use App\Entity\Category;
 use App\Repository\CategoryRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 
 #[Route('/api/categories')]
@@ -15,11 +17,24 @@ class CategoryController
     }
 
     #[Route('', name: 'categories_list', methods: ['GET'])]
-    public function list(): JsonResponse
+    public function list(Request $request): JsonResponse
     {
-        $data = array_map($this->serialize(...), $this->categories->findBy([], ['name' => 'ASC']));
+        $items = $request->query->getBoolean('root')
+            ? $this->categories->findAllRoot()
+            : $this->categories->findBy([], ['name' => 'ASC']);
 
-        return new JsonResponse(['data' => $data]);
+        return new JsonResponse(['data' => array_map($this->serialize(...), $items)]);
+    }
+
+    #[Route('/{slug}', name: 'categories_get', methods: ['GET'])]
+    public function get(string $slug): JsonResponse
+    {
+        $category = $this->categories->findBySlug($slug);
+        if (null === $category) {
+            throw new NotFoundHttpException('Category not found.');
+        }
+
+        return new JsonResponse($this->serialize($category));
     }
 
     /**

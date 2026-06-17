@@ -25,12 +25,17 @@ class ProductRepository extends ServiceEntityRepository
      */
     public function findByFilters(array $filters, int $page, int $limit): array
     {
-        return $this->filtered($filters)
-            ->orderBy('p.id', 'ASC')
+        $qb = $this->filtered($filters)
             ->setFirstResult(($page - 1) * $limit)
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
+            ->setMaxResults($limit);
+
+        match ($filters['sort'] ?? '') {
+            'price_asc' => $qb->orderBy('p.price', 'ASC'),
+            'price_desc' => $qb->orderBy('p.price', 'DESC'),
+            default => $qb->orderBy('p.id', 'ASC'),
+        };
+
+        return $qb->getQuery()->getResult();
     }
 
     /**
@@ -45,6 +50,42 @@ class ProductRepository extends ServiceEntityRepository
     }
 
     /**
+     * Min/max price (cents) across available products. Honours the same filters.
+     *
+     * @param array<string, mixed> $filters
+     *
+     * @return array{min: int, max: int}
+     */
+    public function priceRange(array $filters): array
+    {
+        $row = $this->filtered($filters)
+            ->select('MIN(p.price) AS minp, MAX(p.price) AS maxp')
+            ->getQuery()
+            ->getSingleResult();
+
+        return ['min' => (int) ($row['minp'] ?? 0), 'max' => (int) ($row['maxp'] ?? 0)];
+    }
+
+    /**
+     * @param string[] $ids
+     *
+     * @return Product[]
+     */
+    public function findByIds(array $ids): array
+    {
+        $valid = array_values(array_filter($ids, static fn (string $id): bool => Uuid::isValid($id)));
+        if ([] === $valid) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('p')
+            ->where('p.id IN (:ids)')
+            ->setParameter('ids', $valid)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * @param array<string, mixed> $filters
      */
     private function filtered(array $filters): QueryBuilder
@@ -55,8 +96,23 @@ class ProductRepository extends ServiceEntityRepository
             $qb->andWhere('p.category = :category')
                 ->setParameter('category', Uuid::fromString((string) $filters['category']), 'uuid');
         }
+        if (!empty($filters['categorySlug'])) {
+            $qb->join('p.category', 'c')->andWhere('c.slug = :categorySlug')
+                ->setParameter('categorySlug', (string) $filters['categorySlug']);
+        }
+        if (!empty($filters['brandSlug'])) {
+            $qb->join('p.brand', 'b')->andWhere('b.slug = :brandSlug')
+                ->setParameter('brandSlug', (string) $filters['brandSlug']);
+        }
+        if (!empty($filters['q'])) {
+            $qb->andWhere('LOWER(p.name) LIKE :q')
+                ->setParameter('q', '%'.strtolower((string) $filters['q']).'%');
+        }
         if (isset($filters['isFeatured']) && '' !== $filters['isFeatured']) {
             $qb->andWhere('p.isFeatured = :featured')->setParameter('featured', (bool) $filters['isFeatured']);
+        }
+        if (!empty($filters['availableOnly'])) {
+            $qb->andWhere('p.stock > 0');
         }
         if (!empty($filters['priceMin'])) {
             $qb->andWhere('p.price >= :priceMin')->setParameter('priceMin', (int) $filters['priceMin']);
