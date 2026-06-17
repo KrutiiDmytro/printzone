@@ -1075,9 +1075,16 @@ public function ready(Connection $db): JsonResponse
 
 Ціль: Перший самостійний мікросервіс — найменша зв'язність.
 
-- [ ] Новий Symfony додаток для User Service
-- [ ] API Gateway маршрутизує `/api/auth/*` → User Service
-- [ ] Моноліт читає `userId` + `roles` лише з JWT claims
+- [x] Новий Symfony додаток для User Service — `services/user-service/` (FrankenPHP, Symfony 7.4),
+      власна БД `db-user`, порт 8001; register/login/JWT, `/api/users`, `/health/*`; 14 функц. тестів
+- [x] Моноліт довіряє токенам сервісу — спільний RS256 keypair (підпис валідується монолітним public key:
+      `openssl ... Verified OK`), `username`-claim резолвиться через провайдер моноліту. Моноліт незмінний.
+- [ ] API Gateway маршрутизує `/api/auth/*` → User Service — **відкладено** (сервіс доступний напряму :8001)
+- [ ] Моноліт читає `userId` + `roles` лише з JWT claims (повний cutover — коли приберемо таблицю `users`
+      з моноліту; зараз перехідний стан зі знімком користувачів в обох)
+
+> **Обсяг MVP (Strangler крок 1):** сервіс додано адитивно; web/admin-сесії та OAuth поки в моноліті.
+> Поза обсягом цієї фази: API Gateway, перенесення OAuth, прод-розгортання сервісу (compose.prod + CI + секрети).
 
 ### Фаза 4 — Виокремлення Catalog Service
 

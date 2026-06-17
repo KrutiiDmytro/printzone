@@ -51,13 +51,19 @@
 - [x] Автотести сервісу `phpunit` — **OK (14 tests, 27 assertions)**: health(2), auth(6: register 201/409/422×2,
       login JWT/401), users(6: 401/200/403, self/admin/forbidden). SQLite in-memory + окремий passphrase-free
       тестовий keypair (`config/jwt-test`) → самодостатньо, CI-ready
-- [ ] Відмітити §10 Фаза 3 в architecture-доку — **залишок**
+- [x] §10 Фаза 3 в `microservices-architecture.md` відмічено (MVP done; gateway/OAuth/cutover — відкладено)
 
-## Залишок / наступні підфази
-- Автоматичні `phpunit`-тести сервісу (health/register/login/guard) на SQLite in-memory.
-- Прод-розгортання нового сервісу: `compose.prod.yaml` (user-service + db-user + JWT-ключі), CI build/push,
-  секрети (JWT_PASSPHRASE, DB пароль) — окремий крок.
-- Перенесення OAuth, cutover web/admin моноліту, API Gateway.
+## Підсумок Фази 3
+User Service виокремлено як перший мікросервіс (FrankenPHP, власна БД, :8001), видає JWT, які моноліт
+криптографічно приймає (спільний keypair). Адитивно — моноліт незмінний. 14 функц. тестів зелені.
+Деплой свідомо відкладено (блокер: UUID-cutover у `develop` стирає прод-дані).
+
+## Залишок / наступні підфази (потребують вибору напрямку)
+- **Прод-розгортання user-service**: `compose.prod.yaml` (user-service + db-user + JWT-ключі), CI build/push,
+  секрети (JWT_PASSPHRASE, DB пароль).
+- **Фаза 4** — виокремлення Catalog Service (наступна за планом architecture-доку).
+- Дрібніші підфази Фази 3: перенесення OAuth у сервіс, cutover web/admin моноліту, API Gateway.
+- HTTP-демо crosс-trust проти моноліту — заблоковано хостовим Apache на :80 (доведено криптографічно).
 
 ## Ризики / підводні камені
 1. **JWT identity claim**: монолітний lexik вантажить user по `sub`(email) з власної БД → email мусить
