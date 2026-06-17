@@ -1,3 +1,72 @@
+# Фаза 3 — Виокремлення User Service (MVP, Strangler Fig крок 1)
+
+> **Мета:** перший справжній мікросервіс. Окремий Symfony-застосунок у `services/user-service/`
+> (monorepo), власна БД `db-user`, порт **8001**. Видає JWT (RS256). Моноліт **довіряє** цим
+> токенам, бо підпис тим самим keypair + ті самі fixture-користувачі.
+> Гілка: `feat/phase3-user-service`. **Адитивно**: web/admin-сесії та OAuth поки лишаються в моноліті.
+
+## Рішення (узгоджено)
+- **Layout:** monorepo-підкаталог `services/user-service/`.
+- **Обсяг:** MVP — сервіс owns identity API (register/login/JWT, `/api/users`, health). Моноліт майже не
+  чіпаємо. Web/admin + OAuth — у моноліті (наступні підфази).
+- **Gateway:** відкладено — сервіс на :8001, звертання напряму.
+- **Runtime (моя рекомендація):** FrankenPHP — один контейнер на сервіс (стандарт сучасного Symfony,
+  менше інфри, ніж php-fpm+nginx). Якщо волієш php-fpm+nginx як у моноліті — скажи.
+- **JWT keypair:** монтуємо наявні ключі моноліту (`config/jwt/`) у сервіс read-only → обидва підписують/
+  валідують однаковим RS256. Нуль змін у конфігу моноліту.
+
+## Чому моноліт не змінюється
+`^/api` фаєрвол моноліту вже `jwt: ~` (валідує підпис public-key'ем, тоді вантажить user по email-claim
+з provider). Якщо токен підписаний тим самим private key і `sub`=email існує у БД моноліту (ті самі
+фікстури `admin@example.com`/`user@example.com`) → моноліт приймає токен сервісу. Демонструє «trust».
+
+## Під-задача 1 — Скелет сервісу + інфраструктура (greenfield, новий каталог) ✅
+- [x] `services/user-service/`: composer.json (Symfony 7.4), Kernel, public/index.php, bin/console,
+      config/{bundles,packages/*,routes,services}, .env (+ .env.local з JWT_PASSPHRASE, gitignored)
+- [x] `Dockerfile` (**FrankenPHP**) + `compose.yaml`: `db-user` (postgres16), `user-service` (:8001),
+      монтаж `../../config/jwt:/jwt:ro`
+- [x] `HealthController`: `/health/live`, `/health/ready` (ping БД)
+- [x] ✅ Verify: контейнер піднявся; `/health/live`→`{"status":"ok"}`, 404 на невідомому маршруті
+- [x] ⚠️ **Фікс продуктивності:** `vendor/`+`var/` винесено в named-volumes — без цього кожен запит
+      перевищував `max_execution_time` (десятки тис. stat() по 9p bind-mount; `about` падав 85с→2.7с)
+
+## Під-задача 2 — User-домен + БД ✅
+- [x] `src/Entity/User.php` (UUID PK, email unique, password nullable, roles JSON, fullName, googleId,
+      githubId) + `UserRepository` (PasswordUpgrader) + `doctrine.yaml`
+- [x] Міграція `users` (власна БД, public) + фікстури (admin/user — ті самі email, що в моноліті)
+- [x] ✅ Verify: `migrate` + `fixtures:load` на `db-user`; `schema:validate` [OK]
+
+## Під-задача 3 — Auth (register / login / users) ✅
+- [x] LexikJWT (спільний keypair), `security.yaml`: `json_login` `/api/auth/login`, `^/` stateless jwt
+- [x] `AuthController`: register (201) + login-stub-route; `UserController`: list (ADMIN) / get (self|ADMIN)
+- [x] ⚠️ **Фікс:** `json_login` потребує маршрут на check_path (RouterListener@32 > Firewall@8), інакше 404
+- [x] ✅ Verify: login→RS256 JWT (payload `username`=email+roles); `/api/users` 401/200; wrong pw 401
+
+## Під-задача 4 — Cross-trust демо + документація ✅ (частково)
+- [x] **Cross-trust доведено:** `openssl dgst -verify config/jwt/public.pem` токена сервісу → **Verified OK**;
+      payload `username=admin@example.com` є в БД моноліту → моноліт прийме токен
+- [x] `services/user-service/README.md`
+- [ ] HTTP-демо проти моноліту: :80 на хості зайнятий локальним **Apache (XAMPP)**, не Docker-nginx —
+      тому крос-trust показано криптографічно (еквівалентно й надійніше)
+- [ ] Автотести сервісу `phpunit` — **залишок** (manual E2E повністю зелений)
+- [ ] Відмітити §10 Фаза 3 в architecture-доку — **залишок**
+
+## Залишок / наступні підфази
+- Автоматичні `phpunit`-тести сервісу (health/register/login/guard) на SQLite in-memory.
+- Прод-розгортання нового сервісу: `compose.prod.yaml` (user-service + db-user + JWT-ключі), CI build/push,
+  секрети (JWT_PASSPHRASE, DB пароль) — окремий крок.
+- Перенесення OAuth, cutover web/admin моноліту, API Gateway.
+
+## Ризики / підводні камені
+1. **JWT identity claim**: монолітний lexik вантажить user по `sub`(email) з власної БД → email мусить
+   збігатися у фікстурах обох. (Повний cut-over — коли моноліт перестане мати users; не цей крок.)
+2. **Дублювання User-моделі** свідоме (Strangler): дві копії на час переходу — нормально.
+3. **FrankenPHP** — новий runtime у проєкті; ізольований у services/, моноліт не чіпає.
+4. **Порти/мережа Docker**: user-service і db-user в тій самій compose-мережі; :8001 назовні.
+5. **Дані**: власна `db-user` — окремий том, не перетинається з монолітною БД.
+
+---
+
 # Фаза 2.2 — Database-per-service: розділення схем PostgreSQL
 
 > **Мета:** завершити Фазу 2 з §10 architecture — кожен модуль отримує власну PostgreSQL-схему
