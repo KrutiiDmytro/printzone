@@ -48,7 +48,9 @@
 - [x] `services/user-service/README.md`
 - [ ] HTTP-демо проти моноліту: :80 на хості зайнятий локальним **Apache (XAMPP)**, не Docker-nginx —
       тому крос-trust показано криптографічно (еквівалентно й надійніше)
-- [ ] Автотести сервісу `phpunit` — **залишок** (manual E2E повністю зелений)
+- [x] Автотести сервісу `phpunit` — **OK (14 tests, 27 assertions)**: health(2), auth(6: register 201/409/422×2,
+      login JWT/401), users(6: 401/200/403, self/admin/forbidden). SQLite in-memory + окремий passphrase-free
+      тестовий keypair (`config/jwt-test`) → самодостатньо, CI-ready
 - [ ] Відмітити §10 Фаза 3 в architecture-доку — **залишок**
 
 ## Залишок / наступні підфази

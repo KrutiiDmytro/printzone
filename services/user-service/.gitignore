@@ -4,3 +4,4 @@
 /var/
 /composer.phar
 /config/reference.php
+/.phpunit.cache/
