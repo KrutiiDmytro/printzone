@@ -1090,9 +1090,18 @@ public function ready(Connection $db): JsonResponse
 
 Ціль: Основний домен читання, дозволяє Cart та Order відв'язатися від даних продуктів.
 
-- [ ] Новий Symfony додаток для Catalog Service
-- [ ] Cart та Order отримують дані продуктів через HTTP
-- [ ] Storage Service виокремлений або вбудований
+- [x] Новий Symfony додаток для Catalog Service — `services/catalog-service/` (FrankenPHP, Symfony 7.4),
+      власна БД `db-catalog`, порт 8002; read-API `GET /api/products` (фільтри+пагінація), `/products/{id}`,
+      `/categories`, `/health/*`; service-to-service JWT (спільний keypair, лише верифікація); 8 функц. тестів
+- [x] Перший споживач на HTTP — монолітний Export `ProductExtractor` читає продукти з сервісу через
+      `CatalogProductClient` (HttpClient + сервісний JWT, посторінково), а не з локальних Doctrine-таблиць
+- [ ] Cart та Order отримують дані продуктів через HTTP — **відкладено** (hot-path вітрини/кошика лишається
+      на моноліті в цьому MVP)
+- [ ] Storage Service виокремлений або вбудований — **відкладено**
+
+> **Обсяг MVP (Strangler крок 2):** сервіс + read-API + один показовий споживач (Export). Вітрина, рендер
+> кошика й адмінка поки читають каталог із моноліту. Поза обсягом: `stock_reservations` (Фаза 5),
+> PrinterModel/атрибути, write-API/адмінка на сервісі, API Gateway, прод-розгортання.
 
 ### Фаза 5 — Виокремлення Cart + Order Services + Checkout Saga
 

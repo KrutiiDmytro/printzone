@@ -1,3 +1,77 @@
+# Фаза 4 — Виокремлення Catalog Service (MVP, Strangler Fig крок 2) — ПЛАН, очікує апрув
+
+> **Мета:** другий мікросервіс — Catalog. Окремий Symfony 7.4 застосунок `services/catalog-service/`
+> (FrankenPHP), власна БД `db-catalog`, порт **8002**. Експонує **read-API** каталогу + health.
+> Один показовий споживач моноліту переходить на HTTP. Гілка: `feat/phase4-catalog-service`.
+> **Адитивно**: вітрина, кошик-рендер, адмінка поки читають каталог із моноліту.
+
+## Розвідка (факт) — споживачі Catalog у моноліті
+- **Вітрина (hot path):** `ProductController`, `ShopController`, `SearchController`, Twig
+  (`BrandExtension.all_brands`, `CategoryExtension.get_categories/brand_models`, `ProductImageExtension`).
+- **Кошик:** `CartService` — `find`/`findBy` Product на `add` + повний Product для рендеру (ціна/сток/назва/img).
+- **Checkout:** `StripeCheckoutService` — line-items з product-обʼєктів кошика.
+- **Export:** `ProductExtractor` — Doctrine QB прямо по `Product` (`leftJoin category`).
+- **Адмінка:** `Product/Category/Brand/PrinterModel CrudController`, `DashboardController`.
+- **Картинки:** `ProductImageService`, `ProductImagePresignService`, `MediaController` (S3 presign).
+- Сутності: `Product, Category, Brand, PrinterModel, ProductAttribute` (інтра-Catalog FK, без крос-доменних).
+
+## Рішення на узгодження (див. питання)
+1. **Який споживач переводимо на HTTP** (показова межа). Рекомендація: **Export `ProductExtractor`** —
+   ізольований, асинхронний, не hot-path, точковий read (розбіжність даних некритична). Відповідає §4.8 доку.
+2. **stock_reservations** — у MVP **відкласти** (немає Order-Saga-споживача; додамо у Фазі 5).
+3. **Runtime** — FrankenPHP (як user-service). **Admin/вітрина лишаються в моноліті.**
+
+## Відомий компроміс (свідомо, як у Фазі 3)
+catalog-service отримує власну `db-catalog`, засіяну тими ж фікстурами. Адмінка поки пише в каталог
+**моноліту** → дані сервісу можуть розходитися. Для MVP прийнятно (показовий read через Export — точковий),
+закриється коли адмінка/вітрина перейдуть на сервіс (наступні підфази).
+
+## Під-задача 1 — Скелет catalog-service + інфра ✅
+- [x] `services/catalog-service/` (патерни user-service: FrankenPHP, `db-catalog`+`catalog-service` :8002,
+      vendor/var named-volumes), `/health/live|ready`
+- [x] ✅ Verify: контейнер піднявся; health 200, 404 на невідомому маршруті
+
+## Під-задача 2 — Домен + БД + read-API ✅
+- [x] Сутності `Product/Category/Brand` (UUID PK; інтра-Catalog асоціації). PrinterModel/ProductAttribute —
+      відкладено (вітринні фічі лишились у моноліті)
+- [x] Міграція (через `diff` → коректні імена індексів/FK) + фікстури на `db-catalog`
+- [x] Read-API: `GET /api/products` (фільтри + пагінація), `/products/{id}`, `/categories`; ready з пінгом БД
+- [x] Service-to-service JWT: `^/api` верифікує підпис спільним keypair (lexik `jwt`-провайдер, без БД-юзерів)
+- [x] ✅ Verify: `migrate`+`fixtures`+`schema:validate [OK]`; API віддає дані; токен зі спільного keypair прийнято
+
+## Під-задача 3 — Перевести Export ProductExtractor на HTTP (моноліт) ✅
+- [x] `src/Export/Client/CatalogProductClient` → `GET {CATALOG_SERVICE_URL}/api/products` (HttpClient,
+      `auth_bearer` = сервісний JWT, timeout 5s)
+- [x] `ProductExtractor` переписано: посторінкове читання через клієнт (PAGE_SIZE 500), не Doctrine
+- [x] `.env`: `CATALOG_SERVICE_URL=http://host.docker.internal:8002`; клієнт через `#[Autowire]`
+- [x] ✅ Verify: `ProductExtractorTest` (HTTP-мок) 5/5; phpstan [OK]; монолітний контейнер дістає сервіс
+      (`host.docker.internal:8002/health/live` → ok). Повний export-E2E через адмінку — manual.
+
+## Під-задача 4 — Тести сервісу + документація ✅
+- [x] `phpunit` catalog-service: **OK (8 tests, 18 assertions)** — health(2), products(6: 401, list,
+      featured-filter, pagination, get-by-id 200/404). SQLite + тестовий keypair (мінт сервісних токенів)
+- [x] README сервісу + §10 Фаза 4 в architecture-доку відмічено
+- [x] ✅ Verify: усе зелене
+
+## Підсумок Фази 4
+Catalog Service виокремлено (read-model: products/categories/brands), FrankenPHP, власна `db-catalog`, :8002,
+read-API під service-to-service JWT (спільний keypair). Перший консюмер — монолітний Export — читає продукти
+з сервісу по HTTP. Адитивно: вітрина/кошик/адмінка лишились на моноліті. Тести: сервіс 8, екстрактор 5.
+
+## Залишок / наступні підфази
+- Перевести вітрину/кошик-рендер на сервіс (великий крок, hot-path) + write-API/адмінка на сервісі.
+- `stock_reservations` + Checkout Saga (Фаза 5: Cart+Order).
+- Прод-розгортання обох сервісів (compose.prod + CI + секрети).
+
+## Ризики
+1. **Обсяг вітрини** — свідомо НЕ чіпаємо (лишається на моноліті); інакше переписування пів-додатка.
+2. **Розбіжність даних** сервіс↔моноліт під час переходу (компроміс вище) — для Export некритично.
+3. **Сервіс-до-сервіс auth** — моноліт→catalog потребує токен; перевикористати спільний JWT keypair
+   (як у Фазі 3), згенерувати короткий сервісний токен.
+4. **Продуктивність** — Export посторінково (limit 500), не одним запитом.
+
+---
+
 # Фаза 3 — Виокремлення User Service (MVP, Strangler Fig крок 1)
 
 > **Мета:** перший справжній мікросервіс. Окремий Symfony-застосунок у `services/user-service/`
