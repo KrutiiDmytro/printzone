@@ -10,11 +10,15 @@ namespace App\Catalog\View;
  */
 final class CategoryView
 {
+    /**
+     * @param self[] $children
+     */
     public function __construct(
         private readonly string $id,
         private readonly ?string $name,
         private readonly ?string $slug,
         private readonly ?string $parentId,
+        private readonly array $children = [],
     ) {
     }
 
@@ -23,11 +27,17 @@ final class CategoryView
      */
     public static function fromArray(array $data): self
     {
+        $children = [];
+        if (isset($data['children']) && is_array($data['children'])) {
+            $children = array_map(self::fromArray(...), $data['children']);
+        }
+
         return new self(
             (string) ($data['id'] ?? ''),
             isset($data['name']) ? (string) $data['name'] : null,
             isset($data['slug']) ? (string) $data['slug'] : null,
             isset($data['parentId']) ? (string) $data['parentId'] : null,
+            $children,
         );
     }
 
@@ -49,6 +59,14 @@ final class CategoryView
     public function getParentId(): ?string
     {
         return $this->parentId;
+    }
+
+    /**
+     * @return self[]
+     */
+    public function getChildren(): array
+    {
+        return $this->children;
     }
 
     /**

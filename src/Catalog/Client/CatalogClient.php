@@ -88,13 +88,31 @@ class CatalogClient
     }
 
     /**
+     * Root categories with their children nested (built from the flat list so the
+     * navbar dropdowns work).
+     *
      * @return CategoryView[]
      */
     public function rootCategories(): array
     {
-        $payload = $this->get('/api/categories', ['root' => 1]);
+        $all = $this->get('/api/categories')['data'] ?? [];
 
-        return array_map(CategoryView::fromArray(...), $payload['data'] ?? []);
+        $childrenByParent = [];
+        foreach ($all as $row) {
+            if (!empty($row['parentId'])) {
+                $childrenByParent[(string) $row['parentId']][] = $row;
+            }
+        }
+
+        $roots = [];
+        foreach ($all as $row) {
+            if (empty($row['parentId'])) {
+                $row['children'] = $childrenByParent[(string) $row['id']] ?? [];
+                $roots[] = CategoryView::fromArray($row);
+            }
+        }
+
+        return $roots;
     }
 
     public function category(string $slug): ?CategoryView

@@ -12,6 +12,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
+use Symfony\Component\Uid\Uuid;
 
 class CheckoutController extends AbstractController
 {
@@ -64,10 +65,10 @@ class CheckoutController extends AbstractController
             $product = $cartItem['product'];
             $orderItem = new OrderItem();
             $orderItem->setOrderRef($order);
-            $orderItem->setProductId($product->getId());
-            $orderItem->setProductName($product->getName());
+            $orderItem->setProductId(Uuid::fromString((string) $product->getId()));
+            $orderItem->setProductName((string) $product->getName());
             $orderItem->setQuantity($cartItem['quantity']);
-            $orderItem->setPrice($product->getPrice());
+            $orderItem->setPrice((int) $product->getPrice());
             $order->getItems()->add($orderItem);
         }
 

@@ -17,7 +17,7 @@ class StripeCheckoutService
     }
 
     /**
-     * @param array<int, array{product: \App\Catalog\Domain\Entity\Product, quantity: int, total: int}> $cartItems
+     * @param array<int, array{product: \App\Catalog\View\ProductView, quantity: int, total: int}> $cartItems
      *
      * @return array{id: string, url: string}
      */
