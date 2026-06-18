@@ -13,7 +13,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: ExportJobRepository::class)]
-#[ORM\Table(name: 'export_jobs')]
+#[ORM\Table(name: 'export_jobs', schema: 'exports')]
 #[ORM\Index(columns: ['status'], name: 'idx_export_jobs_status')]
 #[ORM\Index(columns: ['created_at'], name: 'idx_export_jobs_created_at')]
 class ExportJob

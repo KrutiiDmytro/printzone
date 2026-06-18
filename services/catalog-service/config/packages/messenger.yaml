@@ -1,0 +1,25 @@
+framework:
+    messenger:
+        transports:
+            # Inbound integration events from the monolith's RabbitMQ `events`
+            # topic exchange. JSON serializer + the shared FQCN in the `type`
+            # header let us decode the monolith's messages into our own
+            # App\Messaging\Domain\IntegrationEvent. Own queue, bound to order.*.
+            events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        catalog_events:
+                            binding_keys: ['order.*']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
+        default_bus: messenger.bus.default
+        buses:
+            messenger.bus.default: []

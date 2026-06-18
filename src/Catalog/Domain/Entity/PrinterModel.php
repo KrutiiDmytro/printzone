@@ -7,7 +7,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: PrinterModelRepository::class)]
-#[ORM\Table(name: 'printer_models')]
+#[ORM\Table(name: 'printer_models', schema: 'catalog')]
 class PrinterModel
 {
     #[ORM\Id]

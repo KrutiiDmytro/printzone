@@ -16,6 +16,10 @@ framework:
             # outbox relay; the routing key is set per-message (e.g. order.OrderPaid).
             events:
                 dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                # JSON on the wire so a non-PHP-native consumer (catalog-service) can read it.
+                # The `type` header carries the FQCN App\Messaging\Domain\IntegrationEvent,
+                # which is duplicated in catalog-service so its Messenger maps the message back.
+                serializer: messenger.transport.symfony_serializer
                 options:
                     exchange:
                         name: events

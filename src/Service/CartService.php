@@ -4,9 +4,9 @@ namespace App\Service;
 
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
-use App\Catalog\Domain\Entity\Product;
+use App\Catalog\Client\CatalogClient;
+use App\Catalog\View\ProductView;
 use App\Repository\CartRepository;
-use App\Repository\ProductRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -18,32 +18,24 @@ class CartService
 
     public function __construct(
         private RequestStack $requestStack,
-        private ProductRepository $productRepository,
+        private CatalogClient $catalog,
         private CartRepository $cartRepository,
         private EntityManagerInterface $entityManager,
         private Security $security
     ) {
     }
 
-    /**
-     * Добавить товар в корзину.
-     */
     public function add(string $productId, int $quantity = 1): void
     {
         $user = $this->security->getUser();
 
         if ($user) {
-            // Для залогиненных — БД
             $this->addToDatabase($user, $productId, $quantity);
         } else {
-            // Для гостей — сессия
             $this->addToSession($productId, $quantity);
         }
     }
 
-    /**
-     * Удалить товар из корзины.
-     */
     public function remove(string $productId): void
     {
         $user = $this->security->getUser();
@@ -55,9 +47,6 @@ class CartService
         }
     }
 
-    /**
-     * Обновить количество.
-     */
     public function update(string $productId, int $quantity): void
     {
         $user = $this->security->getUser();
@@ -69,9 +58,6 @@ class CartService
         }
     }
 
-    /**
-     * Очистить корзину.
-     */
     public function clear(): void
     {
         $user = $this->security->getUser();
@@ -83,9 +69,6 @@ class CartService
         }
     }
 
-    /**
-     * Получить содержимое корзины.
-     */
     public function getCart(): array
     {
         $user = $this->security->getUser();
@@ -97,9 +80,6 @@ class CartService
         return $this->getCartFromSession();
     }
 
-    /**
-     * Перенести корзину из сессии в БД (при входе).
-     */
     public function migrateSessionToDatabase(): void
     {
         $user = $this->security->getUser();
@@ -113,38 +93,34 @@ class CartService
             return;
         }
 
-        $products = $this->productRepository->findBy(['id' => array_keys($sessionCart)]);
-        $productMap = [];
-        foreach ($products as $product) {
-            $productMap[(string) $product->getId()] = $product;
-        }
+        $productMap = $this->catalog->productsByIds(array_map('strval', array_keys($sessionCart)));
 
         foreach ($sessionCart as $productId => $quantity) {
-            if (isset($productMap[$productId])) {
-                $this->addProductToDatabase($user, $productMap[$productId], $quantity);
+            if (isset($productMap[(string) $productId])) {
+                $this->addProductToDatabase($user, $productMap[(string) $productId], $quantity);
             }
         }
 
         $this->clearSession();
     }
 
-    // === Методы для работы с БД ===
+    // === Database ===
 
     private function addToDatabase($user, string $productId, int $quantity): void
     {
-        $cart = $this->getOrCreateCart($user);
-        $product = $this->productRepository->find(Uuid::fromString($productId));
+        $product = $this->catalog->product($productId);
 
-        if (!$product) {
+        if (null === $product) {
             return;
         }
 
+        $cart = $this->getOrCreateCart($user);
         $this->upsertCartItem($cart, $product, $quantity);
         $cart->setUpdatedAt(new \DateTimeImmutable());
         $this->entityManager->flush();
     }
 
-    private function addProductToDatabase($user, Product $product, int $quantity): void
+    private function addProductToDatabase($user, ProductView $product, int $quantity): void
     {
         $cart = $this->getOrCreateCart($user);
         $this->upsertCartItem($cart, $product, $quantity);
@@ -152,11 +128,11 @@ class CartService
         $this->entityManager->flush();
     }
 
-    private function upsertCartItem(Cart $cart, Product $product, int $quantity): void
+    private function upsertCartItem(Cart $cart, ProductView $product, int $quantity): void
     {
         $existingItem = null;
         foreach ($cart->getItems() as $item) {
-            if ($item->getProductId()->equals($product->getId())) {
+            if ((string) $item->getProductId() === $product->getId()) {
                 $existingItem = $item;
                 break;
             }
@@ -166,9 +142,9 @@ class CartService
             $existingItem->setQuantity($existingItem->getQuantity() + $quantity);
         } else {
             $cartItem = new CartItem();
-            $cartItem->setProductId($product->getId());
-            $cartItem->setProductName($product->getName());
-            $cartItem->setPrice($product->getPrice());
+            $cartItem->setProductId(Uuid::fromString($product->getId()));
+            $cartItem->setProductName((string) $product->getName());
+            $cartItem->setPrice((int) $product->getPrice());
             $cartItem->setQuantity($quantity);
             $cart->addItem($cartItem);
         }
@@ -182,9 +158,8 @@ class CartService
             return;
         }
 
-        $productUuid = Uuid::fromString($productId);
         foreach ($cart->getItems() as $item) {
-            if ($item->getProductId()->equals($productUuid)) {
+            if ((string) $item->getProductId() === $productId) {
                 $cart->removeItem($item);
                 break;
             }
@@ -202,9 +177,8 @@ class CartService
             return;
         }
 
-        $productUuid = Uuid::fromString($productId);
         foreach ($cart->getItems() as $item) {
-            if ($item->getProductId()->equals($productUuid)) {
+            if ((string) $item->getProductId() === $productId) {
                 if ($quantity <= 0) {
                     $cart->removeItem($item);
                 } else {
@@ -234,22 +208,15 @@ class CartService
         $cart = $this->cartRepository->findOneByUserId($user->getId());
 
         if (!$cart) {
-            return [
-                'items' => [],
-                'total' => 0,
-                'count' => 0,
-            ];
+            return ['items' => [], 'total' => 0, 'count' => 0];
         }
 
         $productIds = [];
         foreach ($cart->getItems() as $item) {
-            $productIds[] = $item->getProductId();
+            $productIds[] = (string) $item->getProductId();
         }
 
-        $productMap = [];
-        foreach ($this->productRepository->findBy(['id' => $productIds]) as $product) {
-            $productMap[(string) $product->getId()] = $product;
-        }
+        $productMap = $this->catalog->productsByIds($productIds);
 
         $cartItems = [];
         $total = 0;
@@ -290,7 +257,7 @@ class CartService
         return $cart;
     }
 
-    // === Методы для работы с сессией ===
+    // === Session ===
 
     private function addToSession(string $productId, int $quantity): void
     {
@@ -342,20 +309,16 @@ class CartService
             return ['items' => [], 'total' => 0, 'count' => 0];
         }
 
-        $products = $this->productRepository->findBy(['id' => array_keys($cart)]);
-        $productMap = [];
-        foreach ($products as $product) {
-            $productMap[(string) $product->getId()] = $product;
-        }
+        $productMap = $this->catalog->productsByIds(array_map('strval', array_keys($cart)));
 
         $cartItems = [];
         $total = 0;
 
         foreach ($cart as $productId => $quantity) {
-            $product = $productMap[$productId] ?? null;
+            $product = $productMap[(string) $productId] ?? null;
 
             if ($product && $product->getStock() >= $quantity) {
-                $itemTotal = $product->getPrice() * $quantity;
+                $itemTotal = (int) $product->getPrice() * $quantity;
                 $cartItems[] = [
                     'product' => $product,
                     'quantity' => $quantity,

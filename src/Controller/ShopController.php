@@ -2,9 +2,7 @@
 
 namespace App\Controller;
 
-use App\Repository\BrandRepository;
-use App\Repository\CategoryRepository;
-use App\Repository\ProductRepository;
+use App\Catalog\Client\CatalogClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,154 +10,122 @@ use Symfony\Component\Routing\Attribute\Route;
 
 class ShopController extends AbstractController
 {
+    public function __construct(private readonly CatalogClient $catalog)
+    {
+    }
+
     #[Route('/shop', name: 'app_shop')]
-    public function index(
-        Request $request,
-        ProductRepository $productRepository,
-        CategoryRepository $categoryRepository
-    ): Response {
-        [$filters, $priceParams] = $this->buildFilters($request);
-        $products = $productRepository->findWithFilters($filters);
-        $priceRange = $productRepository->getPriceRange();
-        $categories = $categoryRepository->findAllRootCategories();
+    public function index(Request $request): Response
+    {
+        [$query, $priceParams] = $this->buildQuery($request);
+        $result = $this->catalog->products($query);
 
         return $this->render('shop/index.html.twig', [
-            'products' => $products,
-            'categories' => $categories,
-            'priceRange' => $priceRange,
+            'products' => $result['items'],
+            'categories' => $this->catalog->rootCategories(),
+            'priceRange' => $result['priceRange'],
             'priceParams' => $priceParams,
-            'currentSort' => $filters['sort'] ?? '',
+            'currentSort' => $query['sort'] ?? '',
         ]);
     }
 
     #[Route('/category/{slug}', name: 'app_category_show')]
-    public function showCategory(
-        string $slug,
-        Request $request,
-        CategoryRepository $categoryRepository,
-        ProductRepository $productRepository
-    ): Response {
-        $category = $categoryRepository->findBySlug($slug);
-
-        if (!$category) {
+    public function showCategory(string $slug, Request $request): Response
+    {
+        $category = $this->catalog->category($slug);
+        if (null === $category) {
             throw $this->createNotFoundException('Category not found');
         }
 
-        [$filters, $priceParams] = $this->buildFilters($request, category: $category);
-        $products = $productRepository->findWithFilters($filters);
-        $priceRange = $productRepository->getPriceRange();
-        $categories = $categoryRepository->findAllRootCategories();
+        [$query, $priceParams] = $this->buildQuery($request, categorySlug: $slug);
+        $result = $this->catalog->products($query);
 
         return $this->render('shop/index.html.twig', [
-            'products' => $products,
-            'categories' => $categories,
+            'products' => $result['items'],
+            'categories' => $this->catalog->rootCategories(),
             'currentCategory' => $category,
-            'priceRange' => $priceRange,
+            'priceRange' => $result['priceRange'],
             'priceParams' => $priceParams,
-            'currentSort' => $filters['sort'] ?? '',
+            'currentSort' => $query['sort'] ?? '',
         ]);
     }
 
     #[Route('/brand/{slug}', name: 'shop_brand')]
-    public function showBrand(
-        string $slug,
-        Request $request,
-        BrandRepository $brandRepository,
-        ProductRepository $productRepository,
-        CategoryRepository $categoryRepository
-    ): Response {
-        $brand = $brandRepository->findBySlug($slug);
-
-        if (!$brand) {
+    public function showBrand(string $slug, Request $request): Response
+    {
+        $brand = $this->catalog->brand($slug);
+        if (null === $brand) {
             throw $this->createNotFoundException('Brand not found');
         }
 
-        [$filters, $priceParams] = $this->buildFilters($request, brand: $brand);
-        $products = $productRepository->findWithFilters($filters);
-        $priceRange = $productRepository->getPriceRange();
+        [$query, $priceParams] = $this->buildQuery($request, brandSlug: $slug);
+        $result = $this->catalog->products($query);
 
         return $this->render('shop/index.html.twig', [
-            'products' => $products,
-            'categories' => $categoryRepository->findAllRootCategories(),
+            'products' => $result['items'],
+            'categories' => $this->catalog->rootCategories(),
             'currentBrand' => $brand,
-            'priceRange' => $priceRange,
+            'priceRange' => $result['priceRange'],
             'priceParams' => $priceParams,
-            'currentSort' => $filters['sort'] ?? '',
+            'currentSort' => $query['sort'] ?? '',
         ]);
     }
 
     #[Route('/brand/{brandSlug}/category/{categorySlug}', name: 'shop_brand_category')]
-    public function showBrandCategory(
-        string $brandSlug,
-        string $categorySlug,
-        Request $request,
-        BrandRepository $brandRepository,
-        CategoryRepository $categoryRepository,
-        ProductRepository $productRepository
-    ): Response {
-        $brand = $brandRepository->findBySlug($brandSlug);
-        $category = $categoryRepository->findBySlug($categorySlug);
-
-        if (!$brand || !$category) {
+    public function showBrandCategory(string $brandSlug, string $categorySlug, Request $request): Response
+    {
+        $brand = $this->catalog->brand($brandSlug);
+        $category = $this->catalog->category($categorySlug);
+        if (null === $brand || null === $category) {
             throw $this->createNotFoundException();
         }
 
-        [$filters, $priceParams] = $this->buildFilters($request, category: $category, brand: $brand);
-        $products = $productRepository->findWithFilters($filters);
-        $priceRange = $productRepository->getPriceRange();
+        [$query, $priceParams] = $this->buildQuery($request, categorySlug: $categorySlug, brandSlug: $brandSlug);
+        $result = $this->catalog->products($query);
 
         return $this->render('shop/index.html.twig', [
-            'products' => $products,
-            'categories' => $categoryRepository->findAllRootCategories(),
+            'products' => $result['items'],
+            'categories' => $this->catalog->rootCategories(),
             'currentBrand' => $brand,
             'currentCategory' => $category,
-            'priceRange' => $priceRange,
+            'priceRange' => $result['priceRange'],
             'priceParams' => $priceParams,
-            'currentSort' => $filters['sort'] ?? '',
+            'currentSort' => $query['sort'] ?? '',
         ]);
     }
 
     #[Route('/categories', name: 'app_categories')]
-    public function categories(CategoryRepository $categoryRepository): Response
+    public function categories(): Response
     {
-        $categories = $categoryRepository->findAllRootCategories();
-
         return $this->render('shop/categories.html.twig', [
-            'categories' => $categories,
+            'categories' => $this->catalog->rootCategories(),
         ]);
     }
 
     /**
-     * Extracts price/sort params from request and builds the filters array.
-     *
-     * @return array{0: array, 1: array{min: float|null, max: float|null}}
+     * @return array{0: array<string, mixed>, 1: array{min: float|null, max: float|null}}
      */
-    private function buildFilters(
-        Request $request,
-        mixed $category = null,
-        mixed $brand = null
-    ): array {
+    private function buildQuery(Request $request, ?string $categorySlug = null, ?string $brandSlug = null): array
+    {
         $priceMinEur = $request->query->get('price_min');
         $priceMaxEur = $request->query->get('price_max');
-        $sort = $request->query->get('sort', '');
 
-        $filters = [
-            'category' => $category,
-            'brand' => $brand,
-            'sort' => $sort,
+        $query = [
+            'sort' => $request->query->get('sort', ''),
+            'categorySlug' => $categorySlug,
+            'brandSlug' => $brandSlug,
         ];
-
         $priceParams = ['min' => null, 'max' => null];
 
         if (null !== $priceMinEur && '' !== $priceMinEur) {
-            $filters['minPrice'] = (int) round((float) $priceMinEur * 100);
+            $query['priceMin'] = (int) round((float) $priceMinEur * 100);
             $priceParams['min'] = (float) $priceMinEur;
         }
         if (null !== $priceMaxEur && '' !== $priceMaxEur) {
-            $filters['maxPrice'] = (int) round((float) $priceMaxEur * 100);
+            $query['priceMax'] = (int) round((float) $priceMaxEur * 100);
             $priceParams['max'] = (float) $priceMaxEur;
         }
 
-        return [$filters, $priceParams];
+        return [$query, $priceParams];
     }
 }

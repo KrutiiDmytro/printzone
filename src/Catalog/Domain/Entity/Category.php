@@ -11,7 +11,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity(repositoryClass: CategoryRepository::class)]
-#[ORM\Table(name: 'categories')]
+#[ORM\Table(name: 'categories', schema: 'catalog')]
 #[ORM\Index(columns: ['parent_id'], name: 'idx_categories_parent_id')]
 #[ApiResource(
     normalizationContext: ['groups' => ['category:read']],

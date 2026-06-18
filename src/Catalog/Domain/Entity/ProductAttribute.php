@@ -8,7 +8,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
-#[ORM\Table(name: 'product_attributes')]
+#[ORM\Table(name: 'product_attributes', schema: 'catalog')]
 #[ORM\Index(columns: ['product_id'], name: 'idx_product_attributes_product_id')]
 #[ApiResource(
     normalizationContext: ['groups' => ['product_attribute:read']],

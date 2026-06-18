@@ -4,10 +4,9 @@ namespace App\Tests\Unit\Service;
 
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
-use App\Catalog\Domain\Entity\Category;
-use App\Catalog\Domain\Entity\Product;
+use App\Catalog\Client\CatalogClient;
+use App\Catalog\View\ProductView;
 use App\Repository\CartRepository;
-use App\Repository\ProductRepository;
 use App\Service\CartService;
 use App\User\Domain\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
@@ -22,7 +21,7 @@ class CartServiceTest extends TestCase
 {
     private CartService $cartService;
     private $requestStack;
-    private $productRepository;
+    private $catalog;
     private $cartRepository;
     private $entityManager;
     private $security;
@@ -30,38 +29,29 @@ class CartServiceTest extends TestCase
     protected function setUp(): void
     {
         $this->requestStack = $this->createMock(RequestStack::class);
-        $this->productRepository = $this->createMock(ProductRepository::class);
+        $this->catalog = $this->createMock(CatalogClient::class);
         $this->cartRepository = $this->createMock(CartRepository::class);
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
         $this->security = $this->createMock(Security::class);
 
         $this->cartService = new CartService(
             $this->requestStack,
-            $this->productRepository,
+            $this->catalog,
             $this->cartRepository,
             $this->entityManager,
             $this->security
         );
     }
 
-    private function makeProduct(Uuid $id, string $name, int $price, int $stock = 0): Product
+    private function makeProduct(Uuid $id, string $name, int $price, int $stock = 0): ProductView
     {
-        $category = new Category();
-        $category->setName('Test Category');
-        $category->setSlug('test-category');
-
-        $product = new Product();
-        $product->setName($name);
-        $product->setPrice($price);
-        $product->setStock($stock);
-        $product->setCategory($category);
-
-        $reflection = new \ReflectionClass($product);
-        $idProperty = $reflection->getProperty('id');
-        $idProperty->setAccessible(true);
-        $idProperty->setValue($product, $id);
-
-        return $product;
+        return ProductView::fromArray([
+            'id' => (string) $id,
+            'name' => $name,
+            'price' => $price,
+            'stock' => $stock,
+            'category' => ['id' => (string) Uuid::v4(), 'name' => 'Test Category', 'slug' => 'test-category'],
+        ]);
     }
 
     public function testRemoveFromSession(): void
@@ -134,7 +124,7 @@ class CartServiceTest extends TestCase
 
         $this->security->method('getUser')->willReturn($user);
         $this->cartRepository->method('findOneByUserId')->willReturn(null);
-        $this->productRepository->method('find')->with($productId)->willReturn($product);
+        $this->catalog->method('product')->with((string) $productId)->willReturn($product);
 
         $this->entityManager->expects($this->once())->method('persist');
         $this->entityManager->expects($this->exactly(2))->method('flush');
@@ -162,7 +152,7 @@ class CartServiceTest extends TestCase
 
         $this->security->method('getUser')->willReturn($user);
         $this->cartRepository->method('findOneByUserId')->willReturn($cart);
-        $this->productRepository->method('find')->with($productId)->willReturn($product);
+        $this->catalog->method('product')->with((string) $productId)->willReturn($product);
 
         $this->entityManager->expects($this->once())->method('flush');
 
@@ -192,10 +182,10 @@ class CartServiceTest extends TestCase
         $this->cartRepository->method('findOneByUserId')
             ->willReturnOnConsecutiveCalls(null, $cart);
 
-        $this->productRepository->expects($this->once())
-            ->method('findBy')
-            ->with(['id' => [(string) $id1, (string) $id2]])
-            ->willReturn([$product1, $product2]);
+        $this->catalog->expects($this->once())
+            ->method('productsByIds')
+            ->with([(string) $id1, (string) $id2])
+            ->willReturn([(string) $id1 => $product1, (string) $id2 => $product2]);
 
         // persist: 1× (create cart); flush: 3× (create cart + 2× addProductToDatabase)
         $this->entityManager->expects($this->once())->method('persist');
@@ -218,9 +208,9 @@ class CartServiceTest extends TestCase
 
         $this->requestStack->method('getSession')->willReturn($session);
         $this->security->method('getUser')->willReturn(null);
-        $this->productRepository->method('findBy')
-            ->with(['id' => [(string) $id1, (string) $id2]])
-            ->willReturn([$product1, $product2]);
+        $this->catalog->method('productsByIds')
+            ->with([(string) $id1, (string) $id2])
+            ->willReturn([(string) $id1 => $product1, (string) $id2 => $product2]);
 
         $this->assertEquals(2, $this->cartService->getCount());
     }

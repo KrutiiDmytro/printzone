@@ -118,6 +118,14 @@ class StripeWebhookController extends AbstractController
         }
 
         $order->setStatus('FAILED');
+
+        // Release the HELD stock reservation in the Catalog Saga, atomically
+        // with the status change (transactional outbox → relay → RabbitMQ).
+        $this->outboxRecorder->record('order', 'OrderCancelled', [
+            'orderId' => (string) $order->getId(),
+            'items' => $order->toEventItems(),
+        ]);
+
         $this->entityManager->flush();
 
         $this->logger->info('Stripe webhook: order marked as FAILED', ['order_id' => $orderId]);

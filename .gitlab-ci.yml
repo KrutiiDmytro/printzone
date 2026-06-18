@@ -55,12 +55,16 @@ audit:composer:
   stage: validate
   script:
     - echo "=== Composer security audit ==="
+    # --locked audits composer.lock, NOT the installed vendor/. The shell runner
+    # reuses its build dir, where earlier root-running docker jobs leave a stale
+    # root-owned vendor/; without --locked the audit read that old tree (2.8.0)
+    # instead of the committed lock and failed on an already-patched advisory.
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
         composer:2 \
-        composer audit --format=plain
+        sh -c "git config --global --add safe.directory /app && composer audit --locked --format=plain"
   rules: *rules_mr_develop
 
 cs:fixer:
@@ -111,7 +115,7 @@ build:image:
         -w /app \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
-        sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test"
+        sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test && rm -f var/test.db var/test.db-wal var/test.db-shm"
   needs:
     - build:image
   rules: *rules_mr_develop

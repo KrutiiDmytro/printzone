@@ -1075,17 +1075,33 @@ public function ready(Connection $db): JsonResponse
 
 Ціль: Перший самостійний мікросервіс — найменша зв'язність.
 
-- [ ] Новий Symfony додаток для User Service
-- [ ] API Gateway маршрутизує `/api/auth/*` → User Service
-- [ ] Моноліт читає `userId` + `roles` лише з JWT claims
+- [x] Новий Symfony додаток для User Service — `services/user-service/` (FrankenPHP, Symfony 7.4),
+      власна БД `db-user`, порт 8001; register/login/JWT, `/api/users`, `/health/*`; 14 функц. тестів
+- [x] Моноліт довіряє токенам сервісу — спільний RS256 keypair (підпис валідується монолітним public key:
+      `openssl ... Verified OK`), `username`-claim резолвиться через провайдер моноліту. Моноліт незмінний.
+- [ ] API Gateway маршрутизує `/api/auth/*` → User Service — **відкладено** (сервіс доступний напряму :8001)
+- [ ] Моноліт читає `userId` + `roles` лише з JWT claims (повний cutover — коли приберемо таблицю `users`
+      з моноліту; зараз перехідний стан зі знімком користувачів в обох)
+
+> **Обсяг MVP (Strangler крок 1):** сервіс додано адитивно; web/admin-сесії та OAuth поки в моноліті.
+> Поза обсягом цієї фази: API Gateway, перенесення OAuth, прод-розгортання сервісу (compose.prod + CI + секрети).
 
 ### Фаза 4 — Виокремлення Catalog Service
 
 Ціль: Основний домен читання, дозволяє Cart та Order відв'язатися від даних продуктів.
 
-- [ ] Новий Symfony додаток для Catalog Service
-- [ ] Cart та Order отримують дані продуктів через HTTP
-- [ ] Storage Service виокремлений або вбудований
+- [x] Новий Symfony додаток для Catalog Service — `services/catalog-service/` (FrankenPHP, Symfony 7.4),
+      власна БД `db-catalog`, порт 8002; read-API `GET /api/products` (фільтри+пагінація), `/products/{id}`,
+      `/categories`, `/health/*`; service-to-service JWT (спільний keypair, лише верифікація); 8 функц. тестів
+- [x] Перший споживач на HTTP — монолітний Export `ProductExtractor` читає продукти з сервісу через
+      `CatalogProductClient` (HttpClient + сервісний JWT, посторінково), а не з локальних Doctrine-таблиць
+- [ ] Cart та Order отримують дані продуктів через HTTP — **відкладено** (hot-path вітрини/кошика лишається
+      на моноліті в цьому MVP)
+- [ ] Storage Service виокремлений або вбудований — **відкладено**
+
+> **Обсяг MVP (Strangler крок 2):** сервіс + read-API + один показовий споживач (Export). Вітрина, рендер
+> кошика й адмінка поки читають каталог із моноліту. Поза обсягом: `stock_reservations` (Фаза 5),
+> PrinterModel/атрибути, write-API/адмінка на сервісі, API Gateway, прод-розгортання.
 
 ### Фаза 5 — Виокремлення Cart + Order Services + Checkout Saga
 

@@ -8,7 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
-#[ORM\Table(name: 'carts')]
+#[ORM\Table(name: 'carts', schema: 'cart')]
 #[ORM\Index(columns: ['updated_at'], name: 'idx_carts_updated_at')]
 class Cart
 {

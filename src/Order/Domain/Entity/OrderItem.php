@@ -8,7 +8,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Uid\Uuid;
 
 #[ORM\Entity]
-#[ORM\Table(name: 'order_items')]
+#[ORM\Table(name: 'order_items', schema: 'orders')]
 #[ORM\Index(columns: ['order_ref_id'], name: 'idx_order_items_order_ref_id')]
 #[ORM\Index(columns: ['product_id'], name: 'idx_order_items_product_id')]
 #[ApiResource(

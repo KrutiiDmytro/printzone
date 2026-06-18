@@ -4,55 +4,55 @@ declare(strict_types=1);
 
 namespace App\Export\Extractor;
 
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\Uid\Uuid;
+use App\Export\Client\CatalogProductClient;
 
+/**
+ * Extracts products for export from the Catalog Service over HTTP (Phase 4),
+ * paginating through the service API instead of querying local Doctrine tables.
+ */
 final class ProductExtractor implements ExportExtractorInterface
 {
-    public function __construct(private readonly EntityManagerInterface $em)
+    private const PAGE_SIZE = 500;
+
+    public function __construct(private readonly CatalogProductClient $catalog)
     {
     }
 
     public function extract(array $filters): array
     {
-        $qb = $this->em->createQueryBuilder()
-            ->select('p.id, p.name, p.description, p.price, p.stock, p.isFeatured, p.image, c.name AS category')
-            ->from('App\Catalog\Domain\Entity\Product', 'p')
-            ->leftJoin('p.category', 'c')
-            ->orderBy('p.id', 'ASC');
+        $rows = [];
+        $page = 1;
 
-        if (!empty($filters['category']) && Uuid::isValid((string) $filters['category'])) {
-            $qb->andWhere('c.id = :category')->setParameter('category', Uuid::fromString((string) $filters['category']), 'uuid');
-        }
-        if (isset($filters['isFeatured']) && '' !== $filters['isFeatured']) {
-            $qb->andWhere('p.isFeatured = :featured')->setParameter('featured', (bool) $filters['isFeatured']);
-        }
-        if (!empty($filters['priceMin'])) {
-            $qb->andWhere('p.price >= :priceMin')->setParameter('priceMin', (int) $filters['priceMin']);
-        }
-        if (!empty($filters['priceMax'])) {
-            $qb->andWhere('p.price <= :priceMax')->setParameter('priceMax', (int) $filters['priceMax']);
-        }
-        if (!empty($filters['stockMin'])) {
-            $qb->andWhere('p.stock >= :stockMin')->setParameter('stockMin', (int) $filters['stockMin']);
-        }
-        if (!empty($filters['stockMax'])) {
-            $qb->andWhere('p.stock <= :stockMax')->setParameter('stockMax', (int) $filters['stockMax']);
-        }
+        do {
+            $result = $this->catalog->fetchProducts($filters, $page, self::PAGE_SIZE);
+            foreach ($result['data'] as $product) {
+                $rows[] = $this->toRow($product);
+            }
+            $fetched = count($result['data']);
+            ++$page;
+        } while (self::PAGE_SIZE === $fetched);
 
-        $rows = $qb->getQuery()->getArrayResult();
+        return $rows;
+    }
 
-        return array_map(function (array $row): array {
-            return [
-                'id' => (string) $row['id'],
-                'name' => $row['name'],
-                'description' => $row['description'] ?? '',
-                'price' => number_format($row['price'] / 100, 2),
-                'stock' => $row['stock'],
-                'is_featured' => $row['isFeatured'] ? 'yes' : 'no',
-                'category' => $row['category'] ?? '',
-                'image' => $row['image'] ?? '',
-            ];
-        }, $rows);
+    /**
+     * @param array<string, mixed> $product
+     *
+     * @return array<string, mixed>
+     */
+    private function toRow(array $product): array
+    {
+        $category = $product['category'] ?? null;
+
+        return [
+            'id' => (string) ($product['id'] ?? ''),
+            'name' => $product['name'] ?? '',
+            'description' => $product['description'] ?? '',
+            'price' => number_format(((int) ($product['price'] ?? 0)) / 100, 2),
+            'stock' => $product['stock'] ?? 0,
+            'is_featured' => ($product['isFeatured'] ?? false) ? 'yes' : 'no',
+            'category' => is_array($category) ? ($category['name'] ?? '') : '',
+            'image' => $product['image'] ?? '',
+        ];
     }
 }
