@@ -1,3 +1,64 @@
+# Фаза 5 — Checkout Saga зі stock-резервуванням (MVP) — ПЛАН, очікує апрув
+
+> **Мета:** хореографічна Saga на наявному RabbitMQ-backbone. Монолітний Order емітить доменні події;
+> **catalog-service стає консюмером** і веде `stock_reservations` (HELD→COMMITTED/RELEASED). Розблоковано
+> Фазою 4.5 (cart/order на catalog-UUID). Гілка: `feat/phase5-checkout-saga`.
+> **Order/Cart лишаються в моноліті** (емітять події) — не виносимо в окремі застосунки (обсяг).
+
+## Розвідка (факт)
+- Backbone: outbox → `OutboxRelay` → `events` (topic exchange, ключ `aggregate.eventName`) → консюмер.
+- `OrderPaid` уже емітиться у `StripeWebhookController`. `OrderCreated`/`OrderCancelled` — ще нема.
+- ⚠️ `events` транспорт серіалізує **PHP-native** → крос-сервісно не читається. Треба **JSON-контракт**.
+- catalog-service: **нема ext-amqp / messenger**. RabbitMQ :5672 публічний (catalog → host.docker.internal).
+
+## Рішення на узгодження
+1. **Хореографія — одностороння** (рекоменд.): Order емітить `OrderCreated/OrderPaid/OrderCancelled`;
+   Catalog резервує/комітить/звільняє. (Повна двостороння — Catalog шле `StockReserved/Failed`, Order
+   реагує — не пасує до синхронного Stripe-redirect checkout; лишаємо як «емітимо для спостережуваності».)
+2. **Серіалізація — JSON** + спільний контракт-клас `App\Messaging\Domain\IntegrationEvent` (дублюється
+   в catalog-service з тим самим FQCN, щоб Messenger type-header змапився).
+3. **Order/Cart — у моноліті** (емітять події), без виокремлення сервісів.
+
+## Крок 1 — JSON-контракт подій (моноліт) ✅
+- [x] `events` транспорт: `serializer: messenger.transport.symfony_serializer` (JSON на дроті)
+- [x] ✅ Verify: relay→RabbitMQ→монолітний консюмер (OrderPaid лист) усе ще працює на JSON (purge старої черги).
+      `EventSerializerRoundTripTest` (JSON-тіло + `type`=FQCN, decode→IntegrationEvent) + ручний E2E
+      (outbox `OrderPaid`→relay→брокер→worker→лист у Mailpit `step1@printzone.test`)
+
+## Крок 2 — Моноліт емітить Order-події
+- [ ] `CheckoutController::pay`: після persist Order — `outboxRecorder->record('order','OrderCreated',
+      {orderId,userId,items:[{productId,quantity}],totalAmount})` (в тій же транзакції)
+- [ ] Stripe fail / `StripeWebhookController` payment_failed: `OrderCancelled {orderId, items:[...]}`
+- [ ] ✅ Verify: рядки в outbox; relay публікує `order.OrderCreated` у RabbitMQ
+
+## Крок 3 — catalog-service: інфра консюмера + stock_reservations
+- [ ] Dockerfile: + `amqp`; composer: `symfony/messenger` + `symfony/amqp-messenger`
+- [ ] `events` транспорт (consume): власна черга `catalog_events` binding `order.*`; JSON-серіалізатор;
+      контракт-клас `App\Messaging\Domain\IntegrationEvent`
+- [ ] `stock_reservations` (entity+міграція): id, product_id(uuid), order_id(uuid), quantity, status
+      (HELD/COMMITTED/RELEASED), created_at; унікальність (order_id, product_id) для ідемпотентності
+- [ ] compose: сервіс `catalog-worker` (messenger:consume events)
+- [ ] ✅ Verify: worker піднявся, черга прив'язана
+
+## Крок 4 — Saga-хендлер (catalog-service)
+- [ ] `OrderEventHandler` (#[AsMessageHandler] для IntegrationEvent):
+      `OrderCreated`→reserve HELD (idempotent), `OrderPaid`→COMMITTED + `products.stock -= qty`,
+      `OrderCancelled`→RELEASED. (Опц.: емітити `StockReserved/Failed` назад в exchange.)
+- [ ] ✅ Verify: phpunit (reserve/commit/release + дедуп); один консюм на подію
+
+## Крок 5 — E2E
+- [ ] Локально: checkout → `OrderCreated` → catalog HELD; оплата `4242`/webhook → `OrderPaid` → COMMITTED,
+      stock зменшився; скасування → RELEASED. Перевірити рядки `stock_reservations` + `products.stock`
+- [ ] phpunit (моноліт+catalog) + phpstan зелені
+
+## Ризики
+1. **Крос-сервісна серіалізація** (головне) — JSON + спільний FQCN-контракт; стара PHP-serialize черга — purge.
+2. **Ідемпотентність** — relay at-least-once; унікальність (order_id,product_id) + статус-переходи.
+3. **UUID-консистентність** — забезпечена Фазою 4.5 (cart/order на catalog-UUID).
+4. **Мережа** — catalog→RabbitMQ через host.docker.internal:5672 (dev).
+
+---
+
 # Фаза 4.5 — Catalog storefront cutover (catalog = джерело правди) — розблоковує Phase 5
 
 > **Мета:** вітрина + кошик моноліту читають каталог із **catalog-service** (а не локального Doctrine).
@@ -9,14 +70,14 @@
 `Brand/Category/ProductImage`) + `CartService` усі тримаються на Doctrine-каталозі. Вітрина+кошик мусять
 перейти **разом** (інакше `CartService.add` не знайде продукт). Адмінка-write → крок 5.
 
-## Крок 1 — catalog-service: канонічні дані + повний read-API
-- [ ] Фікстури → канонічний набір (4 root + 10 child категорій, 7 брендів, 10 продуктів; slug-и = монолітні)
-- [ ] `CategoryRepository` (findBySlug, findAllRoot), `BrandRepository` (findBySlug, findAll)
-- [ ] `ProductRepository.findByFilters`: + `categorySlug, brandSlug, q (search), sort, availableOnly(stock>0)`;
+## Крок 1 — catalog-service: канонічні дані + повний read-API ✅
+- [x] Фікстури → канонічний набір (4 root + 10 child категорій, 7 брендів, 10 продуктів; slug-и = монолітні)
+- [x] `CategoryRepository` (findBySlug, findAllRoot), `BrandRepository` (findBySlug, findAll)
+- [x] `ProductRepository.findByFilters`: + `categorySlug, brandSlug, q (search), sort, availableOnly(stock>0)`;
       `getPriceRange()`; `findByIds()` (для кошика). `availableOnly` за замовч. false → Export (Phase 4) не ламається
-- [ ] `ProductController`: розширити список (slug-фільтри, sort, q, availableOnly, featured, ids, priceRange у відповіді);
+- [x] `ProductController`: розширити список (slug-фільтри, sort, q, availableOnly, featured, ids, priceRange у відповіді);
       `CategoryController` (?root=1); новий `BrandController` (list). Без зміни схеми (міграція не потрібна)
-- [ ] ✅ Verify: fixtures:load; ендпоінти віддають дані; Export (Phase 4) усе ще зелений
+- [x] ✅ Verify: fixtures:load; ендпоінти віддають дані; Export (Phase 4) усе ще зелений
 
 ## Крок 2 — Моноліт: CatalogClient + view-DTO ✅
 - [x] `CatalogClient` (HttpClient + сервісний JWT, graceful-fallback на []) + `ProductView/CategoryView/
