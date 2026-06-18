@@ -30,7 +30,7 @@ final class ProductExtractor implements ExportExtractorInterface
             }
             $fetched = count($result['data']);
             ++$page;
-        } while ($fetched === self::PAGE_SIZE);
+        } while (self::PAGE_SIZE === $fetched);
 
         return $rows;
     }
