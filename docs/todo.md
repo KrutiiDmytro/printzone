@@ -54,16 +54,29 @@
 - [x] ✅ Verify: `OrderEventHandlerTest` 3/3 (HELD-дедуп; commit+списання один раз при повторі OrderPaid; release
       лишає stock). Повний сьют catalog-service **11 OK**. ⚠️ test-env `debug=false` → після нових сервісів `cache:clear --env=test`
 
-## Крок 5 — E2E
-- [ ] Локально: checkout → `OrderCreated` → catalog HELD; оплата `4242`/webhook → `OrderPaid` → COMMITTED,
-      stock зменшився; скасування → RELEASED. Перевірити рядки `stock_reservations` + `products.stock`
-- [ ] phpunit (моноліт+catalog) + phpstan зелені
+## Крок 5 — E2E ✅
+- [x] Локально (реальний шлях outbox→relay→RabbitMQ JSON→catalog-worker→`OrderEventHandler`→`db-catalog`):
+      OrderCreated A(5)+B(3) → 2×**HELD**, stock 200 незмінний; OrderPaid A → **COMMITTED** + stock 200→**195**;
+      OrderCancelled B → **RELEASED**, stock без змін. Рядки `stock_reservations` + `products.stock` звірені
+- [x] phpunit моноліт **148 OK**, catalog-service **11 OK** (Saga 3); phpstan моноліт [OK] на змінених
 
-## Ризики
-1. **Крос-сервісна серіалізація** (головне) — JSON + спільний FQCN-контракт; стара PHP-serialize черга — purge.
-2. **Ідемпотентність** — relay at-least-once; унікальність (order_id,product_id) + статус-переходи.
-3. **UUID-консистентність** — забезпечена Фазою 4.5 (cart/order на catalog-UUID).
-4. **Мережа** — catalog→RabbitMQ через host.docker.internal:5672 (dev).
+## Підсумок Фази 5
+Хореографічна checkout-Saga на наявному RabbitMQ-backbone. Моноліт емітить `OrderCreated/OrderPaid/
+OrderCancelled` (JSON, спільний FQCN). catalog-service консюмить `order.*` і веде `stock_reservations`
+(HELD→COMMITTED+`stock-=qty` / RELEASED), ідемпотентно за (order_id, product_id). Order/Cart лишились у
+моноліті. Комміти: `96eb69e`(1) `2c6012d`(2) `836db48`(3) `c2ff22e`(4).
+
+## Ризики (підсумок реалізації)
+1. **Крос-сервісна серіалізація** — JSON + спільний FQCN; стару PHP-serialize чергу `events_all` purge'нуто.
+   ⚠️ `events_all` (binding `#`) ловить усе → step-1 email-E2E не доводив routing-key; справжню перевірку
+   дав `catalog_events` (binding `order.*`).
+2. **Ідемпотентність** — relay at-least-once; unique (order_id,product_id) + переходи лише з HELD (повторний
+   OrderPaid не подвоює списання) — покрито `OrderEventHandlerTest`.
+3. **UUID-консистентність** — Фаза 4.5. ⚠️ `Uuid::isValid()` відкидає не-RFC-варіантні UUID (важливо для тест-даних).
+4. **Мережа** — host.docker.internal:5672 НЕ дістав брокер (Docker Desktop IPv6 host-gateway) → worker
+   приєднано до мережі моноліту `task-25_default`, DSN `rabbitmq:5672`.
+5. **Кеш catalog-service** — після нових сервісів обовʼязково `cache:clear` (dev і test), інакше скомпільований
+   контейнер у томі `csvc_var` не бачить хендлера/репозиторію.
 
 ---
 
