@@ -115,7 +115,7 @@ build:image:
         -w /app \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
-        sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test"
+        sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test && rm -f var/test.db var/test.db-wal var/test.db-shm"
   needs:
     - build:image
   rules: *rules_mr_develop
