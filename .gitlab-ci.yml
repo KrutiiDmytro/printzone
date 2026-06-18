@@ -53,19 +53,18 @@ lint:php:
 
 audit:composer:
   stage: validate
-  # Fresh clone: the shell runner reuses its build dir, and a fetch+checkout has
-  # been observed leaving a stale composer.lock in $CI_PROJECT_DIR → the audit
-  # then reads outdated package versions. A clone guarantees the committed lock.
-  variables:
-    GIT_STRATEGY: clone
   script:
     - echo "=== Composer security audit ==="
+    # --locked audits composer.lock, NOT the installed vendor/. The shell runner
+    # reuses its build dir, where earlier root-running docker jobs leave a stale
+    # root-owned vendor/; without --locked the audit read that old tree (2.8.0)
+    # instead of the committed lock and failed on an already-patched advisory.
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
         composer:2 \
-        sh -c "git config --global --add safe.directory /app && composer audit --format=plain"
+        sh -c "git config --global --add safe.directory /app && composer audit --locked --format=plain"
   rules: *rules_mr_develop
 
 cs:fixer:
