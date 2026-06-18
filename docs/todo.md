@@ -35,14 +35,16 @@
       (Stripe-відмова). relay публікує `{aggregate}.{eventName}` ⇒ `order.OrderCreated` (E2E доведено в Кроці 1).
       Повний сьют 148 OK; phpstan [OK] на змінених файлах
 
-## Крок 3 — catalog-service: інфра консюмера + stock_reservations
-- [ ] Dockerfile: + `amqp`; composer: `symfony/messenger` + `symfony/amqp-messenger`
-- [ ] `events` транспорт (consume): власна черга `catalog_events` binding `order.*`; JSON-серіалізатор;
-      контракт-клас `App\Messaging\Domain\IntegrationEvent`
-- [ ] `stock_reservations` (entity+міграція): id, product_id(uuid), order_id(uuid), quantity, status
-      (HELD/COMMITTED/RELEASED), created_at; унікальність (order_id, product_id) для ідемпотентності
-- [ ] compose: сервіс `catalog-worker` (messenger:consume events)
-- [ ] ✅ Verify: worker піднявся, черга прив'язана
+## Крок 3 — catalog-service: інфра консюмера + stock_reservations ✅
+- [x] Dockerfile: + `amqp`; composer: `symfony/messenger` + `symfony/amqp-messenger` (+ `symfony/serializer` для JSON)
+- [x] `events` транспорт (consume): власна черга `catalog_events` binding `order.*`; JSON-серіалізатор;
+      контракт-клас `App\Messaging\Domain\IntegrationEvent` (той самий FQCN, що в моноліті)
+- [x] `stock_reservations` (entity+міграція `Version20260618085405`): id, order_id(uuid), product_id(uuid),
+      quantity, status (HELD/COMMITTED/RELEASED), created_at; unique (order_id, product_id) для ідемпотентності
+- [x] compose: сервіс `catalog-worker` (messenger:consume events). ⚠️ host.docker.internal:5672 НЕ дістав брокер
+      (IPv6 host-gateway quirk) → worker під'єднано напряму до мережі моноліту `task-25_default`, DSN `rabbitmq:5672`
+- [x] ✅ Verify: worker піднявся й під'єднаний (172.19.0.11); черга `catalog_events` на брокері моноліту,
+      binding `events`→`order.*` (mgmt API); `migrate`+`schema:validate [OK]`
 
 ## Крок 4 — Saga-хендлер (catalog-service)
 - [ ] `OrderEventHandler` (#[AsMessageHandler] для IntegrationEvent):

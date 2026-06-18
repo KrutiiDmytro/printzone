@@ -2,7 +2,7 @@ FROM dunglas/frankenphp:1-php8.2
 
 WORKDIR /app
 
-RUN install-php-extensions pdo_pgsql intl zip opcache sodium
+RUN install-php-extensions pdo_pgsql intl zip opcache sodium amqp
 
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
 
