@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Messaging\Application\OutboxRecorder;
 use App\Order\Domain\Entity\Order;
 use App\Order\Domain\Entity\OrderItem;
 use App\Payment\Service\StripeCheckoutService;
@@ -20,6 +21,7 @@ class CheckoutController extends AbstractController
         private CartService $cartService,
         private EntityManagerInterface $entityManager,
         private StripeCheckoutService $stripeCheckoutService,
+        private OutboxRecorder $outboxRecorder,
     ) {
     }
 
@@ -73,22 +75,29 @@ class CheckoutController extends AbstractController
         }
 
         $this->entityManager->persist($order);
+
+        // Transactional outbox: OrderCreated commits atomically with the order
+        // insert, then the relay ships it to RabbitMQ where the Catalog Saga
+        // reserves stock (HELD) for these items.
+        $this->outboxRecorder->record('order', 'OrderCreated', [
+            'orderId' => (string) $order->getId(),
+            'userId' => (string) $user->getId(),
+            'items' => $order->toEventItems(),
+            'totalAmount' => $order->getTotalAmount(),
+        ]);
+
         $this->entityManager->flush();
 
         try {
             $session = $this->stripeCheckoutService->createSession($order, $cart['items']);
         } catch (\Exception $e) {
-            $order->setStatus('FAILED');
-            $this->entityManager->flush();
-            $this->addFlash('error', 'Payment service is unavailable. Please try again.');
+            $this->failOrder($order, 'Payment service is unavailable. Please try again.');
 
             return $this->redirectToRoute('app_checkout');
         }
 
         if (null === $session['url']) {
-            $order->setStatus('FAILED');
-            $this->entityManager->flush();
-            $this->addFlash('error', 'Could not initiate payment session. Please try again.');
+            $this->failOrder($order, 'Could not initiate payment session. Please try again.');
 
             return $this->redirectToRoute('app_checkout');
         }
@@ -97,6 +106,21 @@ class CheckoutController extends AbstractController
         $this->entityManager->flush();
 
         return $this->redirect($session['url']);
+    }
+
+    /**
+     * Marks the order FAILED and emits OrderCancelled so the Catalog Saga
+     * releases the HELD reservation; both commit in one flush.
+     */
+    private function failOrder(Order $order, string $flash): void
+    {
+        $order->setStatus('FAILED');
+        $this->outboxRecorder->record('order', 'OrderCancelled', [
+            'orderId' => (string) $order->getId(),
+            'items' => $order->toEventItems(),
+        ]);
+        $this->entityManager->flush();
+        $this->addFlash('error', $flash);
     }
 
     #[Route('/checkout/success', name: 'app_checkout_success')]

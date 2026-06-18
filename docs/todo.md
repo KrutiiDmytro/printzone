@@ -25,11 +25,15 @@
       `EventSerializerRoundTripTest` (JSON-тіло + `type`=FQCN, decode→IntegrationEvent) + ручний E2E
       (outbox `OrderPaid`→relay→брокер→worker→лист у Mailpit `step1@printzone.test`)
 
-## Крок 2 — Моноліт емітить Order-події
-- [ ] `CheckoutController::pay`: після persist Order — `outboxRecorder->record('order','OrderCreated',
-      {orderId,userId,items:[{productId,quantity}],totalAmount})` (в тій же транзакції)
-- [ ] Stripe fail / `StripeWebhookController` payment_failed: `OrderCancelled {orderId, items:[...]}`
-- [ ] ✅ Verify: рядки в outbox; relay публікує `order.OrderCreated` у RabbitMQ
+## Крок 2 — Моноліт емітить Order-події ✅
+- [x] `CheckoutController::pay`: після persist Order — `outboxRecorder->record('order','OrderCreated',
+      {orderId,userId,items:[{productId,quantity}],totalAmount})` (в тій же транзакції). Знімок позицій —
+      `Order::toEventItems()` (єдине джерело payload)
+- [x] Stripe fail (catch + порожній url у `pay()` → `failOrder()`) / `StripeWebhookController` payment_failed:
+      `OrderCancelled {orderId, items:[...]}` (реліз HELD)
+- [x] ✅ Verify: `CheckoutControllerTest` — outbox містить `OrderCreated` (успіх) та `OrderCreated`+`OrderCancelled`
+      (Stripe-відмова). relay публікує `{aggregate}.{eventName}` ⇒ `order.OrderCreated` (E2E доведено в Кроці 1).
+      Повний сьют 148 OK; phpstan [OK] на змінених файлах
 
 ## Крок 3 — catalog-service: інфра консюмера + stock_reservations
 - [ ] Dockerfile: + `amqp`; composer: `symfony/messenger` + `symfony/amqp-messenger`

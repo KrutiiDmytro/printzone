@@ -7,6 +7,7 @@ use App\Cart\Domain\Entity\CartItem;
 use App\Catalog\Client\CatalogClient;
 use App\Catalog\Domain\Entity\Product;
 use App\Catalog\View\ProductView;
+use App\Messaging\Domain\Entity\OutboxMessage;
 use App\Payment\Service\StripeCheckoutService;
 use App\Tests\Functional\WebTestCase;
 use App\User\Domain\Entity\User;
@@ -58,11 +59,13 @@ class CheckoutControllerTest extends WebTestCase
         $mock = $this->createMock(StripeCheckoutService::class);
         $mock->method('createSession')->willReturn(['id' => 'cs_test_123', 'url' => $stripeUrl]);
 
-        [$client] = $this->authWithCartProduct('Stripe Test Product', 2000, 5, $mock);
+        [$client, $container] = $this->authWithCartProduct('Stripe Test Product', 2000, 5, $mock);
 
         $client->request('POST', '/checkout/place-order');
 
         $this->assertResponseRedirects($stripeUrl);
+        // Saga: OrderCreated emitted into the outbox in the same transaction.
+        $this->assertSame(['OrderCreated'], $this->outboxEventNames($container));
     }
 
     public function testPlaceOrderHandlesStripeFailure(): void
@@ -70,9 +73,12 @@ class CheckoutControllerTest extends WebTestCase
         $mock = $this->createMock(StripeCheckoutService::class);
         $mock->method('createSession')->willThrowException(new \RuntimeException('Stripe API error'));
 
-        [$client] = $this->authWithCartProduct('Stripe Fail Product', 1500, 5, $mock);
+        [$client, $container] = $this->authWithCartProduct('Stripe Fail Product', 1500, 5, $mock);
 
         $client->request('POST', '/checkout/place-order');
+
+        // Saga: HELD then released — both OrderCreated and OrderCancelled emitted.
+        $this->assertEqualsCanonicalizing(['OrderCreated', 'OrderCancelled'], $this->outboxEventNames($container));
 
         $this->assertResponseRedirects('/checkout');
     }
@@ -107,6 +113,19 @@ class CheckoutControllerTest extends WebTestCase
         $client->loginUser($user, 'main');
 
         return [$client, $container, $product];
+    }
+
+    /**
+     * Event names recorded in the transactional outbox, in insertion order.
+     *
+     * @return list<string>
+     */
+    private function outboxEventNames(object $container): array
+    {
+        $em = $container->get('doctrine.orm.entity_manager');
+        $rows = $em->getRepository(OutboxMessage::class)->findBy([], ['createdAt' => 'ASC']);
+
+        return array_map(static fn (OutboxMessage $m): string => $m->getEventName(), $rows);
     }
 
     /**

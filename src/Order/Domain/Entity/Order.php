@@ -135,6 +135,25 @@ class Order
         return $this->items;
     }
 
+    /**
+     * Item lines as a plain snapshot for integration-event payloads
+     * (OrderCreated/OrderCancelled), so the Catalog Saga can reserve/release stock.
+     *
+     * @return list<array{productId: string, quantity: int}>
+     */
+    public function toEventItems(): array
+    {
+        $items = [];
+        foreach ($this->items as $item) {
+            $items[] = [
+                'productId' => (string) $item->getProductId(),
+                'quantity' => (int) $item->getQuantity(),
+            ];
+        }
+
+        return $items;
+    }
+
     public function addItem(OrderItem $item): static
     {
         if (!$this->items->contains($item)) {
