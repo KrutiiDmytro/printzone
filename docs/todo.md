@@ -46,11 +46,13 @@
 - [x] ✅ Verify: worker піднявся й під'єднаний (172.19.0.11); черга `catalog_events` на брокері моноліту,
       binding `events`→`order.*` (mgmt API); `migrate`+`schema:validate [OK]`
 
-## Крок 4 — Saga-хендлер (catalog-service)
-- [ ] `OrderEventHandler` (#[AsMessageHandler] для IntegrationEvent):
-      `OrderCreated`→reserve HELD (idempotent), `OrderPaid`→COMMITTED + `products.stock -= qty`,
-      `OrderCancelled`→RELEASED. (Опц.: емітити `StockReserved/Failed` назад в exchange.)
-- [ ] ✅ Verify: phpunit (reserve/commit/release + дедуп); один консюм на подію
+## Крок 4 — Saga-хендлер (catalog-service) ✅
+- [x] `OrderEventHandler` (#[AsMessageHandler] для IntegrationEvent):
+      `OrderCreated`→reserve HELD (idempotent: skip якщо є для (order,product)),
+      `OrderPaid`→COMMITTED + `products.stock -= qty` (лише HELD→не подвоюється),
+      `OrderCancelled`→RELEASED (лише HELD). Емісію `StockReserved/Failed` назад — не робили (одностороння хореографія)
+- [x] ✅ Verify: `OrderEventHandlerTest` 3/3 (HELD-дедуп; commit+списання один раз при повторі OrderPaid; release
+      лишає stock). Повний сьют catalog-service **11 OK**. ⚠️ test-env `debug=false` → після нових сервісів `cache:clear --env=test`
 
 ## Крок 5 — E2E
 - [ ] Локально: checkout → `OrderCreated` → catalog HELD; оплата `4242`/webhook → `OrderPaid` → COMMITTED,
