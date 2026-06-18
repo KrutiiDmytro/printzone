@@ -18,14 +18,24 @@
       `CategoryController` (?root=1); новий `BrandController` (list). Без зміни схеми (міграція не потрібна)
 - [ ] ✅ Verify: fixtures:load; ендпоінти віддають дані; Export (Phase 4) усе ще зелений
 
-## Крок 2 — Моноліт: CatalogClient + view-DTO
-- [ ] `CatalogClient` (HttpClient + сервісний JWT) + `ProductView/CategoryView/BrandView` під геттери шаблонів
+## Крок 2 — Моноліт: CatalogClient + view-DTO ✅
+- [x] `CatalogClient` (HttpClient + сервісний JWT, graceful-fallback на []) + `ProductView/CategoryView/
+      BrandView` під геттери шаблонів (атрибути/category.products порожні — 1а/2а; children для навбару)
 
-## Крок 3 — Cutover вітрини
-- [ ] `ShopController`, storefront `ProductController`, `SearchController`, Twig `Brand/Category` → клієнт
+## Крок 3 — Cutover вітрини ✅
+- [x] `ShopController`, storefront `ProductController`, `DashboardController` (home), Twig `Brand/Category`
+      → `CatalogClient`. `SearchController`/printer-models/`brand_models` лишились у моноліті
 
-## Крок 4 — Cutover CartService
-- [ ] `CartService` (add + рендер) → клієнт; cart items несуть catalog-UUID ⇒ розблоковано Saga
+## Крок 4 — Cutover CartService ✅
+- [x] `CartService` (add + рендер) → `CatalogClient`; cart items несуть catalog-UUID ⇒ **розблоковано Saga**
+- [x] `CheckoutController`/`StripeCheckoutService` оновлено під `ProductView`-знімок
+- [x] Тести: CartServiceTest/CategoryExtensionTest мокають CatalogClient; CheckoutControllerTest стабить
+      catalog ДО ініціалізації сервісу; baseline 98→92. **phpunit 147 зелений, phpstan [OK]**
+- [x] ✅ E2E: home-сторінка моноліту рендериться з продуктами catalog-service (через docker-мережу)
+
+## Підсумок Фази 4.5 (кроки 1–4)
+Catalog-service — джерело правди для вітрини+кошика моноліту (read через HTTP). Адмінка поки пише в
+моноліт (крок 5). Розблоковано справжню Фазу 5 (cart/order оперують catalog-UUID).
 
 ## Крок 5 (окремо) — Адмінка write-API + проксі (А)
 - [ ] catalog-service write-API; 4 CRUD-контролери моноліту пишуть через HTTP; дроп каталог-таблиць моноліту
