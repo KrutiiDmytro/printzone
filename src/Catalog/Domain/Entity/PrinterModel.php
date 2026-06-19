@@ -20,9 +20,12 @@ class PrinterModel
     #[ORM\Column(length: 255, unique: true)]
     private string $slug;
 
-    #[ORM\ManyToOne(targetEntity: Brand::class)]
-    #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
-    private Brand $brand;
+    // Brand lives in catalog-service now; we keep snapshots (slug is the storefront key).
+    #[ORM\Column(length: 255)]
+    private string $brandSlug;
+
+    #[ORM\Column(length: 255)]
+    private string $brandName;
 
     public function __construct()
     {
@@ -58,14 +61,26 @@ class PrinterModel
         return $this;
     }
 
-    public function getBrand(): Brand
+    public function getBrandSlug(): string
     {
-        return $this->brand;
+        return $this->brandSlug;
     }
 
-    public function setBrand(Brand $brand): static
+    public function setBrandSlug(string $brandSlug): static
     {
-        $this->brand = $brand;
+        $this->brandSlug = $brandSlug;
+
+        return $this;
+    }
+
+    public function getBrandName(): string
+    {
+        return $this->brandName;
+    }
+
+    public function setBrandName(string $brandName): static
+    {
+        $this->brandName = $brandName;
 
         return $this;
     }

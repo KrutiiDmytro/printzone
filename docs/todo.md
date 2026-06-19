@@ -25,15 +25,24 @@
 - [x] ✅ Verify: phpunit catalog-service **23 OK** (+12 write: 201/200/204/401/403/422/404, dup-slug, bad-color);
       `schema:validate [OK]`. catalog-service без phpstan (немає тулінгу). ⚠️ `cache:clear --env=test` після нових роутів
 
-## Крок 5.2 — моноліт: розв'язати FK + дроп каталог-сутностей (атомарно; >3 файли — семантично один крок)
-- [ ] `PrinterModel.brand` (ManyToOne→Brand) → `brandId: Uuid` + знімки `brandName`, `brandSlug`;
-      `PrinterModelRepository::findByBrandSlug`/`searchByName` → по знімках (без JOIN);
-      `SearchController`/`BrandExtension.getBrandModels` — по знімках
-- [ ] **Видалити** `ProductAttribute` (entity + repo + API Platform-конфіг + `CollectionField` з ProductCrud)
-- [ ] Видалити entity-класи моноліту `Product`/`Category`/`Brand` + їхні Doctrine-репозиторії (якщо не вживані)
-- [ ] Міграція моноліту: drop `catalog.products/categories/brands`, drop `product_attributes`,
-      `printer_models`: drop FK+`brand_id` → `+ brand_id(uuid)`, `+ brand_name`, `+ brand_slug`
-- [ ] ✅ Verify: phpunit моноліт зелений; `schema:validate [OK]` (без catalog/products/categories/brands)
+## Крок 5.2 — моноліт: розв'язати FK + дроп каталог-сутностей (атомарно; семантично один крок) ✅
+- [x] `PrinterModel.brand` (ManyToOne→Brand) → знімки `brandSlug`+`brandName` (БЕЗ `brandId` — жоден код
+      printer-finder не вживає UUID, лише slug-маршрути); `PrinterModelRepository` без JOIN;
+      `SearchController.getBrandName/Slug`; `BrandExtension.getBrandModels` — по знімках
+- [x] **Видалено** `ProductAttribute` (entity; репо не існувало; ApiResource на самій entity → зник з нею)
+- [x] Видалено entity `Product`/`Category`/`Brand` + Doctrine-репо (ніде не вживались — вітрина на CatalogClient)
+- [x] ⚠️ **Розширення обсягу (фолд):** 3 EasyAdmin CRUD (`Product/Category/Brand`) посилались на видалені entity
+      → видалено + прибрано з Dashboard-меню (заміна — кастомні сторінки в 5.3). `PrinterModelCrudController`:
+      `AssociationField('brand')` → `ChoiceField(brandSlug)` з `CatalogClient->brands()`, `brandName` через persist/update
+- [x] `ProductImageService::syncAfterWrite()` — видалено (мертвий: єдиний викликач був ProductCrud; новий флоу — presign-ключ)
+- [x] Фікстури: лише `printer_models` (знімки) + users; каталог сіє catalog-service
+- [x] Міграція `Version20260619120000`: drop `products/categories/brands/product_attributes`;
+      `printer_models` drop `brand_id` (FK падає з колонкою) → `+ brand_slug`, `+ brand_name`. `down()` irreversible (cutover)
+- [x] Тести: WebTestCase (мертвий seeding категорій прибрано), CheckoutControllerTest (Uuid замість Product entity),
+      видалено `ProductTest`/`ProductCrudTest`, SecurityTest (роути), ProductImageExtensionTest (сигнатура);
+      phpstan-baseline почищено від видалених файлів
+- [x] ✅ Verify: phpunit моноліт **140 OK**; phpstan **[OK] No errors**; Postgres `migrate`+`schema:validate [OK]`
+      (`catalog` лишив лише `printer_models`); `fixtures:load` ок; `printer_models.brand_slug/brand_name` заповнені
 
 ## Крок 5.3 — моноліт: адмінка пише через HTTP
 - [ ] `CatalogAdminClient` (write-токен `ROLE_CATALOG_ADMIN`): create/update/delete Product/Category/Brand

@@ -85,20 +85,8 @@ abstract class WebTestCase extends BaseWebTestCase
         $user->setPassword($passwordHasher->hashPassword($user, 'user123'));
         $entityManager->persist($user);
 
-        // Створюємо категорії для тестів (потрібні для base.html.twig)
-        $categories = [
-            ['name' => 'Electronics', 'slug' => 'electronics'],
-            ['name' => 'Computers', 'slug' => 'computers'],
-            ['name' => 'Phones', 'slug' => 'phones'],
-        ];
-
-        foreach ($categories as $catData) {
-            $category = new \App\Catalog\Domain\Entity\Category();
-            $category->setName($catData['name']);
-            $category->setSlug($catData['slug']);
-            $entityManager->persist($category);
-        }
-
+        // Categories/products live in catalog-service now; base.html.twig reads the
+        // navbar via CatalogClient (graceful-empty in tests), so nothing to seed here.
         $entityManager->flush();
     }
 

@@ -5,12 +5,12 @@ namespace App\Tests\Functional\Controller;
 use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
 use App\Catalog\Client\CatalogClient;
-use App\Catalog\Domain\Entity\Product;
 use App\Catalog\View\ProductView;
 use App\Messaging\Domain\Entity\OutboxMessage;
 use App\Payment\Service\StripeCheckoutService;
 use App\Tests\Functional\WebTestCase;
 use App\User\Domain\Entity\User;
+use Symfony\Component\Uid\Uuid;
 
 class CheckoutControllerTest extends WebTestCase
 {
@@ -88,7 +88,7 @@ class CheckoutControllerTest extends WebTestCase
      * Catalog client (and optionally Stripe) BEFORE login so the test container
      * can replace them before they are first used.
      *
-     * @return array{0: \Symfony\Bundle\FrameworkBundle\KernelBrowser, 1: object, 2: Product}
+     * @return array{0: \Symfony\Bundle\FrameworkBundle\KernelBrowser, 1: object}
      */
     private function authWithCartProduct(string $name, int $price, int $stock, ?StripeCheckoutService $stripeMock = null): array
     {
@@ -106,13 +106,13 @@ class CheckoutControllerTest extends WebTestCase
         $this->loadFixtures();
 
         $em = $container->get('doctrine.orm.entity_manager');
-        $product = $this->persistProduct($em, $name, $price, $stock);
         $user = $em->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
-        $this->persistCartWithItem($em, $user, $product, 1);
+        // Catalog products live in catalog-service; the cart item only needs an id snapshot.
+        $this->persistCartWithItem($em, $user, Uuid::v4(), $name, $price, 1);
 
         $client->loginUser($user, 'main');
 
-        return [$client, $container, $product];
+        return [$client, $container];
     }
 
     /**
@@ -156,26 +156,7 @@ class CheckoutControllerTest extends WebTestCase
         $container->set(CatalogClient::class, $mock);
     }
 
-    private function persistProduct(object $entityManager, string $name, int $price, int $stock): Product
-    {
-        $product = new Product();
-        $product->setName($name);
-        $product->setDescription('Test Description');
-        $product->setPrice($price);
-        $product->setStock($stock);
-
-        $category = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class)->findOneBy([]);
-        if ($category) {
-            $product->setCategory($category);
-        }
-
-        $entityManager->persist($product);
-        $entityManager->flush(); // flush so the product gets an id for the cart-item snapshot
-
-        return $product;
-    }
-
-    private function persistCartWithItem(object $entityManager, User $user, Product $product, int $quantity): void
+    private function persistCartWithItem(object $entityManager, User $user, Uuid $productId, string $name, int $price, int $quantity): void
     {
         $cart = new Cart();
         $cart->setUserId($user->getId());
@@ -183,9 +164,9 @@ class CheckoutControllerTest extends WebTestCase
 
         $cartItem = new CartItem();
         $cartItem->setCart($cart);
-        $cartItem->setProductId($product->getId());
-        $cartItem->setProductName($product->getName());
-        $cartItem->setPrice($product->getPrice());
+        $cartItem->setProductId($productId);
+        $cartItem->setProductName($name);
+        $cartItem->setPrice($price);
         $cartItem->setQuantity($quantity);
         $cart->addItem($cartItem);
         $entityManager->persist($cartItem);
