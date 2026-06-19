@@ -44,12 +44,17 @@
 - [x] ✅ Verify: phpunit моноліт **140 OK**; phpstan **[OK] No errors**; Postgres `migrate`+`schema:validate [OK]`
       (`catalog` лишив лише `printer_models`); `fixtures:load` ок; `printer_models.brand_slug/brand_name` заповнені
 
-## Крок 5.3 — моноліт: адмінка пише через HTTP
-- [ ] `CatalogAdminClient` (write-токен `ROLE_CATALOG_ADMIN`): create/update/delete Product/Category/Brand
-- [ ] Кастомні адмін-сторінки (список + форма create/edit/delete) для Product/Category/Brand → через клієнт;
-      прибрати 3 EasyAdmin CRUD з DashboardController-меню (PrinterModel/Order/User/Export лишаються)
-- [ ] Зображення: presign-флоу лишається; у сервіс передається лише `image`-ключ; `ProductImageService` перевірити
-- [ ] ✅ Verify: phpstan [OK] на змінених
+## Крок 5.3 — моноліт: адмінка пише через HTTP ✅
+- [x] `CatalogAdminClient` (write-токен `ROLE_CATALOG_ADMIN`): reads (products availableOnly=0, categories, brands,
+      product by id) + create/update/delete; **throws** на 4xx (адмін бачить помилки, на відміну від storefront-fallback)
+- [x] `CatalogAdminController` (`#[IsGranted('ROLE_ADMIN')]`, `/admin/catalog`): 12 роутів — list + new[GET/POST]
+      + edit[GET/POST] + delete[POST] для Product/Category/Brand; CSRF `catalog_admin`; flash + redirect (патерн ExportController)
+- [x] 6 Twig-шаблонів (`templates/admin/catalog/`): {products,categories,brands}.html.twig + *_form.html.twig (Bootstrap)
+- [x] Dashboard-меню: повернуто Products/Categories/Brands через `linkToRoute` (HTTP, не EasyAdmin)
+- [x] ⚠️ Зображення: форма приймає `image`-ключ текстом (presign-JS інтеграція в кастомну форму — відкладено;
+      ендпоінт presign лишається). Ціна вводиться в євро → конвертація в центи (round*100)
+- [x] ✅ Verify: phpstan **[OK]**; контейнер компілюється (dev+test); `lint:twig` 6/6 OK; 12 роутів зареєстровано;
+      SecurityTest 7 OK (дашборд із новим меню рендериться). Повний E2E (адмін→вітрина) — Крок 5.4
 
 ## Крок 5.4 — E2E + документація
 - [ ] Адмінка create/edit/delete продукту → одразу на вітрині (один сервіс) → дані НЕ розходяться
