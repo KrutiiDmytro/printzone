@@ -16,6 +16,22 @@ class BrandRepository extends ServiceEntityRepository
         parent::__construct($registry, Brand::class);
     }
 
+    public function save(Brand $brand, bool $flush = false): void
+    {
+        $this->getEntityManager()->persist($brand);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
+    public function remove(Brand $brand, bool $flush = false): void
+    {
+        $this->getEntityManager()->remove($brand);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
     public function findBySlug(string $slug): ?Brand
     {
         return $this->findOneBy(['slug' => $slug]);

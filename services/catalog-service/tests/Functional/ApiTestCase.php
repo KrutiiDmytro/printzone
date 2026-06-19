@@ -68,9 +68,31 @@ abstract class ApiTestCase extends WebTestCase
         return $jwt->create(new InMemoryUser('service-test', null, ['ROLE_USER']));
     }
 
+    protected function adminToken(): string
+    {
+        $jwt = static::getContainer()->get(JWTTokenManagerInterface::class);
+
+        return $jwt->create(new InMemoryUser('service-admin', null, ['ROLE_CATALOG_ADMIN']));
+    }
+
     protected function authGet(string $uri): void
     {
         $this->client->request('GET', $uri, [], [], ['HTTP_AUTHORIZATION' => 'Bearer '.$this->serviceToken()]);
+    }
+
+    /**
+     * JSON request with an optional bearer token (null = unauthenticated).
+     *
+     * @param array<string, mixed> $body
+     */
+    protected function send(string $method, string $uri, array $body = [], ?string $token = null): void
+    {
+        $server = ['CONTENT_TYPE' => 'application/json'];
+        if (null !== $token) {
+            $server['HTTP_AUTHORIZATION'] = 'Bearer '.$token;
+        }
+
+        $this->client->request($method, $uri, [], [], $server, [] === $body ? null : (string) json_encode($body));
     }
 
     /**

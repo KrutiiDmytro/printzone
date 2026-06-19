@@ -1,3 +1,62 @@
+# Фаза 4.5 Крок 5 — Catalog = єдине джерело правди (write-API + дроп таблиць) — ПЛАН, очікує апрув
+
+> **Мета:** catalog-service володіє і читанням, і **записом** каталогу. Адмінка моноліту пише через
+> HTTP. Каталог-таблиці моноліту (`catalog.products/categories/brands`) **дропаються** → розбіжність
+> даних усувається повністю. Завершення Strangler-Fig-винесення Catalog. Гілка: поточна.
+> **Узгоджені рішення:** (A) кастомні адмін-контролери + дроп (НЕ dual-write — це анти-патерн, який
+> закрили у Фазі 2); PrinterModel лишається в моноліті з розв'язаним FK (знімки); ProductAttribute — **видалити** (дрімаючий).
+
+## Розвідка (факт)
+- catalog-service: лише read-API (`GET`), сутності `Product/Category/Brand/StockReservation`; `^/api`
+  вимагає `IS_AUTHENTICATED_FULLY` (без розрізнення read/write).
+- Дві FK-зачіпки в моноліті блокують дроп: `PrinterModel.brand → catalog.brands` (CASCADE; читає
+  `SearchController`/`BrandExtension.brand_models`/`PrinterModelCrudController`) та
+  `ProductAttribute.product → catalog.products` (API Platform; дрімаючий `CollectionField` hideOnForm).
+- EasyAdmin `Product/Category/Brand CrudController` намертво на Doctrine (persist/update/delete +
+  index/фільтри/форми через EntityManager) → «писати через HTTP» = замінити data-layer.
+- Зображення: presign S3 (браузер→S3) лишається в моноліті, у сервіс іде лише рядок-ключ `image`;
+  `MediaController` (віддача) лишається в моноліті.
+
+## Крок 5.1 — catalog-service: write-API + RBAC ✅
+- [x] `Product/Category/Brand` контролери: `POST` (201), `PUT/PATCH` (200), `DELETE` (204); валідація → 422; 404
+      (hydrate: create=усі обов'язкові, update=лише надані поля; FK category/brand/parent резолвляться → 422 якщо нема)
+- [x] `security.yaml`: `methods:[POST,PUT,PATCH,DELETE]`→`ROLE_CATALOG_ADMIN`; решта `^/api`→`IS_AUTHENTICATED_FULLY` (read)
+- [x] Репозиторії Product/Category/Brand: методи save/remove (flush)
+- [x] ✅ Verify: phpunit catalog-service **23 OK** (+12 write: 201/200/204/401/403/422/404, dup-slug, bad-color);
+      `schema:validate [OK]`. catalog-service без phpstan (немає тулінгу). ⚠️ `cache:clear --env=test` після нових роутів
+
+## Крок 5.2 — моноліт: розв'язати FK + дроп каталог-сутностей (атомарно; >3 файли — семантично один крок)
+- [ ] `PrinterModel.brand` (ManyToOne→Brand) → `brandId: Uuid` + знімки `brandName`, `brandSlug`;
+      `PrinterModelRepository::findByBrandSlug`/`searchByName` → по знімках (без JOIN);
+      `SearchController`/`BrandExtension.getBrandModels` — по знімках
+- [ ] **Видалити** `ProductAttribute` (entity + repo + API Platform-конфіг + `CollectionField` з ProductCrud)
+- [ ] Видалити entity-класи моноліту `Product`/`Category`/`Brand` + їхні Doctrine-репозиторії (якщо не вживані)
+- [ ] Міграція моноліту: drop `catalog.products/categories/brands`, drop `product_attributes`,
+      `printer_models`: drop FK+`brand_id` → `+ brand_id(uuid)`, `+ brand_name`, `+ brand_slug`
+- [ ] ✅ Verify: phpunit моноліт зелений; `schema:validate [OK]` (без catalog/products/categories/brands)
+
+## Крок 5.3 — моноліт: адмінка пише через HTTP
+- [ ] `CatalogAdminClient` (write-токен `ROLE_CATALOG_ADMIN`): create/update/delete Product/Category/Brand
+- [ ] Кастомні адмін-сторінки (список + форма create/edit/delete) для Product/Category/Brand → через клієнт;
+      прибрати 3 EasyAdmin CRUD з DashboardController-меню (PrinterModel/Order/User/Export лишаються)
+- [ ] Зображення: presign-флоу лишається; у сервіс передається лише `image`-ключ; `ProductImageService` перевірити
+- [ ] ✅ Verify: phpstan [OK] на змінених
+
+## Крок 5.4 — E2E + документація
+- [ ] Адмінка create/edit/delete продукту → одразу на вітрині (один сервіс) → дані НЕ розходяться
+- [ ] printer-finder працює (знімки бренду); search/autocomplete ок
+- [ ] phpunit моноліт + catalog-service зелені; phpstan [OK]; `schema:validate` обох [OK]
+- [ ] Закрити Крок 5 у todo.md; оновити `microservices-analysis.md`/architecture (Catalog повністю винесено)
+
+## Ризики
+1. **EasyAdmin data-layer** — найбільший: кастомні сторінки замість Doctrine-CRUD (втрата авто-index/фільтрів — свідомо).
+2. **FK-розв'язання** — патерн Фази 1; ризик «загубити» бренд у printer-finder, якщо знімок не заповнити при write.
+3. **Транзакційність HTTP-запису** — адмін-запис у сервіс не атомарний із локальним станом; для адмінки прийнятно (не Saga).
+4. **Зображення** — presign-ключ має дійти до сервісу; локальне сховище (`syncAfterWrite`) переглянути.
+5. **Фікстури** — канонічні дані лише в catalog-service; моноліт більше не сіє каталог.
+
+---
+
 # Фаза 5 — Checkout Saga зі stock-резервуванням (MVP) — ПЛАН, очікує апрув
 
 > **Мета:** хореографічна Saga на наявному RabbitMQ-backbone. Монолітний Order емітить доменні події;

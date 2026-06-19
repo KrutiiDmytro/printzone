@@ -16,6 +16,22 @@ class CategoryRepository extends ServiceEntityRepository
         parent::__construct($registry, Category::class);
     }
 
+    public function save(Category $category, bool $flush = false): void
+    {
+        $this->getEntityManager()->persist($category);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
+    public function remove(Category $category, bool $flush = false): void
+    {
+        $this->getEntityManager()->remove($category);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
     public function findBySlug(string $slug): ?Category
     {
         return $this->findOneBy(['slug' => $slug]);
