@@ -56,11 +56,23 @@
 - [x] ✅ Verify: phpstan **[OK]**; контейнер компілюється (dev+test); `lint:twig` 6/6 OK; 12 роутів зареєстровано;
       SecurityTest 7 OK (дашборд із новим меню рендериться). Повний E2E (адмін→вітрина) — Крок 5.4
 
-## Крок 5.4 — E2E + документація
-- [ ] Адмінка create/edit/delete продукту → одразу на вітрині (один сервіс) → дані НЕ розходяться
-- [ ] printer-finder працює (знімки бренду); search/autocomplete ок
-- [ ] phpunit моноліт + catalog-service зелені; phpstan [OK]; `schema:validate` обох [OK]
-- [ ] Закрити Крок 5 у todo.md; оновити `microservices-analysis.md`/architecture (Catalog повністю винесено)
+## Крок 5.4 — E2E + документація ✅
+- [x] ✅ **Реальний E2E** (probe-команда проти живих сервісів, потім видалена): admin POST (CatalogAdminClient,
+      `ROLE_CATALOG_ADMIN`, спільний keypair) → catalog-service створив brand+product → storefront read
+      (CatalogClient, ROLE_USER) **знайшов його на вітрині** €42.42 → cleanup. Дані НЕ розходяться (один сервіс)
+- [x] Репродукований `CatalogAdminControllerTest` (мок CatalogAdminClient, бо CI без сервісу): 4 тести
+      (anon→login, list рендериться, create POST'иться в сервіс, delete POST'иться)
+- [x] printer-finder: знімки `brand_slug/brand_name` заповнені (звірено в БД); search/autocomplete на знімках
+- [x] ✅ Verify: phpunit моноліт **144 OK** (+4); catalog-service **23 OK**; phpstan **[OK]**;
+      `schema:validate` обох **[OK]**
+- [x] Оновлено `microservices-architecture.md` §10 (Фаза 4.5 — cutover завершено: write-API+адмінка+дроп таблиць)
+
+## Підсумок Кроку 5 (Фаза 4.5)
+Catalog Service — **єдине джерело правди**: і читання (вітрина/кошик), і запис (адмінка через HTTP) ідуть у
+сервіс; каталог-таблиці моноліту дропнуто. Розбіжність даних усунено (доведено E2E). PrinterModel/printer-finder
+лишився в моноліті зі знімками бренду (без FK). Strangler-Fig-винесення Catalog завершено на рівні даних.
+Комміти: `91e7c0c`(5.1 write-API+RBAC) `bf89007`(5.2 дроп таблиць) `406e58c`(5.3 admin HTTP) + 5.4 (E2E+доки).
+⚠️ Залишок: presign-JS у кастомну форму продукту; прод-розгортання сервісів (окрема задача, не блокує).
 
 ## Ризики
 1. **EasyAdmin data-layer** — найбільший: кастомні сторінки замість Doctrine-CRUD (втрата авто-index/фільтрів — свідомо).
