@@ -7,11 +7,13 @@ services:
       - letsencrypt:/etc/letsencrypt
 
   mailer:
-    ports: []
+    # !reset is required: an empty `ports: []` override is ignored by Compose, so
+    # the base published ports would otherwise leak into production.
+    ports: !reset []
 
   # Do not expose the broker / management UI publicly in production.
   rabbitmq:
-    ports: []
+    ports: !reset []
 
   php:
     environment:

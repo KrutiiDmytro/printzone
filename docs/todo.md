@@ -25,10 +25,10 @@
       моноліту (`CATALOG_SERVICE_URL` ×2); `.gitlab-ci.yml` — валідний YAML, 6 нових джоб.
       ⚠️ Реальний прод-деплой — на runner при merge в `develop` (тут не верифікується).
 
-## ⚠️ Pre-existing баг моноліту (виявлено, НЕ виправлено — поза задачею)
-У `compose.prod.yaml` `rabbitmq: ports: []` і `mailer: ports: []` **не діють** → у прод досі публічно
-виставлені **RabbitMQ :5672** і **Mailpit :1025** (попри коментар «не виставляти брокер публічно»).
-Фікс — `ports: !reset []` (як у сервісах). Рекомендовано виправити окремо.
+## Pre-existing баг моноліту (виявлено й ВИПРАВЛЕНО) ✅
+У `compose.prod.yaml` `rabbitmq: ports: []` і `mailer: ports: []` **не діяли** → у прод публічно виставлялися
+**RabbitMQ :5672** і **Mailpit :1025** (попри коментар «не виставляти брокер публічно»). Виправлено на
+`ports: !reset []`; `docker compose config` підтверджує — публічних портів у `rabbitmq`/`mailer` більше немає.
 
 ## Поза моєю зоною (дії користувача)
 - GitLab CI vars: `CATALOG_DB_PASSWORD`, `USER_DB_PASSWORD`, `APP_SECRET` (для сервісів). `JWT_PASSPHRASE` — є.
