@@ -1,3 +1,41 @@
+# Фаза 6 — Прод-середовища + CI для user/catalog сервісів — ПЛАН (затверджено 1–3)
+
+> **Мета:** закрити вимогу «окремі dev/test/prod для кожного мікросервісу». Кожен сервіс отримує
+> prod-overlay + CI (build/test/deploy). Модель — як у моноліту: shell-runner на прод-хості, deploy на
+> `develop`, секрети через GitLab CI vars. **Рішення (узгоджено):** (1) спільна мережа `task-25_default`,
+> без публічних портів; (2) `migrate` завжди + `fixtures` лише якщо БД порожня; (3) user-service деплоїмо
+> для повноти (моноліт його ще не викликає в рантаймі).
+
+## Ключове відкриття
+Моноліт-деплой rsync'ить увесь проєкт (вкл. `services/`) у `/var/www/app`, виключаючи `vendor`/`var`/
+`tests`/`.env.local`. Тож код сервісів уже лягає в `/var/www/app/services/<svc>/`, а `../../config/jwt`
+резолвиться в `/var/www/app/config/jwt` (спільний keypair). ⇒ окремий rsync і правка base-compose не потрібні.
+
+## Кроки ✅
+- [x] `services/catalog-service/compose.prod.yaml`: db `${CATALOG_DB_PASSWORD}`, env (prod/APP_SECRET/
+      DATABASE_URL/MESSENGER_EVENTS_DSN), `ports: !reset []`, `restart: unless-stopped`, catalog-service у
+      `[default, monolith]`. (catalog лише верифікує JWT → passphrase не треба.)
+- [x] `services/user-service/compose.prod.yaml`: db `${USER_DB_PASSWORD}`, env (+`JWT_PASSPHRASE` — підписує),
+      `ports: !reset []`, restart, оголошено external-мережу `monolith` + приєднано.
+- [x] Моноліт `compose.prod.yaml`: `CATALOG_SERVICE_URL: http://catalog-service` у `php`+`worker`.
+- [x] `.gitlab-ci.yml`: `build:`/`test:`/`deploy:` для обох сервісів (deploy `needs:[test:<svc>, deploy]`, gated `develop`).
+- [x] ⚠️ **Знахідка:** `ports: []` НЕ перевизначає (порожній override ігнорується) → треба `ports: !reset []`
+      (Compose 2.24+). Через це й pre-existing баг моноліту (нижче).
+- [x] ✅ Verify (локально): `docker compose config` VALID для обох overlay (порти прибрано, на мережі monolith) +
+      моноліту (`CATALOG_SERVICE_URL` ×2); `.gitlab-ci.yml` — валідний YAML, 6 нових джоб.
+      ⚠️ Реальний прод-деплой — на runner при merge в `develop` (тут не верифікується).
+
+## ⚠️ Pre-existing баг моноліту (виявлено, НЕ виправлено — поза задачею)
+У `compose.prod.yaml` `rabbitmq: ports: []` і `mailer: ports: []` **не діють** → у прод досі публічно
+виставлені **RabbitMQ :5672** і **Mailpit :1025** (попри коментар «не виставляти брокер публічно»).
+Фікс — `ports: !reset []` (як у сервісах). Рекомендовано виправити окремо.
+
+## Поза моєю зоною (дії користувача)
+- GitLab CI vars: `CATALOG_DB_PASSWORD`, `USER_DB_PASSWORD`, `APP_SECRET` (для сервісів). `JWT_PASSPHRASE` — є.
+- Звʼязність: прод catalog як джерело правди працює лише разом із Фазою 4.5 (MR !6).
+
+---
+
 # Фаза 4.5 Крок 5 — Catalog = єдине джерело правди (write-API + дроп таблиць) — ПЛАН, очікує апрув
 
 > **Мета:** catalog-service володіє і читанням, і **записом** каталогу. Адмінка моноліту пише через

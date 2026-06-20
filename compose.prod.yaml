@@ -21,6 +21,9 @@ services:
       DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
       DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
       MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # catalog-service is reached over the shared network by name in prod
+      # (host.docker.internal:8002 only works on the dev host).
+      CATALOG_SERVICE_URL: "http://catalog-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
@@ -41,6 +44,8 @@ services:
       DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
       DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
       MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # Export's ProductExtractor reads the catalog over HTTP from the async worker.
+      CATALOG_SERVICE_URL: "http://catalog-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       # The worker delivers queued emails (SendEmailMessage on the async transport),
       # so it needs the real mailer DSN — otherwise it falls back to null:// and drops them.
