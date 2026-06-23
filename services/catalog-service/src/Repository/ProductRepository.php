@@ -18,6 +18,22 @@ class ProductRepository extends ServiceEntityRepository
         parent::__construct($registry, Product::class);
     }
 
+    public function save(Product $product, bool $flush = false): void
+    {
+        $this->getEntityManager()->persist($product);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
+    public function remove(Product $product, bool $flush = false): void
+    {
+        $this->getEntityManager()->remove($product);
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
+
     /**
      * @param array<string, mixed> $filters
      *

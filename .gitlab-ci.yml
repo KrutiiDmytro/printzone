@@ -288,3 +288,155 @@ deploy:
     - test:functional
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# ─────────────────────────────────────────────────────────────
+# MICROSERVICES (user-service / catalog-service)
+# Own dev/test/prod: build a local FrankenPHP image, run the service's own
+# phpunit (SQLite), and deploy in-place under the monolith tree (the monolith
+# deploy already rsynced services/ → $DEPLOY_DIR/services/<svc>). Reached over
+# the shared task-25_default network by name; no public ports in prod.
+# ─────────────────────────────────────────────────────────────
+
+build:catalog-service:
+  stage: build
+  script:
+    - docker build -f services/catalog-service/Dockerfile
+      -t printzone/catalog-service:$CI_COMMIT_SHA
+      -t printzone/catalog-service:latest
+      services/catalog-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:user-service:
+  stage: build
+  script:
+    - docker build -f services/user-service/Dockerfile
+      -t printzone/user-service:$CI_COMMIT_SHA
+      -t printzone/user-service:latest
+      services/user-service
+  needs: []
+  rules: *rules_mr_develop
+
+test:catalog-service:
+  stage: test
+  needs:
+    - build:catalog-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/catalog-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/catalog-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:user-service:
+  stage: test
+  needs:
+    - build:user-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/user-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/user-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+deploy:catalog-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    CSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    - cd "$DEPLOY_DIR/services/catalog-service"
+    - echo "--- Starting db-catalog ---"
+    - $CSVC up -d db-catalog
+    - |
+      i=0
+      until $CSVC exec -T db-catalog pg_isready -U app -d catalog_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-catalog not ready"; $CSVC logs db-catalog --tail=20; exit 1; }
+        echo "Waiting for db-catalog ($i/30)..."; sleep 2
+      done
+    - $CSVC exec -T db-catalog psql -U app -d catalog_service -c "ALTER USER app WITH PASSWORD '${CATALOG_DB_PASSWORD}';"
+    - echo "--- Starting service (pre-built image) ---"
+    - $CSVC up -d --no-build
+    - $CSVC exec -T catalog-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    - echo "--- Migrations ---"
+    - $CSVC exec -T catalog-service php bin/console doctrine:migrations:migrate --no-interaction
+    - echo "--- Seed only if empty (catalog is source of truth) ---"
+    - |
+      COUNT=$($CSVC exec -T db-catalog psql -U app -d catalog_service -tAc "SELECT count(*) FROM products" 2>/dev/null | tr -d '[:space:]')
+      if [ -z "$COUNT" ] || [ "$COUNT" = "0" ]; then
+        echo "Empty catalog — loading fixtures"; $CSVC exec -T catalog-service php bin/console doctrine:fixtures:load --no-interaction
+      else
+        echo "Catalog has $COUNT products — skip seeding"
+      fi
+    - $CSVC exec -T catalog-service php bin/console cache:clear --env=prod
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $CSVC exec -T catalog-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: catalog-service health failed"; $CSVC logs catalog-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "catalog-service healthy"
+  needs:
+    - test:catalog-service
+    - deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:user-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    USVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    - cd "$DEPLOY_DIR/services/user-service"
+    - echo "--- Starting db-user ---"
+    - $USVC up -d db-user
+    - |
+      i=0
+      until $USVC exec -T db-user pg_isready -U app -d user_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-user not ready"; $USVC logs db-user --tail=20; exit 1; }
+        echo "Waiting for db-user ($i/30)..."; sleep 2
+      done
+    - $USVC exec -T db-user psql -U app -d user_service -c "ALTER USER app WITH PASSWORD '${USER_DB_PASSWORD}';"
+    - echo "--- Starting service (pre-built image) ---"
+    - $USVC up -d --no-build
+    - $USVC exec -T user-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    - echo "--- Migrations ---"
+    - $USVC exec -T user-service php bin/console doctrine:migrations:migrate --no-interaction
+    - echo "--- Seed only if empty ---"
+    - |
+      COUNT=$($USVC exec -T db-user psql -U app -d user_service -tAc "SELECT count(*) FROM users" 2>/dev/null | tr -d '[:space:]')
+      if [ -z "$COUNT" ] || [ "$COUNT" = "0" ]; then
+        echo "Empty users — loading fixtures"; $USVC exec -T user-service php bin/console doctrine:fixtures:load --no-interaction
+      else
+        echo "Users table has $COUNT rows — skip seeding"
+      fi
+    - $USVC exec -T user-service php bin/console cache:clear --env=prod
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $USVC exec -T user-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: user-service health failed"; $USVC logs user-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "user-service healthy"
+  needs:
+    - test:user-service
+    - deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'

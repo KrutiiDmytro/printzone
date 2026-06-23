@@ -1103,6 +1103,21 @@ public function ready(Connection $db): JsonResponse
 > кошика й адмінка поки читають каталог із моноліту. Поза обсягом: `stock_reservations` (Фаза 5),
 > PrinterModel/атрибути, write-API/адмінка на сервісі, API Gateway, прод-розгортання.
 
+### Фаза 4.5 — Catalog cutover (завершено): Catalog Service — єдине джерело правди
+
+Ціль: завершити винесення Catalog — і читання, і запис каталогу в сервісі; усунути розбіжність даних.
+
+- [x] Вітрина + рендер кошика моноліту читають каталог із Catalog Service (`CatalogClient` + view-DTO);
+      `CartService`/`CheckoutController` оперують catalog-UUID (розблокувало справжню Checkout Saga)
+- [x] Write-API сервісу (`POST/PUT/DELETE` products/categories/brands) під `ROLE_CATALOG_ADMIN` (RBAC на
+      рівні firewall за HTTP-методом); адмінка моноліту пише через HTTP (`CatalogAdminClient` + кастомні
+      сторінки `/admin/catalog/*` замість EasyAdmin-CRUD)
+- [x] Каталог-таблиці моноліту (`products`/`categories`/`brands`/`product_attributes`) **дропнуто**
+      (`Version20260619120000`); PrinterModel/printer-finder лишився в моноліті зі знімками
+      `brand_slug`/`brand_name` (без FK на brands)
+- [x] **Розбіжність даних усунено**: адмін-запис і storefront-читання йдуть в один сервіс (доведено E2E:
+      адмін створює продукт → одразу видно на вітрині)
+
 ### Фаза 5 — Виокремлення Cart + Order Services + Checkout Saga
 
 Ціль: Повний процес оформлення замовлення як розподілена транзакція.

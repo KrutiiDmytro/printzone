@@ -90,9 +90,10 @@ class DashboardController extends AbstractDashboardController
     {
         yield MenuItem::linkToDashboard('Dashboard', 'fa fa-home');
         yield MenuItem::section('Catalogue');
-        yield MenuItem::linkTo(ProductCrudController::class, 'Products', 'fa fa-box');
-        yield MenuItem::linkTo(CategoryCrudController::class, 'Categories', 'fa fa-folder');
-        yield MenuItem::linkTo(BrandCrudController::class, 'Brands', 'fa fa-tag');
+        // Product/Category/Brand are proxied to catalog-service over HTTP (no local entity).
+        yield MenuItem::linkToRoute('Products', 'fa fa-box', 'admin_catalog_products');
+        yield MenuItem::linkToRoute('Categories', 'fa fa-folder', 'admin_catalog_categories');
+        yield MenuItem::linkToRoute('Brands', 'fa fa-tag', 'admin_catalog_brands');
         yield MenuItem::linkTo(PrinterModelCrudController::class, 'Printer Models', 'fa fa-print');
         yield MenuItem::section('Orders');
         yield MenuItem::linkTo(OrderCrudController::class, 'Orders', 'fa fa-shopping-cart');

@@ -1,3 +1,126 @@
+# Фаза 6 — Прод-середовища + CI для user/catalog сервісів — ПЛАН (затверджено 1–3)
+
+> **Мета:** закрити вимогу «окремі dev/test/prod для кожного мікросервісу». Кожен сервіс отримує
+> prod-overlay + CI (build/test/deploy). Модель — як у моноліту: shell-runner на прод-хості, deploy на
+> `develop`, секрети через GitLab CI vars. **Рішення (узгоджено):** (1) спільна мережа `task-25_default`,
+> без публічних портів; (2) `migrate` завжди + `fixtures` лише якщо БД порожня; (3) user-service деплоїмо
+> для повноти (моноліт його ще не викликає в рантаймі).
+
+## Ключове відкриття
+Моноліт-деплой rsync'ить увесь проєкт (вкл. `services/`) у `/var/www/app`, виключаючи `vendor`/`var`/
+`tests`/`.env.local`. Тож код сервісів уже лягає в `/var/www/app/services/<svc>/`, а `../../config/jwt`
+резолвиться в `/var/www/app/config/jwt` (спільний keypair). ⇒ окремий rsync і правка base-compose не потрібні.
+
+## Кроки ✅
+- [x] `services/catalog-service/compose.prod.yaml`: db `${CATALOG_DB_PASSWORD}`, env (prod/APP_SECRET/
+      DATABASE_URL/MESSENGER_EVENTS_DSN), `ports: !reset []`, `restart: unless-stopped`, catalog-service у
+      `[default, monolith]`. (catalog лише верифікує JWT → passphrase не треба.)
+- [x] `services/user-service/compose.prod.yaml`: db `${USER_DB_PASSWORD}`, env (+`JWT_PASSPHRASE` — підписує),
+      `ports: !reset []`, restart, оголошено external-мережу `monolith` + приєднано.
+- [x] Моноліт `compose.prod.yaml`: `CATALOG_SERVICE_URL: http://catalog-service` у `php`+`worker`.
+- [x] `.gitlab-ci.yml`: `build:`/`test:`/`deploy:` для обох сервісів (deploy `needs:[test:<svc>, deploy]`, gated `develop`).
+- [x] ⚠️ **Знахідка:** `ports: []` НЕ перевизначає (порожній override ігнорується) → треба `ports: !reset []`
+      (Compose 2.24+). Через це й pre-existing баг моноліту (нижче).
+- [x] ✅ Verify (локально): `docker compose config` VALID для обох overlay (порти прибрано, на мережі monolith) +
+      моноліту (`CATALOG_SERVICE_URL` ×2); `.gitlab-ci.yml` — валідний YAML, 6 нових джоб.
+      ⚠️ Реальний прод-деплой — на runner при merge в `develop` (тут не верифікується).
+
+## Pre-existing баг моноліту (виявлено й ВИПРАВЛЕНО) ✅
+У `compose.prod.yaml` `rabbitmq: ports: []` і `mailer: ports: []` **не діяли** → у прод публічно виставлялися
+**RabbitMQ :5672** і **Mailpit :1025** (попри коментар «не виставляти брокер публічно»). Виправлено на
+`ports: !reset []`; `docker compose config` підтверджує — публічних портів у `rabbitmq`/`mailer` більше немає.
+
+## Поза моєю зоною (дії користувача)
+- GitLab CI vars: `CATALOG_DB_PASSWORD`, `USER_DB_PASSWORD`, `APP_SECRET` (для сервісів). `JWT_PASSPHRASE` — є.
+- Звʼязність: прод catalog як джерело правди працює лише разом із Фазою 4.5 (MR !6).
+
+---
+
+# Фаза 4.5 Крок 5 — Catalog = єдине джерело правди (write-API + дроп таблиць) — ПЛАН, очікує апрув
+
+> **Мета:** catalog-service володіє і читанням, і **записом** каталогу. Адмінка моноліту пише через
+> HTTP. Каталог-таблиці моноліту (`catalog.products/categories/brands`) **дропаються** → розбіжність
+> даних усувається повністю. Завершення Strangler-Fig-винесення Catalog. Гілка: поточна.
+> **Узгоджені рішення:** (A) кастомні адмін-контролери + дроп (НЕ dual-write — це анти-патерн, який
+> закрили у Фазі 2); PrinterModel лишається в моноліті з розв'язаним FK (знімки); ProductAttribute — **видалити** (дрімаючий).
+
+## Розвідка (факт)
+- catalog-service: лише read-API (`GET`), сутності `Product/Category/Brand/StockReservation`; `^/api`
+  вимагає `IS_AUTHENTICATED_FULLY` (без розрізнення read/write).
+- Дві FK-зачіпки в моноліті блокують дроп: `PrinterModel.brand → catalog.brands` (CASCADE; читає
+  `SearchController`/`BrandExtension.brand_models`/`PrinterModelCrudController`) та
+  `ProductAttribute.product → catalog.products` (API Platform; дрімаючий `CollectionField` hideOnForm).
+- EasyAdmin `Product/Category/Brand CrudController` намертво на Doctrine (persist/update/delete +
+  index/фільтри/форми через EntityManager) → «писати через HTTP» = замінити data-layer.
+- Зображення: presign S3 (браузер→S3) лишається в моноліті, у сервіс іде лише рядок-ключ `image`;
+  `MediaController` (віддача) лишається в моноліті.
+
+## Крок 5.1 — catalog-service: write-API + RBAC ✅
+- [x] `Product/Category/Brand` контролери: `POST` (201), `PUT/PATCH` (200), `DELETE` (204); валідація → 422; 404
+      (hydrate: create=усі обов'язкові, update=лише надані поля; FK category/brand/parent резолвляться → 422 якщо нема)
+- [x] `security.yaml`: `methods:[POST,PUT,PATCH,DELETE]`→`ROLE_CATALOG_ADMIN`; решта `^/api`→`IS_AUTHENTICATED_FULLY` (read)
+- [x] Репозиторії Product/Category/Brand: методи save/remove (flush)
+- [x] ✅ Verify: phpunit catalog-service **23 OK** (+12 write: 201/200/204/401/403/422/404, dup-slug, bad-color);
+      `schema:validate [OK]`. catalog-service без phpstan (немає тулінгу). ⚠️ `cache:clear --env=test` після нових роутів
+
+## Крок 5.2 — моноліт: розв'язати FK + дроп каталог-сутностей (атомарно; семантично один крок) ✅
+- [x] `PrinterModel.brand` (ManyToOne→Brand) → знімки `brandSlug`+`brandName` (БЕЗ `brandId` — жоден код
+      printer-finder не вживає UUID, лише slug-маршрути); `PrinterModelRepository` без JOIN;
+      `SearchController.getBrandName/Slug`; `BrandExtension.getBrandModels` — по знімках
+- [x] **Видалено** `ProductAttribute` (entity; репо не існувало; ApiResource на самій entity → зник з нею)
+- [x] Видалено entity `Product`/`Category`/`Brand` + Doctrine-репо (ніде не вживались — вітрина на CatalogClient)
+- [x] ⚠️ **Розширення обсягу (фолд):** 3 EasyAdmin CRUD (`Product/Category/Brand`) посилались на видалені entity
+      → видалено + прибрано з Dashboard-меню (заміна — кастомні сторінки в 5.3). `PrinterModelCrudController`:
+      `AssociationField('brand')` → `ChoiceField(brandSlug)` з `CatalogClient->brands()`, `brandName` через persist/update
+- [x] `ProductImageService::syncAfterWrite()` — видалено (мертвий: єдиний викликач був ProductCrud; новий флоу — presign-ключ)
+- [x] Фікстури: лише `printer_models` (знімки) + users; каталог сіє catalog-service
+- [x] Міграція `Version20260619120000`: drop `products/categories/brands/product_attributes`;
+      `printer_models` drop `brand_id` (FK падає з колонкою) → `+ brand_slug`, `+ brand_name`. `down()` irreversible (cutover)
+- [x] Тести: WebTestCase (мертвий seeding категорій прибрано), CheckoutControllerTest (Uuid замість Product entity),
+      видалено `ProductTest`/`ProductCrudTest`, SecurityTest (роути), ProductImageExtensionTest (сигнатура);
+      phpstan-baseline почищено від видалених файлів
+- [x] ✅ Verify: phpunit моноліт **140 OK**; phpstan **[OK] No errors**; Postgres `migrate`+`schema:validate [OK]`
+      (`catalog` лишив лише `printer_models`); `fixtures:load` ок; `printer_models.brand_slug/brand_name` заповнені
+
+## Крок 5.3 — моноліт: адмінка пише через HTTP ✅
+- [x] `CatalogAdminClient` (write-токен `ROLE_CATALOG_ADMIN`): reads (products availableOnly=0, categories, brands,
+      product by id) + create/update/delete; **throws** на 4xx (адмін бачить помилки, на відміну від storefront-fallback)
+- [x] `CatalogAdminController` (`#[IsGranted('ROLE_ADMIN')]`, `/admin/catalog`): 12 роутів — list + new[GET/POST]
+      + edit[GET/POST] + delete[POST] для Product/Category/Brand; CSRF `catalog_admin`; flash + redirect (патерн ExportController)
+- [x] 6 Twig-шаблонів (`templates/admin/catalog/`): {products,categories,brands}.html.twig + *_form.html.twig (Bootstrap)
+- [x] Dashboard-меню: повернуто Products/Categories/Brands через `linkToRoute` (HTTP, не EasyAdmin)
+- [x] ⚠️ Зображення: форма приймає `image`-ключ текстом (presign-JS інтеграція в кастомну форму — відкладено;
+      ендпоінт presign лишається). Ціна вводиться в євро → конвертація в центи (round*100)
+- [x] ✅ Verify: phpstan **[OK]**; контейнер компілюється (dev+test); `lint:twig` 6/6 OK; 12 роутів зареєстровано;
+      SecurityTest 7 OK (дашборд із новим меню рендериться). Повний E2E (адмін→вітрина) — Крок 5.4
+
+## Крок 5.4 — E2E + документація ✅
+- [x] ✅ **Реальний E2E** (probe-команда проти живих сервісів, потім видалена): admin POST (CatalogAdminClient,
+      `ROLE_CATALOG_ADMIN`, спільний keypair) → catalog-service створив brand+product → storefront read
+      (CatalogClient, ROLE_USER) **знайшов його на вітрині** €42.42 → cleanup. Дані НЕ розходяться (один сервіс)
+- [x] Репродукований `CatalogAdminControllerTest` (мок CatalogAdminClient, бо CI без сервісу): 4 тести
+      (anon→login, list рендериться, create POST'иться в сервіс, delete POST'иться)
+- [x] printer-finder: знімки `brand_slug/brand_name` заповнені (звірено в БД); search/autocomplete на знімках
+- [x] ✅ Verify: phpunit моноліт **144 OK** (+4); catalog-service **23 OK**; phpstan **[OK]**;
+      `schema:validate` обох **[OK]**
+- [x] Оновлено `microservices-architecture.md` §10 (Фаза 4.5 — cutover завершено: write-API+адмінка+дроп таблиць)
+
+## Підсумок Кроку 5 (Фаза 4.5)
+Catalog Service — **єдине джерело правди**: і читання (вітрина/кошик), і запис (адмінка через HTTP) ідуть у
+сервіс; каталог-таблиці моноліту дропнуто. Розбіжність даних усунено (доведено E2E). PrinterModel/printer-finder
+лишився в моноліті зі знімками бренду (без FK). Strangler-Fig-винесення Catalog завершено на рівні даних.
+Комміти: `91e7c0c`(5.1 write-API+RBAC) `bf89007`(5.2 дроп таблиць) `406e58c`(5.3 admin HTTP) + 5.4 (E2E+доки).
+⚠️ Залишок: presign-JS у кастомну форму продукту; прод-розгортання сервісів (окрема задача, не блокує).
+
+## Ризики
+1. **EasyAdmin data-layer** — найбільший: кастомні сторінки замість Doctrine-CRUD (втрата авто-index/фільтрів — свідомо).
+2. **FK-розв'язання** — патерн Фази 1; ризик «загубити» бренд у printer-finder, якщо знімок не заповнити при write.
+3. **Транзакційність HTTP-запису** — адмін-запис у сервіс не атомарний із локальним станом; для адмінки прийнятно (не Saga).
+4. **Зображення** — presign-ключ має дійти до сервісу; локальне сховище (`syncAfterWrite`) переглянути.
+5. **Фікстури** — канонічні дані лише в catalog-service; моноліт більше не сіє каталог.
+
+---
+
 # Фаза 5 — Checkout Saga зі stock-резервуванням (MVP) — ПЛАН, очікує апрув
 
 > **Мета:** хореографічна Saga на наявному RabbitMQ-backbone. Монолітний Order емітить доменні події;

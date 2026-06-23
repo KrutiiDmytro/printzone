@@ -22,7 +22,7 @@ final class ProductImageExtensionTest extends TestCase
             fn (string $route, array $params) => '/media?key='.($params['key'] ?? '')
         );
 
-        $service = new ProductImageService($storage, $urlGenerator, '/tmp', '/tmp/uploads', $storageType);
+        $service = new ProductImageService($storage, $urlGenerator, $storageType);
 
         return new ProductImageExtension($service);
     }

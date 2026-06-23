@@ -22,8 +22,8 @@ class SearchController extends AbstractController
 
         return $this->json(array_map(fn ($m) => [
             'name' => $m->getName(),
-            'brandName' => $m->getBrand()->getName(),
-            'brandSlug' => $m->getBrand()->getSlug(),
+            'brandName' => $m->getBrandName(),
+            'brandSlug' => $m->getBrandSlug(),
         ], $models));
     }
 }

@@ -20,8 +20,7 @@ class PrinterModelRepository extends ServiceEntityRepository
     public function searchByName(string $q, int $limit = 10): array
     {
         return $this->createQueryBuilder('m')
-            ->join('m.brand', 'b')
-            ->where('LOWER(m.name) LIKE LOWER(:q) OR LOWER(b.name) LIKE LOWER(:q)')
+            ->where('LOWER(m.name) LIKE LOWER(:q) OR LOWER(m.brandName) LIKE LOWER(:q)')
             ->setParameter('q', '%'.$q.'%')
             ->orderBy('m.name', 'ASC')
             ->setMaxResults($limit)
@@ -33,8 +32,7 @@ class PrinterModelRepository extends ServiceEntityRepository
     public function findByBrandSlug(string $brandSlug): array
     {
         return $this->createQueryBuilder('m')
-            ->join('m.brand', 'b')
-            ->where('b.slug = :slug')
+            ->where('m.brandSlug = :slug')
             ->setParameter('slug', $brandSlug)
             ->orderBy('m.name', 'ASC')
             ->getQuery()
