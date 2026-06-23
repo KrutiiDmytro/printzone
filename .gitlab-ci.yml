@@ -379,6 +379,10 @@ deploy:catalog-service:
     - echo "--- Starting service (pre-built image) ---"
     - $CSVC up -d --no-build
     - $CSVC exec -T catalog-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in csvc_var) so newly installed bundles
+    # (e.g. fixtures) register their console commands before we use them. prod
+    # does not auto-rebuild a stale cache.
+    - $CSVC exec -T catalog-service php bin/console cache:clear --env=prod
     - echo "--- Migrations ---"
     - $CSVC exec -T catalog-service php bin/console doctrine:migrations:migrate --no-interaction
     - echo "--- Seed only if empty (catalog is source of truth) ---"
@@ -389,7 +393,6 @@ deploy:catalog-service:
       else
         echo "Catalog has $COUNT products — skip seeding"
       fi
-    - $CSVC exec -T catalog-service php bin/console cache:clear --env=prod
     - echo "--- Health check ---"
     - |
       i=0
@@ -426,6 +429,10 @@ deploy:user-service:
     - echo "--- Starting service (pre-built image) ---"
     - $USVC up -d --no-build
     - $USVC exec -T user-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in usvc_var) so newly installed bundles
+    # (e.g. fixtures) register their console commands before we use them. prod
+    # does not auto-rebuild a stale cache.
+    - $USVC exec -T user-service php bin/console cache:clear --env=prod
     - echo "--- Migrations ---"
     - $USVC exec -T user-service php bin/console doctrine:migrations:migrate --no-interaction
     - echo "--- Seed only if empty ---"
@@ -436,7 +443,6 @@ deploy:user-service:
       else
         echo "Users table has $COUNT rows — skip seeding"
       fi
-    - $USVC exec -T user-service php bin/console cache:clear --env=prod
     - echo "--- Health check ---"
     - |
       i=0
