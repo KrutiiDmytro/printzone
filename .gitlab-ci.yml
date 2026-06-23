@@ -193,6 +193,16 @@ deploy:
   script:
     - echo "=== Deploying to $DEPLOY_DIR ==="
 
+    # Контейнери моноліту пишуть у public/ як root → наступний rsync під
+    # неприлегованим runner'ом падає на mkstemp (Permission denied). Перед
+    # синхронізацією повертаємо власника назад на runner через root-контейнер.
+    - |
+      if [ -d "$DEPLOY_DIR/public" ]; then
+        echo "--- Reset public/ ownership to runner (containers wrote as root) ---"
+        docker run --rm -v "$DEPLOY_DIR/public:/pub" busybox \
+          chown -R "$(id -u):$(id -g)" /pub
+      fi
+
     - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
       --exclude='.git'
       --exclude='.env.local'
