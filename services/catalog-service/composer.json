@@ -11,6 +11,7 @@
         "ext-iconv": "*",
         "doctrine/dbal": "^3",
         "doctrine/doctrine-bundle": "^2.18",
+        "doctrine/doctrine-fixtures-bundle": "^4.3.1",
         "doctrine/doctrine-migrations-bundle": "^3.7",
         "doctrine/orm": "^3.6",
         "lexik/jwt-authentication-bundle": "^3.2",
@@ -28,7 +29,6 @@
         "symfony/yaml": "7.4.*"
     },
     "require-dev": {
-        "doctrine/doctrine-fixtures-bundle": "^4.3.1",
         "phpunit/phpunit": "^11.5",
         "symfony/browser-kit": "7.4.*",
         "symfony/css-selector": "7.4.*"
