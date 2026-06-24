@@ -26,6 +26,8 @@ services:
       # catalog-service is reached over the shared network by name in prod
       # (host.docker.internal:8002 only works on the dev host).
       CATALOG_SERVICE_URL: "http://catalog-service"
+      # order-service owns orders + checkout Saga; checkout delegates here.
+      ORDER_SERVICE_URL: "http://order-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
@@ -48,6 +50,8 @@ services:
       MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
       # Export's ProductExtractor reads the catalog over HTTP from the async worker.
       CATALOG_SERVICE_URL: "http://catalog-service"
+      # Export's OrderExtractor reads orders over HTTP from the async worker.
+      ORDER_SERVICE_URL: "http://order-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       # The worker delivers queued emails (SendEmailMessage on the async transport),
       # so it needs the real mailer DSN — otherwise it falls back to null:// and drops them.
