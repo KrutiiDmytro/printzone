@@ -212,6 +212,7 @@ deploy:
       --exclude='tests/'
       --exclude='public/assets/'
       --exclude='public/bundles/'
+      --exclude='config/jwt'
       "$CI_PROJECT_DIR/" "$DEPLOY_DIR/"
 
     - cd "$DEPLOY_DIR"
@@ -245,6 +246,14 @@ deploy:
     - echo "--- Installing dependencies ---"
     - $COMPOSE exec -T php composer install
       --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+
+    # JWT keypair is gitignored (not in the rsync source) and the rsync above now
+    # excludes config/jwt, so existing prod keys survive. On a fresh host (or after
+    # the keys were lost) generate them with the env passphrase; --skip-if-exists
+    # leaves an established keypair untouched. Without this the monolith cannot sign
+    # service-to-service tokens (CatalogClient/OrderClient) → "encode the JWT token".
+    - echo "--- Ensuring JWT keypair exists ---"
+    - $COMPOSE exec -T php php bin/console lexik:jwt:generate-keypair --skip-if-exists
 
     - |
       i=0
