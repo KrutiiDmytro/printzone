@@ -45,6 +45,10 @@ services:
         required: false
     command: php bin/console app:outbox:relay --time-limit=3600
     restart: unless-stopped
+    # The FrankenPHP image bakes in an HTTP healthcheck, but this container runs a
+    # CLI worker (no HTTP server) → it would always report "unhealthy". Disable it.
+    healthcheck:
+      disable: true
     volumes:
       - .:/app
       - osvc_vendor:/app/vendor
