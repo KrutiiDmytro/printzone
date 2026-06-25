@@ -327,6 +327,16 @@ build:user-service:
   needs: []
   rules: *rules_mr_develop
 
+build:order-service:
+  stage: build
+  script:
+    - docker build -f services/order-service/Dockerfile
+      -t printzone/order-service:$CI_COMMIT_SHA
+      -t printzone/order-service:latest
+      services/order-service
+  needs: []
+  rules: *rules_mr_develop
+
 test:catalog-service:
   stage: test
   needs:
@@ -354,6 +364,21 @@ test:user-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/user-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:order-service:
+  stage: test
+  needs:
+    - build:order-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/order-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/order-service:latest
       sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
@@ -453,6 +478,48 @@ deploy:user-service:
       echo "user-service healthy"
   needs:
     - test:user-service
+    - deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:order-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    OSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    - cd "$DEPLOY_DIR/services/order-service"
+    - echo "--- Starting db-order ---"
+    - $OSVC up -d db-order
+    - |
+      i=0
+      until $OSVC exec -T db-order pg_isready -U app -d order_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-order not ready"; $OSVC logs db-order --tail=20; exit 1; }
+        echo "Waiting for db-order ($i/30)..."; sleep 2
+      done
+    - $OSVC exec -T db-order psql -U app -d order_service -c "ALTER USER app WITH PASSWORD '${ORDER_DB_PASSWORD}';"
+    - echo "--- Starting service + relay (pre-built image) ---"
+    - $OSVC up -d --no-build
+    - $OSVC exec -T order-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in osvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $OSVC exec -T order-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $OSVC exec -T order-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Orders are created at runtime — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $OSVC exec -T order-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: order-service health failed"; $OSVC logs order-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "order-service healthy"
+  needs:
+    - test:order-service
     - deploy
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
