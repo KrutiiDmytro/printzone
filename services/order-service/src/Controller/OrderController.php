@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\Order;
 use App\Repository\OrderRepository;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
@@ -11,12 +12,15 @@ use Symfony\Component\Uid\Uuid;
 
 /**
  * Read API consumed by the monolith: the admin order screens and the Export
- * extractor (which used to query the Order entity directly).
+ * extractor (which used to query the Order entity directly). The admin also
+ * updates an order's fulfilment status via PUT /{id}/status (ROLE_ADMIN).
  */
 #[Route('/api/orders')]
 class OrderController
 {
     private const MAX_LIMIT = 500;
+
+    private const STATUSES = ['PENDING', 'PAID', 'FAILED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
     public function __construct(
         private readonly OrderRepository $orders,
@@ -49,6 +53,30 @@ class OrderController
         if (null === $order) {
             return new JsonResponse(['error' => 'Order not found'], 404);
         }
+
+        return new JsonResponse($this->serialize($order));
+    }
+
+    #[Route('/{id}/status', name: 'orders_update_status', methods: ['PUT'])]
+    public function updateStatus(string $id, Request $request, EntityManagerInterface $em): JsonResponse
+    {
+        if (!Uuid::isValid($id)) {
+            return new JsonResponse(['error' => 'Invalid order id'], 400);
+        }
+
+        $data = json_decode($request->getContent() ?: '{}', true);
+        $status = is_array($data) ? (string) ($data['status'] ?? '') : '';
+        if (!in_array($status, self::STATUSES, true)) {
+            return new JsonResponse(['error' => 'Invalid status'], 400);
+        }
+
+        $order = $this->orders->find(Uuid::fromString($id));
+        if (null === $order) {
+            return new JsonResponse(['error' => 'Order not found'], 404);
+        }
+
+        $order->setStatus($status);
+        $em->flush();
 
         return new JsonResponse($this->serialize($order));
     }

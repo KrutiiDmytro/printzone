@@ -2,26 +2,26 @@
 
 namespace App\Controller;
 
-use App\Messaging\Application\OutboxRecorder;
-use App\Order\Domain\Entity\Order;
-use App\Order\Domain\Entity\OrderItem;
-use App\Payment\Service\StripeCheckoutService;
+use App\Order\Client\OrderClient;
 use App\Service\CartService;
 use App\User\Domain\Entity\User;
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
-use Symfony\Component\Uid\Uuid;
 
+/**
+ * Thin checkout entrypoint. The Order domain lives in order-service: this
+ * controller reads the cart (still owned by the monolith), then delegates order
+ * creation + the Stripe Checkout session to the service and redirects the user
+ * to Stripe. The success/cancel pages stay here — they render and clear the cart.
+ */
 class CheckoutController extends AbstractController
 {
     public function __construct(
         private CartService $cartService,
-        private EntityManagerInterface $entityManager,
-        private StripeCheckoutService $stripeCheckoutService,
-        private OutboxRecorder $outboxRecorder,
+        private OrderClient $orderClient,
     ) {
     }
 
@@ -57,70 +57,37 @@ class CheckoutController extends AbstractController
         $user = $this->getUser();
         \assert($user instanceof User);
 
-        $order = new Order();
-        $order->setUserId($user->getId());
-        $order->setUserEmail($user->getEmail());
-        $order->setStatus('PENDING');
-        $order->setTotalAmount($cart['total']);
-
+        $items = [];
         foreach ($cart['items'] as $cartItem) {
             $product = $cartItem['product'];
-            $orderItem = new OrderItem();
-            $orderItem->setOrderRef($order);
-            $orderItem->setProductId(Uuid::fromString((string) $product->getId()));
-            $orderItem->setProductName((string) $product->getName());
-            $orderItem->setQuantity($cartItem['quantity']);
-            $orderItem->setPrice((int) $product->getPrice());
-            $order->getItems()->add($orderItem);
+            $items[] = [
+                'productId' => (string) $product->getId(),
+                'name' => (string) $product->getName(),
+                'price' => (int) $product->getPrice(),
+                'quantity' => (int) $cartItem['quantity'],
+            ];
         }
 
-        $this->entityManager->persist($order);
-
-        // Transactional outbox: OrderCreated commits atomically with the order
-        // insert, then the relay ships it to RabbitMQ where the Catalog Saga
-        // reserves stock (HELD) for these items.
-        $this->outboxRecorder->record('order', 'OrderCreated', [
-            'orderId' => (string) $order->getId(),
-            'userId' => (string) $user->getId(),
-            'items' => $order->toEventItems(),
-            'totalAmount' => $order->getTotalAmount(),
-        ]);
-
-        $this->entityManager->flush();
+        // Stripe redirects back to the monolith (it owns the cart + these pages).
+        $successUrl = $this->generateUrl('app_checkout_success', [], UrlGeneratorInterface::ABSOLUTE_URL)
+            .'?session_id={CHECKOUT_SESSION_ID}';
+        $cancelUrl = $this->generateUrl('app_checkout_cancel', [], UrlGeneratorInterface::ABSOLUTE_URL);
 
         try {
-            $session = $this->stripeCheckoutService->createSession($order, $cart['items']);
-        } catch (\Exception $e) {
-            $this->failOrder($order, 'Payment service is unavailable. Please try again.');
+            $result = $this->orderClient->createCheckout([
+                'userId' => (string) $user->getId(),
+                'userEmail' => (string) $user->getEmail(),
+                'items' => $items,
+                'successUrl' => $successUrl,
+                'cancelUrl' => $cancelUrl,
+            ]);
+        } catch (\Throwable $e) {
+            $this->addFlash('error', 'Payment service is unavailable. Please try again.');
 
             return $this->redirectToRoute('app_checkout');
         }
 
-        if (null === $session['url']) {
-            $this->failOrder($order, 'Could not initiate payment session. Please try again.');
-
-            return $this->redirectToRoute('app_checkout');
-        }
-
-        $order->setStripeSessionId($session['id']);
-        $this->entityManager->flush();
-
-        return $this->redirect($session['url']);
-    }
-
-    /**
-     * Marks the order FAILED and emits OrderCancelled so the Catalog Saga
-     * releases the HELD reservation; both commit in one flush.
-     */
-    private function failOrder(Order $order, string $flash): void
-    {
-        $order->setStatus('FAILED');
-        $this->outboxRecorder->record('order', 'OrderCancelled', [
-            'orderId' => (string) $order->getId(),
-            'items' => $order->toEventItems(),
-        ]);
-        $this->entityManager->flush();
-        $this->addFlash('error', $flash);
+        return $this->redirect($result['url']);
     }
 
     #[Route('/checkout/success', name: 'app_checkout_success')]

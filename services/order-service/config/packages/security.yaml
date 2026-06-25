@@ -23,7 +23,7 @@ security:
 
     access_control:
         - { path: ^/health, roles: PUBLIC_ACCESS }
-        # Admin order listings (export/admin proxy) require an elevated service token.
-        - { path: ^/api/orders, methods: [GET], roles: IS_AUTHENTICATED_FULLY }
-        # Checkout (POST from the monolith) needs any valid service token.
+        # Mutating an order (admin status change) requires an elevated service token.
+        - { path: ^/api/orders, methods: [PUT, PATCH, DELETE], roles: ROLE_ADMIN }
+        # Reads + checkout (POST from the monolith) need any valid service token.
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }

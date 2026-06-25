@@ -19,12 +19,6 @@ parameters:
 			path: src/Controller/Admin/ExportController.php
 
 		-
-			message: '#^Class App\\Controller\\Admin\\OrderCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Controller/Admin/OrderCrudController.php
-
-		-
 			message: '#^Class App\\Controller\\Admin\\PrinterModelCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
 			identifier: missingType.generics
 			count: 1
@@ -47,12 +41,6 @@ parameters:
 			identifier: missingType.parameter
 			count: 1
 			path: src/Controller/Admin/UserCrudController.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between null and string will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: src/Controller/CheckoutController.php
 
 		-
 			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getEmail\(\)\.$#'
@@ -169,24 +157,6 @@ parameters:
 			path: src/Export/Service/ExportService.php
 
 		-
-			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$items with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Order/Domain/Entity/Order.php
-
-		-
-			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$status \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
-			identifier: property.unusedType
-			count: 1
-			path: src/Order/Domain/Entity/Order.php
-
-		-
-			message: '#^Property App\\Order\\Domain\\Entity\\Order\:\:\$totalAmount \(int\|null\) is never assigned null so it can be removed from the property type\.$#'
-			identifier: property.unusedType
-			count: 1
-			path: src/Order/Domain/Entity/Order.php
-
-		-
 			message: '#^Class App\\Repository\\CartRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
 			identifier: missingType.generics
 			count: 1
@@ -203,18 +173,6 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: src/Repository/ExportJobRepository.php
-
-		-
-			message: '#^Class App\\Repository\\OrderRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Repository/OrderRepository.php
-
-		-
-			message: '#^Method App\\Repository\\OrderRepository\:\:findRecentOrders\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Repository/OrderRepository.php
 
 		-
 			message: '#^Method App\\Service\\CartService\:\:addProductToDatabase\(\) has parameter \$user with no type specified\.$#'
@@ -359,24 +317,6 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: tests/Unit/Export/ExportJobTest.php
-
-		-
-			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\OrderExtractorTest\:\:makeEm\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: tests/Unit/Export/Extractor/OrderExtractorTest.php
-
-		-
-			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\OrderExtractorTest\:\:makeQbWithExpectations\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: tests/Unit/Export/Extractor/OrderExtractorTest.php
-
-		-
-			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\OrderExtractorTest\:\:makeQbWithExpectations\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: tests/Unit/Export/Extractor/OrderExtractorTest.php
 
 		-
 			message: '#^Method App\\Tests\\Unit\\Export\\Extractor\\UserExtractorTest\:\:makeEm\(\) has parameter \$rows with no value type specified in iterable type array\.$#'

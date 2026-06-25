@@ -6,8 +6,7 @@ use App\Cart\Domain\Entity\Cart;
 use App\Cart\Domain\Entity\CartItem;
 use App\Catalog\Client\CatalogClient;
 use App\Catalog\View\ProductView;
-use App\Messaging\Domain\Entity\OutboxMessage;
-use App\Payment\Service\StripeCheckoutService;
+use App\Order\Client\OrderClient;
 use App\Tests\Functional\WebTestCase;
 use App\User\Domain\Entity\User;
 use Symfony\Component\Uid\Uuid;
@@ -56,41 +55,39 @@ class CheckoutControllerTest extends WebTestCase
     public function testPlaceOrderRedirectsToStripe(): void
     {
         $stripeUrl = 'https://checkout.stripe.com/c/pay/cs_test_123';
-        $mock = $this->createMock(StripeCheckoutService::class);
-        $mock->method('createSession')->willReturn(['id' => 'cs_test_123', 'url' => $stripeUrl]);
+        $mock = $this->createMock(OrderClient::class);
+        $mock->method('createCheckout')->willReturn(['orderId' => (string) Uuid::v4(), 'url' => $stripeUrl]);
 
-        [$client, $container] = $this->authWithCartProduct('Stripe Test Product', 2000, 5, $mock);
+        [$client] = $this->authWithCartProduct('Stripe Test Product', 2000, 5, $mock);
 
         $client->request('POST', '/checkout/place-order');
 
+        // Order creation + Stripe session now live in order-service; the monolith
+        // just delegates and redirects the user to the returned payment URL.
         $this->assertResponseRedirects($stripeUrl);
-        // Saga: OrderCreated emitted into the outbox in the same transaction.
-        $this->assertSame(['OrderCreated'], $this->outboxEventNames($container));
     }
 
-    public function testPlaceOrderHandlesStripeFailure(): void
+    public function testPlaceOrderHandlesOrderServiceFailure(): void
     {
-        $mock = $this->createMock(StripeCheckoutService::class);
-        $mock->method('createSession')->willThrowException(new \RuntimeException('Stripe API error'));
+        $mock = $this->createMock(OrderClient::class);
+        $mock->method('createCheckout')->willThrowException(new \RuntimeException('Order Service unavailable'));
 
-        [$client, $container] = $this->authWithCartProduct('Stripe Fail Product', 1500, 5, $mock);
+        [$client] = $this->authWithCartProduct('Stripe Fail Product', 1500, 5, $mock);
 
         $client->request('POST', '/checkout/place-order');
 
-        // Saga: HELD then released — both OrderCreated and OrderCancelled emitted.
-        $this->assertEqualsCanonicalizing(['OrderCreated', 'OrderCancelled'], $this->outboxEventNames($container));
-
+        // Failure is surfaced as a flash and the user is sent back to checkout.
         $this->assertResponseRedirects('/checkout');
     }
 
     /**
      * Sets up an authenticated client with a single-product cart, mocking the
-     * Catalog client (and optionally Stripe) BEFORE login so the test container
-     * can replace them before they are first used.
+     * Catalog client (and optionally the Order client) BEFORE login so the test
+     * container can replace them before they are first used.
      *
      * @return array{0: \Symfony\Bundle\FrameworkBundle\KernelBrowser, 1: object}
      */
-    private function authWithCartProduct(string $name, int $price, int $stock, ?StripeCheckoutService $stripeMock = null): array
+    private function authWithCartProduct(string $name, int $price, int $stock, ?OrderClient $orderMock = null): array
     {
         $client = static::createClient();
         $client->disableReboot();
@@ -98,8 +95,8 @@ class CheckoutControllerTest extends WebTestCase
         $container = static::getContainer();
         // Replace the Catalog client before anything can initialise it.
         $this->mockCatalog($container);
-        if (null !== $stripeMock) {
-            $container->set(StripeCheckoutService::class, $stripeMock);
+        if (null !== $orderMock) {
+            $container->set(OrderClient::class, $orderMock);
         }
 
         $this->createSchema();
@@ -113,19 +110,6 @@ class CheckoutControllerTest extends WebTestCase
         $client->loginUser($user, 'main');
 
         return [$client, $container];
-    }
-
-    /**
-     * Event names recorded in the transactional outbox, in insertion order.
-     *
-     * @return list<string>
-     */
-    private function outboxEventNames(object $container): array
-    {
-        $em = $container->get('doctrine.orm.entity_manager');
-        $rows = $em->getRepository(OutboxMessage::class)->findBy([], ['createdAt' => 'ASC']);
-
-        return array_map(static fn (OutboxMessage $m): string => $m->getEventName(), $rows);
     }
 
     /**
