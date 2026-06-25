@@ -94,12 +94,13 @@ class SecurityTest extends WebTestCase
         // Автентифікуємо користувача для брандмауера 'main'
         $client = $this->createUserClient();
 
-        // Product/Category/Brand admin moved to catalog-service (step 5.3); the
-        // remaining EasyAdmin routes still guard the admin firewall.
+        // Product/Category/Brand admin moved to catalog-service (step 5.3) and
+        // orders to order-service (/admin/orders proxy); the admin firewall still
+        // guards the dashboard, the EasyAdmin user CRUD and the order proxy.
         $adminRoutes = [
             '/admin',
             '/admin/user',
-            '/admin/order',
+            '/admin/orders',
         ];
 
         foreach ($adminRoutes as $route) {
