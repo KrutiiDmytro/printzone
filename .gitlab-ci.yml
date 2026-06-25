@@ -293,9 +293,14 @@ deploy:
       echo "Application is healthy"
     - echo "=== Deploy complete ==="
 
+  # order-service must be deployed & healthy BEFORE this job's migrations run —
+  # Version20260625071542 DROPs the monolith order tables, so the new source of
+  # truth has to be live first. If deploy:order-service fails (e.g. missing
+  # ORDER_DB_PASSWORD), this job never runs and the DROP is averted.
   needs:
     - test:unit
     - test:functional
+    - deploy:order-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
@@ -491,6 +496,12 @@ deploy:order-service:
   variables:
     OSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
   script:
+    # Fail fast (before the monolith DROP, which needs this job) if the DB
+    # password is missing — otherwise order-service comes up unreachable.
+    - |
+      if [ -z "$ORDER_DB_PASSWORD" ]; then
+        echo "ERROR: ORDER_DB_PASSWORD is not set. Aborting before the monolith DROP."; exit 1
+      fi
     - cd "$DEPLOY_DIR/services/order-service"
     - echo "--- Starting db-order ---"
     - $OSVC up -d db-order
@@ -518,8 +529,9 @@ deploy:order-service:
         echo "Health attempt $i/15..."; sleep 2
       done
       echo "order-service healthy"
+  # Deploy order-service FIRST (independently of the monolith), so it is live
+  # and healthy before the monolith cutover drops its order tables.
   needs:
     - test:order-service
-    - deploy
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
