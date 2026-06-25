@@ -10,6 +10,9 @@ use PHPUnit\Framework\TestCase;
 
 final class OrderExtractorTest extends TestCase
 {
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     */
     private function clientReturning(array $rows): OrderClient
     {
         $client = $this->createMock(OrderClient::class);
@@ -63,9 +66,12 @@ final class OrderExtractorTest extends TestCase
         $client = $this->createMock(OrderClient::class);
         $client->expects($this->once())
             ->method('list')
-            ->with($this->callback(function (array $filters): bool {
-                return 'PAID' === $filters['status'] && '2026-01-31' === $filters['dateTo'];
-            }))
+            ->with($this->callback(
+                /** @param array<string, mixed> $filters */
+                static function (array $filters): bool {
+                    return 'PAID' === $filters['status'] && '2026-01-31' === $filters['dateTo'];
+                }
+            ))
             ->willReturn([]);
 
         (new OrderExtractor($client))->extract(['status' => 'PAID', 'dateTo' => '2026-01-31']);
