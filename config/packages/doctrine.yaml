@@ -32,12 +32,6 @@ doctrine:
                 dir: '%kernel.project_dir%/src/User/Domain/Entity'
                 prefix: 'App\User\Domain\Entity'
                 alias: User
-            Order:
-                type: attribute
-                is_bundle: false
-                dir: '%kernel.project_dir%/src/Order/Domain/Entity'
-                prefix: 'App\Order\Domain\Entity'
-                alias: Order
             Cart:
                 type: attribute
                 is_bundle: false
