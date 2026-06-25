@@ -54,4 +54,32 @@ class OrderApiTest extends ApiTestCase
 
         self::assertResponseStatusCodeSame(404);
     }
+
+    public function testUpdateStatusRequiresAdminToken(): void
+    {
+        $order = $this->seedOrder('PAID');
+
+        $this->send('PUT', '/api/orders/'.$order->getId().'/status', ['status' => 'SHIPPED'], $this->serviceToken());
+
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    public function testUpdateStatusChangesStatus(): void
+    {
+        $order = $this->seedOrder('PAID');
+
+        $this->send('PUT', '/api/orders/'.$order->getId().'/status', ['status' => 'SHIPPED'], $this->adminToken());
+
+        self::assertResponseIsSuccessful();
+        self::assertSame('SHIPPED', $this->json()['status']);
+    }
+
+    public function testUpdateStatusRejectsUnknownValue(): void
+    {
+        $order = $this->seedOrder('PAID');
+
+        $this->send('PUT', '/api/orders/'.$order->getId().'/status', ['status' => 'BOGUS'], $this->adminToken());
+
+        self::assertResponseStatusCodeSame(400);
+    }
 }

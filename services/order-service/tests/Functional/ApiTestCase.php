@@ -62,6 +62,13 @@ abstract class ApiTestCase extends WebTestCase
         return $jwt->create(new InMemoryUser('service-test', null, ['ROLE_USER']));
     }
 
+    protected function adminToken(): string
+    {
+        $jwt = static::getContainer()->get(JWTTokenManagerInterface::class);
+
+        return $jwt->create(new InMemoryUser('service-admin', null, ['ROLE_USER', 'ROLE_ADMIN']));
+    }
+
     /**
      * Builds a valid Stripe-Signature header for the given payload using the
      * test webhook secret, so the real signature verification path is exercised.

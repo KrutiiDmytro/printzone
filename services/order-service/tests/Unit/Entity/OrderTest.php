@@ -1,22 +1,14 @@
 <?php
 
-namespace App\Tests\Unit\Order\Domain\Entity;
+namespace App\Tests\Unit\Entity;
 
-use App\Order\Domain\Entity\Order;
-use App\Order\Domain\Entity\OrderItem;
+use App\Entity\Order;
+use App\Entity\OrderItem;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
 
 class OrderTest extends TestCase
 {
-    private Order $order;
-
-    protected function setUp(): void
-    {
-        $this->order = new Order();
-        $this->order->setUserId(Uuid::v4());
-    }
-
     private function makeItem(): OrderItem
     {
         $item = new OrderItem();
@@ -30,23 +22,25 @@ class OrderTest extends TestCase
 
     public function testAddItemAddsItemToOrder(): void
     {
+        $order = new Order();
         $item = $this->makeItem();
 
-        $this->order->addItem($item);
+        $order->addItem($item);
 
-        $this->assertCount(1, $this->order->getItems());
-        $this->assertTrue($this->order->getItems()->contains($item));
-        $this->assertEquals($this->order, $item->getOrderRef());
+        $this->assertCount(1, $order->getItems());
+        $this->assertTrue($order->getItems()->contains($item));
+        $this->assertSame($order, $item->getOrderRef());
     }
 
     public function testRemoveItemRemovesItemFromOrder(): void
     {
+        $order = new Order();
         $item = $this->makeItem();
 
-        $this->order->addItem($item);
-        $this->order->removeItem($item);
+        $order->addItem($item);
+        $order->removeItem($item);
 
-        $this->assertCount(0, $this->order->getItems());
+        $this->assertCount(0, $order->getItems());
         $this->assertNull($item->getOrderRef());
     }
 
@@ -55,26 +49,31 @@ class OrderTest extends TestCase
         $order = new Order();
 
         $this->assertInstanceOf(\DateTimeInterface::class, $order->getCreatedAt());
-        $this->assertEquals('PENDING', $order->getStatus());
-        $this->assertEquals(0, $order->getTotalAmount());
+        $this->assertSame('PENDING', $order->getStatus());
+        $this->assertSame(0, $order->getTotalAmount());
         $this->assertCount(0, $order->getItems());
     }
 
     public function testSetAndGetUserId(): void
     {
         $order = new Order();
-
         $userId = Uuid::v4();
+
         $order->setUserId($userId);
+
         $this->assertSame($userId, $order->getUserId());
     }
 
-    public function testSetTotalAmount(): void
+    public function testToEventItemsSnapshotsLines(): void
     {
         $order = new Order();
-        $order->setTotalAmount(5000); // 50.00
+        $order->addItem($this->makeItem());
 
-        $this->assertEquals(5000, $order->getTotalAmount());
+        $events = $order->toEventItems();
+
+        $this->assertCount(1, $events);
+        $this->assertArrayHasKey('productId', $events[0]);
+        $this->assertSame(2, $events[0]['quantity']);
     }
 
     public function testStatusChange(): void
@@ -82,6 +81,6 @@ class OrderTest extends TestCase
         $order = new Order();
         $order->setStatus('SHIPPED');
 
-        $this->assertEquals('SHIPPED', $order->getStatus());
+        $this->assertSame('SHIPPED', $order->getStatus());
     }
 }

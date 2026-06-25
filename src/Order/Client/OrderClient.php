@@ -63,6 +63,16 @@ class OrderClient
     }
 
     /**
+     * Admin fulfilment-status change.
+     *
+     * @return array<string, mixed>
+     */
+    public function updateStatus(string $id, string $status): array
+    {
+        return $this->request('PUT', '/api/orders/'.$id.'/status', ['status' => $status]);
+    }
+
+    /**
      * @param array<string, mixed>|null $body
      *
      * @return array<string, mixed>
