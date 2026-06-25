@@ -502,6 +502,17 @@ deploy:order-service:
       if [ -z "$ORDER_DB_PASSWORD" ]; then
         echo "ERROR: ORDER_DB_PASSWORD is not set. Aborting before the monolith DROP."; exit 1
       fi
+    # order-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/order-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/order-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/order-service/" "$DEPLOY_DIR/services/order-service/"
     - cd "$DEPLOY_DIR/services/order-service"
     - echo "--- Starting db-order ---"
     - $OSVC up -d db-order
