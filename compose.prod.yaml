@@ -74,3 +74,8 @@ services:
       DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
       DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
       MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # Booting the kernel for app:outbox:relay instantiates the lexik key loader
+      # (pass_phrase: %env(JWT_PASSPHRASE)%, no default) via the OrderClient JWT
+      # wiring, so the relay needs the passphrase too — like php/worker above.
+      # .env.local is removed on deploy, so it must come through the environment.
+      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
