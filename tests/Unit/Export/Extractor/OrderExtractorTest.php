@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Export\Extractor;
 
-use App\Order\Client\OrderClient;
 use App\Export\Extractor\OrderExtractor;
+use App\Order\Client\OrderClient;
 use PHPUnit\Framework\TestCase;
 
 final class OrderExtractorTest extends TestCase
