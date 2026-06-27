@@ -160,3 +160,13 @@ volumes:
   certbot_webroot:
   letsencrypt:
   rabbitmq_data:
+
+# Pin the default network name so the monolith shares one network with the
+# extracted services (catalog/user/order), which join it as
+# `external: true, name: task-25_default`. Without this the network is named
+# after the compose project (= deploy dir: "task-25" locally but "app" in prod),
+# so the prod monolith landed on "app_default" and could not resolve
+# catalog-service / order-service by hostname.
+networks:
+  default:
+    name: task-25_default
