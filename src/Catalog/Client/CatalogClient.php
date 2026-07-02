@@ -20,6 +20,19 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  */
 class CatalogClient
 {
+    /**
+     * Per-request memo of idempotent GET responses, keyed by path+query. The
+     * navbar/home render `get_categories()` (and brands) many times per page;
+     * without this each call re-hits the service and re-signs a JWT, turning one
+     * page render into dozens of HTTP round-trips.
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    private array $responseCache = [];
+
+    /** Per-request service JWT — signing is not free; reuse within the request. */
+    private ?string $serviceToken = null;
+
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         private readonly JWTTokenManagerInterface $jwtManager,
@@ -146,8 +159,14 @@ class CatalogClient
      */
     private function get(string $path, array $query = []): array
     {
+        $key = [] === $query ? $path : $path.'?'.http_build_query($query);
+
+        if (isset($this->responseCache[$key])) {
+            return $this->responseCache[$key];
+        }
+
         try {
-            return $this->httpClient->request('GET', rtrim($this->baseUrl, '/').$path, [
+            return $this->responseCache[$key] = $this->httpClient->request('GET', rtrim($this->baseUrl, '/').$path, [
                 'query' => $query,
                 'auth_bearer' => $this->serviceToken(),
                 'timeout' => 5,
@@ -161,6 +180,6 @@ class CatalogClient
 
     private function serviceToken(): string
     {
-        return $this->jwtManager->create(new InMemoryUser('service-storefront', null, ['ROLE_USER']));
+        return $this->serviceToken ??= $this->jwtManager->create(new InMemoryUser('service-storefront', null, ['ROLE_USER']));
     }
 }
