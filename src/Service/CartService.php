@@ -2,15 +2,11 @@
 
 namespace App\Service;
 
-use App\Cart\Domain\Entity\Cart;
-use App\Cart\Domain\Entity\CartItem;
+use App\Cart\Client\CartClient;
 use App\Catalog\Client\CatalogClient;
 use App\Catalog\View\ProductView;
-use App\Repository\CartRepository;
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\Uid\Uuid;
 
 class CartService
 {
@@ -19,8 +15,7 @@ class CartService
     public function __construct(
         private RequestStack $requestStack,
         private CatalogClient $catalog,
-        private CartRepository $cartRepository,
-        private EntityManagerInterface $entityManager,
+        private CartClient $cartClient,
         private Security $security
     ) {
     }
@@ -41,7 +36,7 @@ class CartService
         $user = $this->security->getUser();
 
         if ($user) {
-            $this->removeFromDatabase($user, $productId);
+            $this->cartClient->removeItem((string) $user->getId(), $productId);
         } else {
             $this->removeFromSession($productId);
         }
@@ -52,7 +47,7 @@ class CartService
         $user = $this->security->getUser();
 
         if ($user) {
-            $this->updateInDatabase($user, $productId, $quantity);
+            $this->cartClient->updateItem((string) $user->getId(), $productId, $quantity);
         } else {
             $this->updateInSession($productId, $quantity);
         }
@@ -63,7 +58,7 @@ class CartService
         $user = $this->security->getUser();
 
         if ($user) {
-            $this->clearDatabase($user);
+            $this->cartClient->clear((string) $user->getId());
         } else {
             $this->clearSession();
         }
@@ -96,15 +91,16 @@ class CartService
         $productMap = $this->catalog->productsByIds(array_map('strval', array_keys($sessionCart)));
 
         foreach ($sessionCart as $productId => $quantity) {
-            if (isset($productMap[(string) $productId])) {
-                $this->addProductToDatabase($user, $productMap[(string) $productId], $quantity);
+            $product = $productMap[(string) $productId] ?? null;
+            if (null !== $product) {
+                $this->addProductToDatabase($user, $product, $quantity);
             }
         }
 
         $this->clearSession();
     }
 
-    // === Database ===
+    // === Cart Service (authenticated users) ===
 
     private function addToDatabase($user, string $productId, int $quantity): void
     {
@@ -114,126 +110,47 @@ class CartService
             return;
         }
 
-        $cart = $this->getOrCreateCart($user);
-        $this->upsertCartItem($cart, $product, $quantity);
-        $cart->setUpdatedAt(new \DateTimeImmutable());
-        $this->entityManager->flush();
+        $this->addProductToDatabase($user, $product, $quantity);
     }
 
     private function addProductToDatabase($user, ProductView $product, int $quantity): void
     {
-        $cart = $this->getOrCreateCart($user);
-        $this->upsertCartItem($cart, $product, $quantity);
-        $cart->setUpdatedAt(new \DateTimeImmutable());
-        $this->entityManager->flush();
-    }
-
-    private function upsertCartItem(Cart $cart, ProductView $product, int $quantity): void
-    {
-        $existingItem = null;
-        foreach ($cart->getItems() as $item) {
-            if ((string) $item->getProductId() === $product->getId()) {
-                $existingItem = $item;
-                break;
-            }
-        }
-
-        if ($existingItem) {
-            $existingItem->setQuantity($existingItem->getQuantity() + $quantity);
-        } else {
-            $cartItem = new CartItem();
-            $cartItem->setProductId(Uuid::fromString($product->getId()));
-            $cartItem->setProductName((string) $product->getName());
-            $cartItem->setPrice((int) $product->getPrice());
-            $cartItem->setQuantity($quantity);
-            $cart->addItem($cartItem);
-        }
-    }
-
-    private function removeFromDatabase($user, string $productId): void
-    {
-        $cart = $this->cartRepository->findOneByUserId($user->getId());
-
-        if (!$cart) {
-            return;
-        }
-
-        foreach ($cart->getItems() as $item) {
-            if ((string) $item->getProductId() === $productId) {
-                $cart->removeItem($item);
-                break;
-            }
-        }
-
-        $cart->setUpdatedAt(new \DateTimeImmutable());
-        $this->entityManager->flush();
-    }
-
-    private function updateInDatabase($user, string $productId, int $quantity): void
-    {
-        $cart = $this->cartRepository->findOneByUserId($user->getId());
-
-        if (!$cart) {
-            return;
-        }
-
-        foreach ($cart->getItems() as $item) {
-            if ((string) $item->getProductId() === $productId) {
-                if ($quantity <= 0) {
-                    $cart->removeItem($item);
-                } else {
-                    $item->setQuantity($quantity);
-                }
-                break;
-            }
-        }
-
-        $cart->setUpdatedAt(new \DateTimeImmutable());
-        $this->entityManager->flush();
-    }
-
-    private function clearDatabase($user): void
-    {
-        $cart = $this->cartRepository->findOneByUserId($user->getId());
-
-        if ($cart) {
-            $cart->clear();
-            $cart->setUpdatedAt(new \DateTimeImmutable());
-            $this->entityManager->flush();
-        }
+        $this->cartClient->addItem(
+            (string) $user->getId(),
+            $product->getId(),
+            (string) $product->getName(),
+            (int) $product->getPrice(),
+            $quantity
+        );
     }
 
     private function getCartFromDatabase($user): array
     {
-        $cart = $this->cartRepository->findOneByUserId($user->getId());
+        $items = $this->cartClient->get((string) $user->getId());
 
-        if (!$cart) {
+        if ([] === $items) {
             return ['items' => [], 'total' => 0, 'count' => 0];
         }
 
-        $productIds = [];
-        foreach ($cart->getItems() as $item) {
-            $productIds[] = (string) $item->getProductId();
-        }
-
-        $productMap = $this->catalog->productsByIds($productIds);
+        $productMap = $this->catalog->productsByIds(array_column($items, 'productId'));
 
         $cartItems = [];
         $total = 0;
 
-        foreach ($cart->getItems() as $item) {
-            $product = $productMap[(string) $item->getProductId()] ?? null;
+        foreach ($items as $item) {
+            $product = $productMap[$item['productId']] ?? null;
             if (null === $product) {
                 // Product no longer exists in Catalog — skip the orphaned line.
                 continue;
             }
 
+            $itemTotal = $item['price'] * $item['quantity'];
             $cartItems[] = [
                 'product' => $product,
-                'quantity' => $item->getQuantity(),
-                'total' => $item->getTotal(),
+                'quantity' => $item['quantity'],
+                'total' => $itemTotal,
             ];
-            $total += $item->getTotal();
+            $total += $itemTotal;
         }
 
         return [
@@ -243,21 +160,7 @@ class CartService
         ];
     }
 
-    private function getOrCreateCart($user): Cart
-    {
-        $cart = $this->cartRepository->findOneByUserId($user->getId());
-
-        if (!$cart) {
-            $cart = new Cart();
-            $cart->setUserId($user->getId());
-            $this->entityManager->persist($cart);
-            $this->entityManager->flush();
-        }
-
-        return $cart;
-    }
-
-    // === Session ===
+    // === Session (guests) ===
 
     private function addToSession(string $productId, int $quantity): void
     {

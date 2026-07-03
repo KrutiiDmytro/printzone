@@ -1,18 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Method App\\Cart\\Domain\\Entity\\Cart\:\:getItems\(\) return type with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Cart/Domain/Entity/Cart.php
-
-		-
-			message: '#^Property App\\Cart\\Domain\\Entity\\Cart\:\:\$items with generic interface Doctrine\\Common\\Collections\\Collection does not specify its types\: TKey, T$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Cart/Domain/Entity/Cart.php
-
-		-
 			message: '#^Expression on left side of \?\? is not nullable\.$#'
 			identifier: nullCoalesce.expr
 			count: 1
@@ -157,12 +145,6 @@ parameters:
 			path: src/Export/Service/ExportService.php
 
 		-
-			message: '#^Class App\\Repository\\CartRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
-			identifier: missingType.generics
-			count: 1
-			path: src/Repository/CartRepository.php
-
-		-
 			message: '#^Class App\\Repository\\ExportJobRepository extends generic class Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository but does not specify its types\: T$#'
 			identifier: missingType.generics
 			count: 1
@@ -175,6 +157,12 @@ parameters:
 			path: src/Repository/ExportJobRepository.php
 
 		-
+			message: '#^Call to an undefined method Symfony\\Component\\Security\\Core\\User\\UserInterface\:\:getId\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: src/Service/CartService.php
+
+		-
 			message: '#^Method App\\Service\\CartService\:\:addProductToDatabase\(\) has parameter \$user with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1
@@ -182,12 +170,6 @@ parameters:
 
 		-
 			message: '#^Method App\\Service\\CartService\:\:addToDatabase\(\) has parameter \$user with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: src/Service/CartService.php
-
-		-
-			message: '#^Method App\\Service\\CartService\:\:clearDatabase\(\) has parameter \$user with no type specified\.$#'
 			identifier: missingType.parameter
 			count: 1
 			path: src/Service/CartService.php
@@ -217,26 +199,8 @@ parameters:
 			path: src/Service/CartService.php
 
 		-
-			message: '#^Method App\\Service\\CartService\:\:getOrCreateCart\(\) has parameter \$user with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: src/Service/CartService.php
-
-		-
 			message: '#^Method App\\Service\\CartService\:\:getSession\(\) has no return type specified\.$#'
 			identifier: missingType.return
-			count: 1
-			path: src/Service/CartService.php
-
-		-
-			message: '#^Method App\\Service\\CartService\:\:removeFromDatabase\(\) has parameter \$user with no type specified\.$#'
-			identifier: missingType.parameter
-			count: 1
-			path: src/Service/CartService.php
-
-		-
-			message: '#^Method App\\Service\\CartService\:\:updateInDatabase\(\) has parameter \$user with no type specified\.$#'
-			identifier: missingType.parameter
 			count: 1
 			path: src/Service/CartService.php
 
@@ -337,19 +301,13 @@ parameters:
 			path: tests/Unit/Export/Extractor/UserExtractorTest.php
 
 		-
-			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$cartRepository has no type specified\.$#'
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$cartClient has no type specified\.$#'
 			identifier: missingType.property
 			count: 1
 			path: tests/Unit/Service/CartServiceTest.php
 
 		-
 			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$catalog has no type specified\.$#'
-			identifier: missingType.property
-			count: 1
-			path: tests/Unit/Service/CartServiceTest.php
-
-		-
-			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$entityManager has no type specified\.$#'
 			identifier: missingType.property
 			count: 1
 			path: tests/Unit/Service/CartServiceTest.php

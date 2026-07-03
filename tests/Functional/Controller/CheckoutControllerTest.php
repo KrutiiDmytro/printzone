@@ -2,8 +2,7 @@
 
 namespace App\Tests\Functional\Controller;
 
-use App\Cart\Domain\Entity\Cart;
-use App\Cart\Domain\Entity\CartItem;
+use App\Cart\Client\CartClient;
 use App\Catalog\Client\CatalogClient;
 use App\Catalog\View\ProductView;
 use App\Order\Client\OrderClient;
@@ -17,7 +16,6 @@ class CheckoutControllerTest extends WebTestCase
     {
         $client = static::createClient();
 
-        // Створюємо схему після створення клієнта
         $this->createSchema();
         $this->loadFixtures();
 
@@ -28,26 +26,22 @@ class CheckoutControllerTest extends WebTestCase
 
     public function testCheckoutIsAccessibleForAuthenticatedUser(): void
     {
-        [$client] = $this->authWithCartProduct('Checkout Test Product', 1000, 10);
+        [$client] = $this->authWithCart([$this->line('Checkout Test Product', 1000)]);
 
         $client->request('GET', '/checkout');
 
         $this->assertResponseIsSuccessful();
-        // Використовуємо більш точний селектор, оскільки h1 може бути в логотипі "Electro"
         $this->assertAnySelectorTextContains('h1', 'Billing details');
     }
 
     public function testCheckoutRedirectsWhenCartIsEmpty(): void
     {
-        $client = $this->createUserClient();
+        [$client] = $this->authWithCart([]);
 
-        // Перевіряємо, що при порожній корзині користувач перенаправляється на сторінку кошика
         $client->request('GET', '/checkout');
 
-        // Перевіряємо редирект на /cart
         $this->assertResponseRedirects('/cart');
 
-        // Можна також перевірити flash-повідомлення після редиректу
         $client->followRedirect();
         $this->assertResponseIsSuccessful();
     }
@@ -58,7 +52,7 @@ class CheckoutControllerTest extends WebTestCase
         $mock = $this->createMock(OrderClient::class);
         $mock->method('createCheckout')->willReturn(['orderId' => (string) Uuid::v4(), 'url' => $stripeUrl]);
 
-        [$client] = $this->authWithCartProduct('Stripe Test Product', 2000, 5, $mock);
+        [$client] = $this->authWithCart([$this->line('Stripe Test Product', 2000)], $mock);
 
         $client->request('POST', '/checkout/place-order');
 
@@ -72,7 +66,7 @@ class CheckoutControllerTest extends WebTestCase
         $mock = $this->createMock(OrderClient::class);
         $mock->method('createCheckout')->willThrowException(new \RuntimeException('Order Service unavailable'));
 
-        [$client] = $this->authWithCartProduct('Stripe Fail Product', 1500, 5, $mock);
+        [$client] = $this->authWithCart([$this->line('Stripe Fail Product', 1500)], $mock);
 
         $client->request('POST', '/checkout/place-order');
 
@@ -81,20 +75,30 @@ class CheckoutControllerTest extends WebTestCase
     }
 
     /**
-     * Sets up an authenticated client with a single-product cart, mocking the
-     * Catalog client (and optionally the Order client) BEFORE login so the test
-     * container can replace them before they are first used.
+     * @return array{productId: string, productName: string, price: int, quantity: int}
+     */
+    private function line(string $name, int $price, int $quantity = 1): array
+    {
+        return ['productId' => (string) Uuid::v4(), 'productName' => $name, 'price' => $price, 'quantity' => $quantity];
+    }
+
+    /**
+     * Authenticates a user whose cart (owned by cart-service) is stubbed to the
+     * given snapshot lines. Mocks Catalog + Cart clients BEFORE login so the test
+     * container replaces them before they are first used.
+     *
+     * @param list<array{productId: string, productName: string, price: int, quantity: int}> $items
      *
      * @return array{0: \Symfony\Bundle\FrameworkBundle\KernelBrowser, 1: object}
      */
-    private function authWithCartProduct(string $name, int $price, int $stock, ?OrderClient $orderMock = null): array
+    private function authWithCart(array $items, ?OrderClient $orderMock = null): array
     {
         $client = static::createClient();
         $client->disableReboot();
 
         $container = static::getContainer();
-        // Replace the Catalog client before anything can initialise it.
         $this->mockCatalog($container);
+        $this->mockCart($container, $items);
         if (null !== $orderMock) {
             $container->set(OrderClient::class, $orderMock);
         }
@@ -104,9 +108,6 @@ class CheckoutControllerTest extends WebTestCase
 
         $em = $container->get('doctrine.orm.entity_manager');
         $user = $em->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
-        // Catalog products live in catalog-service; the cart item only needs an id snapshot.
-        $this->persistCartWithItem($em, $user, Uuid::v4(), $name, $price, 1);
-
         $client->loginUser($user, 'main');
 
         return [$client, $container];
@@ -140,21 +141,14 @@ class CheckoutControllerTest extends WebTestCase
         $container->set(CatalogClient::class, $mock);
     }
 
-    private function persistCartWithItem(object $entityManager, User $user, Uuid $productId, string $name, int $price, int $quantity): void
+    /**
+     * @param list<array{productId: string, productName: string, price: int, quantity: int}> $items
+     */
+    private function mockCart(object $container, array $items): void
     {
-        $cart = new Cart();
-        $cart->setUserId($user->getId());
-        $entityManager->persist($cart);
+        $mock = $this->createMock(CartClient::class);
+        $mock->method('get')->willReturn($items);
 
-        $cartItem = new CartItem();
-        $cartItem->setCart($cart);
-        $cartItem->setProductId($productId);
-        $cartItem->setProductName($name);
-        $cartItem->setPrice($price);
-        $cartItem->setQuantity($quantity);
-        $cart->addItem($cartItem);
-        $entityManager->persist($cartItem);
-
-        $entityManager->flush();
+        $container->set(CartClient::class, $mock);
     }
 }
