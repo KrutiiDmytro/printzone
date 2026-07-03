@@ -55,3 +55,16 @@
   (`.env` defaults, some templates, `verify_checkout.mjs`) — **no secrets** (those live in the
   rsync-excluded, gitignored `.env.local`). Safe to drop. Left it clean on `develop @ 9024a26`
   so the host tree mirrors the deployed tip (keeps the "host grep vs `nginx -T` grep" tell valid).
+- **⚠️ Real consequence of that root checkout: it broke the NEXT deploy.** `git checkout` /
+  `git reset --hard` run as **root** rewrote tracked files across `/var/www/app` as `root:root`
+  (tell: files timestamped at the exact minute of the checkout, e.g. `.../order-service/bin/console`
+  = `root:root 16:27`). The CI shell-runner runs as `gitlab-runner`, so the next `deploy:order-service`
+  rsync failed with `failed to set permissions … Operation not permitted` + `mkstemp … Permission
+  denied (13)` — it couldn't overwrite root-owned files. Whole tree affected, not just order-service.
+  - **Fix:** `chown -R gitlab-runner:gitlab-runner /var/www/app`, then retry the failed deploy jobs.
+    Verify clean with `find /var/www/app -not -user gitlab-runner -not -path '*/var/*' -not -path
+    '*/vendor/*'` → empty. (`var/`/`vendor/` legitimately container-owned; rsync excludes them.)
+  - **Prevention:** NEVER run git write-ops (`checkout`, `reset --hard`, `stash`) as root in the
+    rsync deploy target. That checkout was itself avoidable — the docs cleanup it was meant for
+    belonged on the LOCAL repo, not prod. Same family as the pre-existing public/ perms fix
+    (containers write as root → runner rsync can't overwrite → deploy chowns before rsync).
