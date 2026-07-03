@@ -241,7 +241,11 @@ deploy:
 
     - echo "--- Starting all services (using pre-built image from CI) ---"
     - $COMPOSE up -d --no-build
-    - $COMPOSE exec -T nginx nginx -s reload
+    # Recreate nginx instead of `nginx -s reload`: default.conf is bind-mounted as
+    # a single file, and rsync replaces it with a new inode, so a running container
+    # keeps the old inode and a reload would re-read the STALE config. Recreating
+    # re-binds the current file so config changes actually take effect.
+    - $COMPOSE up -d --force-recreate --no-build nginx
 
     - echo "--- Installing dependencies ---"
     - $COMPOSE exec -T php composer install
