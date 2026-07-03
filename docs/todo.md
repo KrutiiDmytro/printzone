@@ -17,22 +17,26 @@
 - [x] `security.yaml`: `^/api` verify JWT (спільний keypair); write-методи `POST/PATCH/DELETE` → `ROLE_CART_ADMIN`
 - [x] Verify: migrate+schema:validate [OK]; phpunit **12 OK** (health 2 + CRUD/401/403/422/404 10)
 
-## Крок 3 — Моноліт: CartClient + рефактор CartService
-- [ ] `App\Cart\Client\CartClient` (HttpClient + S2S JWT, дзеркало CatalogClient; per-request memo для get; throws на 5xx)
-- [ ] `CartService`: `*Database`-методи → CartClient; лишити session + резолвінг CatalogClient + enrich у getCart
-- [ ] Прибрати entity `Cart`/`CartItem` + `CartRepository` + мапінг `Cart` у doctrine.yaml; `.env` `CART_SERVICE_URL`
-- [ ] Verify: phpunit + phpstan [OK]
+## Крок 3 — Моноліт: CartClient + рефактор CartService ✅
+- [x] `App\Cart\Client\CartClient` (HttpClient + S2S JWT `ROLE_CART_ADMIN`, дзеркало CatalogClient; per-request memo для get;
+      **read degrade / write strict**)
+- [x] `CartService`: `*Database`-методи → CartClient; лишити session + резолвінг CatalogClient + enrich у getCart
+- [x] Прибрано entity `Cart`/`CartItem` + `CartRepository` + мапінг `Cart` у doctrine.yaml; `.env` `CART_SERVICE_URL`
+- [x] Тести на моки: `CartServiceTest`, `CheckoutControllerTest` (stub CartClient); phpstan-baseline регенеровано
+- [x] Verify: phpunit моноліт **135 OK**; phpstan **[OK] No errors**
 
-## Крок 4 — Моноліт: cutover БД (дроп cart-таблиць)
-- [ ] Рукописна міграція: DROP cart.cart_items/carts + DROP SCHEMA cart (down irreversible)
-- [ ] Тести: CartServiceTest/MigrateGuestCartOnLoginTest/CheckoutControllerTest (мок CartClient); прибрати CartTest/CartItemTest; baseline
-- [ ] Verify: phpunit green; phpstan [OK]; migrate+schema:validate (схема cart зникла); E2E логін→add→checkout 4242→лист
+## Крок 4 — Моноліт: cutover БД (дроп cart-таблиць) ✅
+- [x] Рукописна міграція `Version20260703220000`: DROP cart.cart_items/carts + DROP SCHEMA cart (down irreversible)
+- [x] Тести на моки; прибрано CartTest/CartItemTest; phpstan-baseline регенеровано
+- [x] Verify: phpunit **135 OK**; phpstan **[OK]**; migrate+schema:validate **[OK]** (схема `cart` зникла);
+      **реальний крос-сервіс probe OK** (upsert→3, update→5, clear→[]; S2S JWT verified)
 
-## Крок 5 — Прод-деплой (до live)
-- [ ] `cart-service/compose.prod.yaml` (db-cart `${CART_DB_PASSWORD}`, ports !reset, мережа task-25_default)
-- [ ] Моноліт `compose.prod.yaml`: `CART_SERVICE_URL` у php+worker; `.gitlab-ci.yml` build/test/deploy:cart-service
-- [ ] Verify локально (compose config VALID, YAML); прод після merge — CI-деплой + e2e checkout
-- [ ] ⚠️ Дії користувача: CI vars `CART_DB_PASSWORD`, `APP_SECRET`
+## Крок 5 — Прод-деплой (до live) — конфіги готові, чекає merge
+- [x] `cart-service/compose.prod.yaml` (db-cart `${CART_DB_PASSWORD}`, ports !reset, мережа task-25_default в overlay)
+- [x] Моноліт `compose.prod.yaml`: `CART_SERVICE_URL` у php+worker; `.gitlab-ci.yml` build/test/deploy:cart-service
+      (deploy needs test:cart-service; монолітний deploy needs deploy:cart-service — дроп чекає живого сервісу)
+- [x] Verify локально: `docker compose config` VALID (обидва overlay + моноліт); `.gitlab-ci.yml` валідний (3 cart-джоби)
+- [ ] ⚠️ Дії користувача: CI vars `CART_DB_PASSWORD`, `APP_SECRET`; прод після merge — CI-деплой + e2e checkout
 
 ---
 

@@ -1,35 +1,37 @@
-# Order Service
+# Cart Service
 
-Owns the **Order** bounded context extracted from the PrintZone monolith
-(Strangler Fig step 3): orders, the checkout Saga, and Stripe payments.
+Owns the **persistent cart of authenticated users**, extracted from the PrintZone
+monolith (Strangler Fig step 4). Guest carts stay in the monolith's Symfony session;
+this service holds the cart once a user logs in.
 
 ## Responsibilities
-- `POST /api/checkout` — create an `Order` (PENDING) from line items posted by the
-  monolith, open a Stripe Checkout session, return its redirect URL.
-- `POST /stripe/webhook` — verify the Stripe signature; mark orders `PAID` / `FAILED`.
-- `GET /api/orders`, `GET /api/orders/{id}` — read API for the monolith admin + Export.
-- Publishes `order.OrderCreated` / `order.OrderPaid` / `order.OrderCancelled` to
-  RabbitMQ via the transactional outbox + `order-relay` worker. The Catalog Saga
-  reserves/releases stock; the monolith sends the email receipt.
+- `GET /api/carts/{userId}` — the user's cart lines (snapshots: `productId`, `productName`, `price`, `quantity`).
+- `POST /api/carts/{userId}/items` — add/upsert a line (repeated products sum quantity).
+- `PATCH /api/carts/{userId}/items/{productId}` — set quantity (`0` removes the line).
+- `DELETE /api/carts/{userId}/items/{productId}` — remove a line.
+- `DELETE /api/carts/{userId}` — clear the cart.
+
+The monolith is the only caller: it resolves products via the Catalog Service and
+sends name/price snapshots here, so this service never talks to Catalog itself.
 
 ## Data
-Own PostgreSQL database (`order_service`): tables `orders`, `order_items`, `outbox`.
-Cross-service references (`user_id`, `product_id`) are UUIDs with no FK;
-`user_email`, `product_name`, `price` are snapshots.
+Own PostgreSQL database (`cart_service`): tables `carts`, `cart_items`. Cross-service
+references (`user_id`, `product_id`) are UUIDs with no FK; `product_name`, `price`
+are snapshots taken when the item was added. Carts are created at runtime — no fixtures.
 
 ## Run (dev)
 ```bash
 docker compose up -d --build
-docker compose run --rm --no-deps order-service composer install
-docker compose exec order-service php bin/console doctrine:migrations:migrate -n
-curl localhost:8003/health/ready
+docker compose exec cart-service composer install
+docker compose exec cart-service php bin/console doctrine:migrations:migrate -n
+curl localhost:8004/health/ready
 ```
 
 ## Test
 ```bash
-docker compose exec order-service vendor/bin/phpunit
+docker compose exec cart-service vendor/bin/phpunit
 ```
 
 Auth: validates RS256 service tokens signed by the monolith with the shared
-`config/jwt` keypair (mounted read-only). Stripe authenticates the webhook via its
-signed payload, not a JWT.
+`config/jwt` keypair (mounted read-only). Reads need any valid service token;
+writes (`POST`/`PATCH`/`DELETE`) require `ROLE_CART_ADMIN`.
