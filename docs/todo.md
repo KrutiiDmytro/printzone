@@ -1,3 +1,66 @@
+# Інцидент (2026-06-27): «тестова оплата pending + товари зникли»
+
+## Діагноз
+Два незалежні дефекти:
+
+### 1. Оплата застрягла `pending` — `order-service` лежав ✅ ВИПРАВЛЕНО
+- Контейнер `order-service` не запущений; `:8003` connection refused.
+- Checkout створює Stripe-платіж, але сервіс, що фіналізує замовлення, був відсутній → статус застряг.
+- Дії: `docker compose up -d` у `services/order-service`, `composer install`, `doctrine:migrations:migrate`
+  (свіжий порожній том БД), рестарт `order-relay` (крешився на `outbox` до завершення міграцій).
+- Перевірено: order-service `healthy`, досяжний `:8003` (404 на `/`, 401 на `/api/orders` = JWT-gated, очікувано);
+  order-relay `running`, restarts=0.
+- ⚠️ Том БД order-service створено заново → попереднє тестове замовлення локально не збережене. Застрягла
+  тестова оплата не має рядка замовлення; повторити checkout тепер, коли сервіс піднятий.
+
+## ⚠️ КОРЕКЦІЯ: симптоми були на РЕАЛЬНОМУ ПРОДІ (e-commerce.it.com), не локально
+Я спершу діагностував **локальний dev-стек** (Windows, `APP_ENV=dev`, `host.docker.internal`, php монтує
+`.:/var/www/html` без named-volumes → 9p stat-storm → `GET /` 27с — це **локальний** артефакт, не прод).
+Прод-симптоми мають **єдиний корінь** і вже виправлені в `d88e283` на гілці `fix/monolith-network-name`:
+
+### Справжній корінь (прод): мережа `app_default` vs `task-25_default`
+- Прод-моноліт у каталозі `/var/www/app` → його default-мережа = `app_default`.
+- Сервіси приєднуються до `external: true, name: task-25_default` (порожньої) → моноліт **не резолвить**
+  `catalog-service`/`order-service` за іменем.
+- ⇒ `CatalogClient` ловить помилку → повертає `[]` → **товари зникли**; checkout не дістає order-service
+  → **оплата pending**. ОБИДВА симптоми — один корінь.
+- Фікс `d88e283`: пін `networks.default.name: task-25_default` у `compose.yaml` моноліту.
+- **ДІЯ:** MR `fix/monolith-network-name` → `develop` → CI редеплой. Після деплою: перевірити, що
+  catalog-service/order-service у `task-25_default` (за потреби `up -d --force-recreate` сервісів);
+  рестарт order-service один раз (JWT loader, як у MR !19).
+
+### N+1 каталогу — окремий, ДРУГОРЯДНИЙ фікс (НЕ причина прод-outage) ✅
+- `CatalogClient::get()` не кешував → `get_categories()` робив **18 `/api/categories` на рендер**.
+- Фікс: per-request memo (кеш GET-відповідей + сервісний JWT). Верифіковано: **18→1**, усіх HTTP 30→4;
+  `CatalogClientTest` 2 + `CategoryExtensionTest` 3 = 5 OK; phpstan [OK].
+- ⚠️ НЕ це тримало локальні 27с (то 9p). На проді з реальною латентністю — корисне зменшення round-trip'ів.
+- **Тримати в ОКРЕМІЙ гілці/MR**, не змішувати з мережевим фіксом.
+
+## ЗАКРИТО 2026-07-02 ✅
+Фінальний фікс — **повний CI-деплой моноліту** (пайплайн #21042, джоба **#76390 `deploy`**, не
+`deploy:order-service`). Перевірено: `SELECT 1` → DB_OK, головна = 8 товарів, реєстрація+логін+кошик+оплата
+(4242) працюють. Нюанс UI: на зеленому пайплайні кнопки Retry нема — треба відкрити саму джобу `deploy` і
+натиснути per-job Retry (⟳). Прямий push у develop заблоковано (обхід MR).
+Залишок: `docker rm -f task-25-worker-1` (сторонній крешлуп); N+1-фікс CatalogClient — окремий MR.
+
+## Review — (діагностична хронологія, RESOLVED)
+- ✅ **Справжній корінь: `JWT_PASSPHRASE` ПОРОЖНІЙ у проді** (`app-php-1`). `private.pem` зашифрований
+  passphrase'ом → моноліт не може його розшифрувати → не може підписати S2S-JWT → catalog/order
+  відхиляють → `CatalogClient` повертає `[]` (товари зникли скрізь) + checkout не дістає order-service
+  (оплата pending). **Один корінь — обидва симптоми.** Причина порожнечі: хтось перестворив моноліт
+  вручну `docker compose up` без `JWT_PASSPHRASE` (`.env.local` видаляється на деплої → passphrase лише з CI-var).
+- ✅ **Фікс (спрацював, home 0→8 товарів):** `JWT_PASSPHRASE='...' docker compose -f compose.yaml -f
+  compose.prod.yaml up -d --force-recreate php worker relay`. Перегенерація ключів НЕ потрібна — ключі цілі.
+- ❌ Мережа (`d88e283`) — **НЕ** причина цього разу: моноліт уже резолвив сервіси на task-25_default.
+- ❌ N+1 каталогу — **НЕ** причина outage (то локальне 9p-гальмо); але фікс легітимний → окремий MR.
+- 🧹 Прибрати сторонній крешлупний `task-25-worker-1` (`docker rm -f`).
+- 📌 Уроки: (1) спершу підтвердити середовище (prod vs локальний dev); (2) products gone на проді →
+  перша перевірка `echo ${#JWT_PASSPHRASE}` в app-php-1; підпис S2S-JWT падає ДО HTTP, тож виглядає як
+  мережа/каталог, а насправді upstream; (3) не перестворювати моноліт ручним `compose up` без passphrase.
+- Деталі в пам'яті: project_deploy_jwt_passphrase_empty_products_gone.
+
+---
+
 # Фаза 6 — Прод-середовища + CI для user/catalog сервісів — ПЛАН (затверджено 1–3)
 
 > **Мета:** закрити вимогу «окремі dev/test/prod для кожного мікросервісу». Кожен сервіс отримує
