@@ -1,3 +1,41 @@
+# Фаза — Виокремлення Cart Service (Strangler-Fig крок 4) — В РОБОТІ
+
+> **Мета:** винести персистентний кошик залогінених у власний `cart-service` (FrankenPHP, `db-cart`, :8004),
+> прибрати cart-таблиці моноліту. Прецедент — order-service. Гілка: `feat/phase-cart-service`.
+> **Рішення:** (1) MVP — сервіс володіє кошиком залогінених за `userId`; гостьовий кошик лишається в сесії
+> моноліту; злиття гість→user при логіні через HTTP. (2) Прод-деплой до live. (3) cart-service — «тупий» стор
+> зі знімками; резолвінг каталогу лишається в моноліті (`CatalogClient`).
+
+## Крок 1 — Скелет cart-service + інфра ✅
+- [x] Каркас із order-service (composer без stripe/messenger; Dockerfile без amqp; :8004); `compose.yaml` `db-cart`+`cart-service`;
+      монтаж `../../config/jwt:ro`; csvc_vendor/csvc_var named-volumes; `HealthController` (live/ready)
+- [x] Verify: контейнер up; health/live 200, /ready db ok; 404 на невідомому роуті
+
+## Крок 2 — Домен + БД + CRUD-API ✅
+- [x] Сутності `App\Entity\Cart`/`CartItem` (власна БД `public`, без schema:); `CartRepository` (findOneByUserId, deleteOlderThan)
+- [x] Міграція `Version20260703211718` (diff); без фікстур; `CartController` (GET/POST/PATCH/DELETE per userId; upsert; 422/404)
+- [x] `security.yaml`: `^/api` verify JWT (спільний keypair); write-методи `POST/PATCH/DELETE` → `ROLE_CART_ADMIN`
+- [x] Verify: migrate+schema:validate [OK]; phpunit **12 OK** (health 2 + CRUD/401/403/422/404 10)
+
+## Крок 3 — Моноліт: CartClient + рефактор CartService
+- [ ] `App\Cart\Client\CartClient` (HttpClient + S2S JWT, дзеркало CatalogClient; per-request memo для get; throws на 5xx)
+- [ ] `CartService`: `*Database`-методи → CartClient; лишити session + резолвінг CatalogClient + enrich у getCart
+- [ ] Прибрати entity `Cart`/`CartItem` + `CartRepository` + мапінг `Cart` у doctrine.yaml; `.env` `CART_SERVICE_URL`
+- [ ] Verify: phpunit + phpstan [OK]
+
+## Крок 4 — Моноліт: cutover БД (дроп cart-таблиць)
+- [ ] Рукописна міграція: DROP cart.cart_items/carts + DROP SCHEMA cart (down irreversible)
+- [ ] Тести: CartServiceTest/MigrateGuestCartOnLoginTest/CheckoutControllerTest (мок CartClient); прибрати CartTest/CartItemTest; baseline
+- [ ] Verify: phpunit green; phpstan [OK]; migrate+schema:validate (схема cart зникла); E2E логін→add→checkout 4242→лист
+
+## Крок 5 — Прод-деплой (до live)
+- [ ] `cart-service/compose.prod.yaml` (db-cart `${CART_DB_PASSWORD}`, ports !reset, мережа task-25_default)
+- [ ] Моноліт `compose.prod.yaml`: `CART_SERVICE_URL` у php+worker; `.gitlab-ci.yml` build/test/deploy:cart-service
+- [ ] Verify локально (compose config VALID, YAML); прод після merge — CI-деплой + e2e checkout
+- [ ] ⚠️ Дії користувача: CI vars `CART_DB_PASSWORD`, `APP_SECRET`
+
+---
+
 # Інцидент (2026-06-27): «тестова оплата pending + товари зникли»
 
 ## Діагноз
