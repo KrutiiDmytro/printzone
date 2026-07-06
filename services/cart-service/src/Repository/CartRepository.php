@@ -2,11 +2,14 @@
 
 namespace App\Repository;
 
-use App\Cart\Domain\Entity\Cart;
+use App\Entity\Cart;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Uid\Uuid;
 
+/**
+ * @extends ServiceEntityRepository<Cart>
+ */
 class CartRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
@@ -25,6 +28,10 @@ class CartRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
+    /**
+     * Deletes carts not touched since $date (abandoned-cart cleanup). Not yet
+     * wired to a command — kept for a future scheduled purge.
+     */
     public function deleteOlderThan(\DateTimeInterface $date): int
     {
         return $this->createQueryBuilder('c')

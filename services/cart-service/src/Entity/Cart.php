@@ -1,14 +1,15 @@
 <?php
 
-namespace App\Cart\Domain\Entity;
+namespace App\Entity;
 
+use App\Repository\CartRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Uid\Uuid;
 
-#[ORM\Entity]
-#[ORM\Table(name: 'carts', schema: 'cart')]
+#[ORM\Entity(repositoryClass: CartRepository::class)]
+#[ORM\Table(name: 'carts')]
 #[ORM\Index(columns: ['updated_at'], name: 'idx_carts_updated_at')]
 class Cart
 {
@@ -33,7 +34,7 @@ class Cart
         $this->updatedAt = new \DateTimeImmutable();
     }
 
-    public function getId(): ?Uuid
+    public function getId(): Uuid
     {
         return $this->id;
     }
@@ -50,6 +51,9 @@ class Cart
         return $this;
     }
 
+    /**
+     * @return Collection<int, CartItem>
+     */
     public function getItems(): Collection
     {
         return $this->items;
@@ -81,21 +85,11 @@ class Cart
         return $this->updatedAt;
     }
 
-    public function setUpdatedAt(\DateTimeImmutable $updatedAt): self
+    public function touch(): self
     {
-        $this->updatedAt = $updatedAt;
+        $this->updatedAt = new \DateTimeImmutable();
 
         return $this;
-    }
-
-    public function getTotal(): int
-    {
-        $total = 0;
-        foreach ($this->items as $item) {
-            $total += $item->getTotal();
-        }
-
-        return $total;
     }
 
     public function clear(): self

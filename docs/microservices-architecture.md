@@ -1122,9 +1122,12 @@ public function ready(Connection $db): JsonResponse
 
 Ціль: Повний процес оформлення замовлення як розподілена транзакція.
 
-- [ ] Cart Service з анонімним сесійним кошиком (на основі cookie)
-- [ ] Хореографічна Сага: ReserveStock → CreateOrder → PaymentRequested
-- [ ] Компенсаційні транзакції для всіх шляхів відмови
+- [x] **Order Service** виокремлено (orders + checkout Saga + Stripe), live у проді.
+- [x] **Cart Service** виокремлено (крок 4): персистентний кошик залогінених (`db-cart`, :8004,
+      API `GET/POST/PATCH/DELETE /api/carts/{userId}`), моноліт пише через `CartClient` (S2S JWT).
+      Гостьовий кошик лишився в сесії моноліту (MVP); анонімний cookie-кошик — відкладено.
+- [x] Хореографічна Сага (OrderCreated/OrderPaid/OrderCancelled → catalog-service `stock_reservations`).
+- [ ] Двостороння компенсація (StockReserved/Failed назад в Order) — поза MVP (синхронний Stripe-redirect).
 
 ### Фаза 6 — Виокремлення Payment + Delivery Services
 

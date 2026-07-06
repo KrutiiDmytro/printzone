@@ -1,0 +1,41 @@
+services:
+  db-cart:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cart_service
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: changeme
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "cart_service", "-U", "app"]
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - db_cart_data:/var/lib/postgresql/data:rw
+
+  cart-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/cart-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8004:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - csvc_vendor:/app/vendor
+      - csvc_var:/app/var
+      # Shared RS256 keypair with the monolith → validates service-to-service tokens.
+      - ../../config/jwt:/jwt:ro
+    depends_on:
+      db-cart:
+        condition: service_healthy
+
+volumes:
+  db_cart_data:
+  csvc_vendor:
+  csvc_var:

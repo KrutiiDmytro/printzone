@@ -28,6 +28,8 @@ services:
       CATALOG_SERVICE_URL: "http://catalog-service"
       # order-service owns orders + checkout Saga; checkout delegates here.
       ORDER_SERVICE_URL: "http://order-service"
+      # cart-service owns the persistent cart of authenticated users.
+      CART_SERVICE_URL: "http://cart-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
@@ -52,6 +54,8 @@ services:
       CATALOG_SERVICE_URL: "http://catalog-service"
       # Export's OrderExtractor reads orders over HTTP from the async worker.
       ORDER_SERVICE_URL: "http://order-service"
+      # Present for parity so any cart resolution in a queued handler can reach the service.
+      CART_SERVICE_URL: "http://cart-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       # The worker delivers queued emails (SendEmailMessage on the async transport),
       # so it needs the real mailer DSN — otherwise it falls back to null:// and drops them.

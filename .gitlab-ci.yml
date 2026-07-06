@@ -306,14 +306,16 @@ deploy:
       echo "Application is healthy"
     - echo "=== Deploy complete ==="
 
-  # order-service must be deployed & healthy BEFORE this job's migrations run —
-  # Version20260625071542 DROPs the monolith order tables, so the new source of
-  # truth has to be live first. If deploy:order-service fails (e.g. missing
-  # ORDER_DB_PASSWORD), this job never runs and the DROP is averted.
+  # order-service and cart-service must be deployed & healthy BEFORE this job's
+  # migrations run — the monolith DROPs its order tables (Version20260625071542)
+  # and cart tables (Version20260703220000), so the new sources of truth have to
+  # be live first. If either service deploy fails (e.g. a missing DB password),
+  # this job never runs and the DROP is averted.
   needs:
     - test:unit
     - test:functional
     - deploy:order-service
+    - deploy:cart-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
@@ -352,6 +354,16 @@ build:order-service:
       -t printzone/order-service:$CI_COMMIT_SHA
       -t printzone/order-service:latest
       services/order-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:cart-service:
+  stage: build
+  script:
+    - docker build -f services/cart-service/Dockerfile
+      -t printzone/cart-service:$CI_COMMIT_SHA
+      -t printzone/cart-service:latest
+      services/cart-service
   needs: []
   rules: *rules_mr_develop
 
@@ -397,6 +409,21 @@ test:order-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/order-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:cart-service:
+  stage: test
+  needs:
+    - build:cart-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/cart-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/cart-service:latest
       sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
@@ -557,5 +584,65 @@ deploy:order-service:
   # and healthy before the monolith cutover drops its order tables.
   needs:
     - test:order-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:cart-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    CSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast (before the monolith DROP, which needs this job) if the DB
+    # password is missing — otherwise cart-service comes up unreachable.
+    - |
+      if [ -z "$CART_DB_PASSWORD" ]; then
+        echo "ERROR: CART_DB_PASSWORD is not set. Aborting before the monolith DROP."; exit 1
+      fi
+    # cart-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/cart-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/cart-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/cart-service/" "$DEPLOY_DIR/services/cart-service/"
+    - cd "$DEPLOY_DIR/services/cart-service"
+    - echo "--- Starting db-cart ---"
+    - $CSVC up -d db-cart
+    - |
+      i=0
+      until $CSVC exec -T db-cart pg_isready -U app -d cart_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-cart not ready"; $CSVC logs db-cart --tail=20; exit 1; }
+        echo "Waiting for db-cart ($i/30)..."; sleep 2
+      done
+    - $CSVC exec -T db-cart psql -U app -d cart_service -c "ALTER USER app WITH PASSWORD '${CART_DB_PASSWORD}';"
+    - echo "--- Starting service (pre-built image) ---"
+    - $CSVC up -d --no-build
+    - $CSVC exec -T cart-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in csvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $CSVC exec -T cart-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $CSVC exec -T cart-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Carts are created at runtime — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $CSVC exec -T cart-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: cart-service health failed"; $CSVC logs cart-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "cart-service healthy"
+  # Deploy cart-service FIRST (independently of the monolith), so it is live
+  # and healthy before the monolith cutover drops its cart tables.
+  needs:
+    - test:cart-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'

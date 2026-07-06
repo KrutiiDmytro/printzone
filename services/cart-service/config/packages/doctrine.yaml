@@ -4,9 +4,6 @@ doctrine:
         driver: pdo_pgsql
         types:
             uuid: Symfony\Bridge\Doctrine\Types\UuidType
-        replicas:
-            replica1:
-                url: '%env(resolve:DATABASE_REPLICA_URL)%'
         profiling_collect_backtrace: '%kernel.debug%'
         use_savepoints: true
     orm:
@@ -15,35 +12,14 @@ doctrine:
         report_fields_where_declared: true
         validate_xml_mapping: true
         naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
-        quote_strategy: App\Doctrine\SchemaEmulatingQuoteStrategy
-        identity_generation_preferences:
-            Doctrine\DBAL\Platforms\PostgreSQLPlatform: identity
         auto_mapping: true
         mappings:
-            Catalog:
+            App:
                 type: attribute
                 is_bundle: false
-                dir: '%kernel.project_dir%/src/Catalog/Domain/Entity'
-                prefix: 'App\Catalog\Domain\Entity'
-                alias: Catalog
-            User:
-                type: attribute
-                is_bundle: false
-                dir: '%kernel.project_dir%/src/User/Domain/Entity'
-                prefix: 'App\User\Domain\Entity'
-                alias: User
-            Export:
-                type: attribute
-                is_bundle: false
-                dir: '%kernel.project_dir%/src/Export/Domain/Entity'
-                prefix: 'App\Export\Domain\Entity'
-                alias: Export
-            Messaging:
-                type: attribute
-                is_bundle: false
-                dir: '%kernel.project_dir%/src/Messaging/Domain/Entity'
-                prefix: 'App\Messaging\Domain\Entity'
-                alias: Messaging
+                dir: '%kernel.project_dir%/src/Entity'
+                prefix: 'App\Entity'
+                alias: App
         controller_resolver:
             auto_mapping: false
 
@@ -51,7 +27,7 @@ when@test:
     doctrine:
         dbal:
             driver: pdo_sqlite
-            replicas: ~
+            url: 'sqlite:///:memory:'
 
 when@prod:
     doctrine:

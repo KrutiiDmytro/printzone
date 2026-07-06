@@ -1,3 +1,45 @@
+# Фаза — Виокремлення Cart Service (Strangler-Fig крок 4) — В РОБОТІ
+
+> **Мета:** винести персистентний кошик залогінених у власний `cart-service` (FrankenPHP, `db-cart`, :8004),
+> прибрати cart-таблиці моноліту. Прецедент — order-service. Гілка: `feat/phase-cart-service`.
+> **Рішення:** (1) MVP — сервіс володіє кошиком залогінених за `userId`; гостьовий кошик лишається в сесії
+> моноліту; злиття гість→user при логіні через HTTP. (2) Прод-деплой до live. (3) cart-service — «тупий» стор
+> зі знімками; резолвінг каталогу лишається в моноліті (`CatalogClient`).
+
+## Крок 1 — Скелет cart-service + інфра ✅
+- [x] Каркас із order-service (composer без stripe/messenger; Dockerfile без amqp; :8004); `compose.yaml` `db-cart`+`cart-service`;
+      монтаж `../../config/jwt:ro`; csvc_vendor/csvc_var named-volumes; `HealthController` (live/ready)
+- [x] Verify: контейнер up; health/live 200, /ready db ok; 404 на невідомому роуті
+
+## Крок 2 — Домен + БД + CRUD-API ✅
+- [x] Сутності `App\Entity\Cart`/`CartItem` (власна БД `public`, без schema:); `CartRepository` (findOneByUserId, deleteOlderThan)
+- [x] Міграція `Version20260703211718` (diff); без фікстур; `CartController` (GET/POST/PATCH/DELETE per userId; upsert; 422/404)
+- [x] `security.yaml`: `^/api` verify JWT (спільний keypair); write-методи `POST/PATCH/DELETE` → `ROLE_CART_ADMIN`
+- [x] Verify: migrate+schema:validate [OK]; phpunit **12 OK** (health 2 + CRUD/401/403/422/404 10)
+
+## Крок 3 — Моноліт: CartClient + рефактор CartService ✅
+- [x] `App\Cart\Client\CartClient` (HttpClient + S2S JWT `ROLE_CART_ADMIN`, дзеркало CatalogClient; per-request memo для get;
+      **read degrade / write strict**)
+- [x] `CartService`: `*Database`-методи → CartClient; лишити session + резолвінг CatalogClient + enrich у getCart
+- [x] Прибрано entity `Cart`/`CartItem` + `CartRepository` + мапінг `Cart` у doctrine.yaml; `.env` `CART_SERVICE_URL`
+- [x] Тести на моки: `CartServiceTest`, `CheckoutControllerTest` (stub CartClient); phpstan-baseline регенеровано
+- [x] Verify: phpunit моноліт **135 OK**; phpstan **[OK] No errors**
+
+## Крок 4 — Моноліт: cutover БД (дроп cart-таблиць) ✅
+- [x] Рукописна міграція `Version20260703220000`: DROP cart.cart_items/carts + DROP SCHEMA cart (down irreversible)
+- [x] Тести на моки; прибрано CartTest/CartItemTest; phpstan-baseline регенеровано
+- [x] Verify: phpunit **135 OK**; phpstan **[OK]**; migrate+schema:validate **[OK]** (схема `cart` зникла);
+      **реальний крос-сервіс probe OK** (upsert→3, update→5, clear→[]; S2S JWT verified)
+
+## Крок 5 — Прод-деплой (до live) — конфіги готові, чекає merge
+- [x] `cart-service/compose.prod.yaml` (db-cart `${CART_DB_PASSWORD}`, ports !reset, мережа task-25_default в overlay)
+- [x] Моноліт `compose.prod.yaml`: `CART_SERVICE_URL` у php+worker; `.gitlab-ci.yml` build/test/deploy:cart-service
+      (deploy needs test:cart-service; монолітний deploy needs deploy:cart-service — дроп чекає живого сервісу)
+- [x] Verify локально: `docker compose config` VALID (обидва overlay + моноліт); `.gitlab-ci.yml` валідний (3 cart-джоби)
+- [ ] ⚠️ Дії користувача: CI vars `CART_DB_PASSWORD`, `APP_SECRET`; прод після merge — CI-деплой + e2e checkout
+
+---
+
 # Інцидент (2026-06-27): «тестова оплата pending + товари зникли»
 
 ## Діагноз
