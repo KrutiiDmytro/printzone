@@ -79,18 +79,32 @@ Stripe ─webhook─► payment-svc /stripe/webhook (public, підпис Stripe
       unknown-order no-op); `WebhookTest` видалено; `debug:messenger` показує IntegrationEvent→PaymentEventHandler;
       schema:validate **[OK]**; dev-smoke checkout no-token→401, health→200
 
-## Крок 5 — Прод-деплой (compose.prod + CI) + E2E
-- [ ] `payment-service/compose.prod.yaml`: db `${PAYMENT_DB_PASSWORD}`, env (`STRIPE_SECRET_KEY`,
+## Крок 5 — Прод-деплой (compose.prod + CI) + E2E ✅
+- [x] `payment-service/compose.prod.yaml`: db `${PAYMENT_DB_PASSWORD}`, env (`STRIPE_SECRET_KEY`,
       `STRIPE_WEBHOOK_SECRET`, `APP_SECRET`, `DATABASE_URL`, `MESSENGER_EVENTS_DSN`), `ports: !reset []`,
-      мережа `task-25_default` в overlay, `restart: unless-stopped`. (Payment лише verify+consume JWT — passphrase не підписує)
-- [ ] order-service `compose.prod.yaml`: `PAYMENT_SERVICE_URL` у php+worker; прибрати `STRIPE_*`
-- [ ] `.gitlab-ci.yml`: build/test/deploy `payment-service` (deploy needs test:payment-service;
-      order-service deploy needs deploy:payment-service — order кличе живий payment)
-- [ ] ⚠️ Дії користувача: CI vars `PAYMENT_DB_PASSWORD`, `APP_SECRET`; **Stripe webhook URL → payment-service**
-      (не order-service!); прод після merge — CI-деплой + e2e checkout (4242)
-- [ ] Verify локально: `docker compose config` VALID (обидва overlay + order); `.gitlab-ci.yml` валідний;
-      **реальний крос-сервіс E2E**: checkout → payment session → (Stripe test) → webhook → PaymentSucceeded →
-      Order PAID → OrderPaid → лист. Прод-деплой — на runner при merge
+      мережа `task-25_default`, `restart`; `payment-relay` (публікує payment.*). (Payment лише verify JWT — passphrase не треба)
+- [x] order-service `compose.prod.yaml`: `PAYMENT_SERVICE_URL: http://payment-service` + **`JWT_PASSPHRASE`**
+      (order вперше підписує!) у `order-service`; прибрано `STRIPE_*`; **+`order-worker`** (consume payment_events)
+- [x] `.gitlab-ci.yml`: build/test/deploy `payment-service` (deploy needs `test:payment-service`);
+      **`deploy:order-service` тепер needs `deploy:payment-service`** (order кличе живий payment на checkout)
+- [x] ⚠️ Дії користувача: CI vars `PAYMENT_DB_PASSWORD`, `APP_SECRET`, `STRIPE_SECRET_KEY`,
+      `STRIPE_WEBHOOK_SECRET`, `JWT_PASSPHRASE` (order-service тепер підписує); **перенаправити Stripe webhook
+      endpoint URL → payment-service** (новий endpoint може дати НОВИЙ `whsec_` → оновити `STRIPE_WEBHOOK_SECRET`);
+      прод після merge — CI-деплой + e2e checkout (4242)
+- [x] ✅ Verify локально: `docker compose config` VALID (обидва overlay: порти прибрано, task-25_default,
+      order-worker, STRIPE зник з order); `.gitlab-ci.yml` валідний; **реальний крос-сервіс E2E** (живі
+      контейнери): підписаний webhook→payment-service `200` → Payment **SUCCEEDED**+`PaymentSucceeded`(published)
+      → RabbitMQ `payment.*` → order-worker → Order **PAID**+`OrderPaid`(published). Прод-деплой — на runner при merge
+
+## Підсумок Фази 6
+Payment Service виокремлено зі order-service (FrankenPHP, `db-payment`, :8005). payment-service володіє Stripe:
+`POST /api/payments` (create-session, `ROLE_PAYMENT_ADMIN`) + `/stripe/webhook` (public) + таблиця `payments`
+(ідемпотентна per-order). Перехід Order-статусу тепер через **події**: webhook → `PaymentSucceeded`/
+`PaymentFailed` (JSON, спільний FQCN, транзакційний outbox) → order-service консюмить (`payment_events`,
+binding `payment.*`) → Order PAID/FAILED + `OrderPaid`/`OrderCancelled` (Saga до catalog БЕЗ ЗМІН). Stripe
+повністю вирізано з order-service. order-service вперше **підписує** S2S JWT (`PaymentClient`). Refunds —
+відкладено. Комміти: `2f1cf71`(1) `1d3a59d`(2) `f34b432`(3) `91f68a9`(4) + Крок 5.
+⚠️ Прод: перенаправити Stripe webhook URL на payment-service + додати CI vars (див. Крок 5).
 
 ## Ризики / підводні камені
 1. **Зміщення емісії OrderPaid/OrderCancelled** — з webhook у консюмер Payment-подій. Ризик подвоєння/втрати:

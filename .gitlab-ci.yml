@@ -367,6 +367,16 @@ build:cart-service:
   needs: []
   rules: *rules_mr_develop
 
+build:payment-service:
+  stage: build
+  script:
+    - docker build -f services/payment-service/Dockerfile
+      -t printzone/payment-service:$CI_COMMIT_SHA
+      -t printzone/payment-service:latest
+      services/payment-service
+  needs: []
+  rules: *rules_mr_develop
+
 test:catalog-service:
   stage: test
   needs:
@@ -424,6 +434,21 @@ test:cart-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/cart-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:payment-service:
+  stage: test
+  needs:
+    - build:payment-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/payment-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/payment-service:latest
       sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
@@ -581,9 +606,11 @@ deploy:order-service:
       done
       echo "order-service healthy"
   # Deploy order-service FIRST (independently of the monolith), so it is live
-  # and healthy before the monolith cutover drops its order tables.
+  # and healthy before the monolith cutover drops its order tables. It also calls
+  # payment-service at checkout, so payment-service must be live first.
   needs:
     - test:order-service
+    - deploy:payment-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
@@ -644,5 +671,65 @@ deploy:cart-service:
   # and healthy before the monolith cutover drops its cart tables.
   needs:
     - test:cart-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:payment-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    PSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast if the DB password is missing — otherwise payment-service comes up
+    # unreachable and order-service checkout would 502 (write-strict PaymentClient).
+    - |
+      if [ -z "$PAYMENT_DB_PASSWORD" ]; then
+        echo "ERROR: PAYMENT_DB_PASSWORD is not set. Aborting."; exit 1
+      fi
+    # payment-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/payment-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/payment-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/payment-service/" "$DEPLOY_DIR/services/payment-service/"
+    - cd "$DEPLOY_DIR/services/payment-service"
+    - echo "--- Starting db-payment ---"
+    - $PSVC up -d db-payment
+    - |
+      i=0
+      until $PSVC exec -T db-payment pg_isready -U app -d payment_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-payment not ready"; $PSVC logs db-payment --tail=20; exit 1; }
+        echo "Waiting for db-payment ($i/30)..."; sleep 2
+      done
+    - $PSVC exec -T db-payment psql -U app -d payment_service -c "ALTER USER app WITH PASSWORD '${PAYMENT_DB_PASSWORD}';"
+    - echo "--- Starting service + relay (pre-built image) ---"
+    - $PSVC up -d --no-build
+    - $PSVC exec -T payment-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in psvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $PSVC exec -T payment-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $PSVC exec -T payment-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Payments are created at runtime — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $PSVC exec -T payment-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: payment-service health failed"; $PSVC logs payment-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "payment-service healthy"
+  # Deploy payment-service FIRST (independently of the monolith), so order-service
+  # has a live Stripe boundary to call at checkout.
+  needs:
+    - test:payment-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
