@@ -31,16 +31,19 @@ Stripe ─webhook─► payment-svc /stripe/webhook (public, підпис Stripe
       named-volumes `psvc_vendor`/`psvc_var`; `HealthController` (/health/live, /health/ready з пінгом БД)
 - [x] ✅ Verify: контейнер up; **health/live 200** `{"status":"ok"}`; **/ready db ok** (50ms); **404** на невідомому роуті
 
-## Крок 2 — Домен + БД + create-session API
-- [ ] Entity `App\Entity\Payment` (власна БД `public`, без schema:): id(uuid), orderId(uuid), stripeSessionId,
-      amount(int, центи), currency, status (INITIATED/SUCCEEDED/FAILED), createdAt/updatedAt;
-      `PaymentRepository` (findOneByOrderId, findByStripeSessionId). Міграція через `diff`
-- [ ] `StripeCheckoutService` (перенести з order-service; `createSession` за `orderId`, не за Order-entity —
-      сервіс не володіє Order; success/cancelUrl приходять у запиті) + `PaymentController` `POST /api/payments`
-      (валідація 400/422; upsert-idемпотентність за orderId; повертає `{url, sessionId}`)
-- [ ] `security.yaml`: `^/api` verify JWT (спільний keypair); `POST /api/payments` → `ROLE_PAYMENT_ADMIN`;
-      `/stripe/webhook` — **поза `^/api`** (публічний, підпис Stripe, без JWT)
-- [ ] Verify: migrate+schema:validate [OK]; phpunit (health + create 201/400/422/401/403)
+## Крок 2 — Домен + БД + create-session API ✅
+- [x] Entity `App\Entity\Payment` (власна БД `public`, без schema:): id(uuid), orderId(uuid **UNIQUE** →
+      ідемпотентність per-order), stripeSessionId, amount(int, центи), currency, status
+      (INITIATED/SUCCEEDED/FAILED), createdAt/updatedAt(touch); `PaymentRepository`
+      (findOneByOrderId, findByStripeSessionId, save). Міграція `Version20260706163348` (diff; down очищено)
+- [x] `StripeCheckoutService` (перенесено з order-service; `createSession(orderId:string, ...)` — сервіс НЕ
+      володіє Order, лише кладе order_id у Stripe metadata) + `PaymentController` `POST /api/payments`
+      (400 top-level / 422 lineItems; upsert-ідемпотентність за orderId; 502 при Stripe-fail → payment FAILED;
+      повертає `{paymentId, orderId, sessionId, url}` 201)
+- [x] `security.yaml` (+bundles Security/Lexik): `^/api` verify JWT (спільний keypair); `POST /api/payments` →
+      `ROLE_PAYMENT_ADMIN`; firewall `^/stripe/webhook` — **security:false** (публічний, підпис Stripe)
+- [x] ✅ Verify: migrate+schema:validate **[OK]**; phpunit **11 OK** (health 2 + unit 2 + payment API 7:
+      401/403/400/422×2/201/ідемпотентність); dev-runtime smoke: POST no-token→401, health→200
 
 ## Крок 3 — Webhook + вихідний контракт подій (outbox/relay)
 - [ ] Перенести `StripeWebhookController` у payment-service: `checkout.session.completed`→`payments` SUCCEEDED;

@@ -1,0 +1,30 @@
+security:
+    # Service-to-service tokens are signed by the monolith/order-service with the
+    # shared keypair. No user database here — the caller is reconstructed from the
+    # verified JWT claims (including roles).
+    providers:
+        jwt:
+            lexik_jwt: ~
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt))/
+            security: false
+
+        # Stripe authenticates itself via the signed webhook payload, not a JWT.
+        webhook:
+            pattern: ^/stripe/webhook
+            security: false
+
+        api:
+            pattern: ^/
+            stateless: true
+            provider: jwt
+            jwt: ~
+
+    access_control:
+        - { path: ^/health, roles: PUBLIC_ACCESS }
+        # Creating a checkout session is a service-to-service write from order-service.
+        - { path: ^/api/payments, methods: [POST], roles: ROLE_PAYMENT_ADMIN }
+        # Any other /api read needs a valid service token.
+        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
