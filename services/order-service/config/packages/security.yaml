@@ -10,11 +10,6 @@ security:
             pattern: ^/(_(profiler|wdt))/
             security: false
 
-        # Stripe authenticates itself via the signed webhook payload, not a JWT.
-        webhook:
-            pattern: ^/stripe/webhook
-            security: false
-
         api:
             pattern: ^/
             stateless: true

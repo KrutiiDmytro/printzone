@@ -2,7 +2,6 @@
 
 namespace App\Service;
 
-use App\Entity\Order;
 use Stripe\StripeClient;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -17,13 +16,15 @@ class StripeCheckoutService
     /**
      * @param list<array{name: string, price: int, quantity: int}> $lineItems
      *
-     * The success/cancel URLs point back to the monolith (it owns the cart and
-     * the rendered pages), so the caller supplies them. `successUrl` must carry
-     * Stripe's literal {CHECKOUT_SESSION_ID} placeholder if it needs the id back.
+     * Keyed by the Order id (a string) — this service does not own the Order
+     * aggregate, it only needs the id to stamp into Stripe metadata so the
+     * webhook can map the event back to an order. Success/cancel URLs belong to
+     * the monolith (it renders those pages), so the caller supplies them;
+     * `successUrl` must carry Stripe's literal {CHECKOUT_SESSION_ID} placeholder.
      *
      * @return array{id: string, url: string|null}
      */
-    public function createSession(Order $order, array $lineItems, string $successUrl, string $cancelUrl): array
+    public function createSession(string $orderId, array $lineItems, string $successUrl, string $cancelUrl): array
     {
         $stripe = new StripeClient($this->secretKey);
 
@@ -47,10 +48,10 @@ class StripeCheckoutService
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
             'metadata' => [
-                'order_id' => (string) $order->getId(),
+                'order_id' => $orderId,
             ],
             'payment_intent_data' => [
-                'metadata' => ['order_id' => (string) $order->getId()],
+                'metadata' => ['order_id' => $orderId],
             ],
         ]);
 

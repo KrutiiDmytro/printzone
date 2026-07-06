@@ -2,8 +2,7 @@
 
 namespace App\Tests\Functional;
 
-use App\Entity\Order;
-use App\Entity\OrderItem;
+use App\Entity\Payment;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
@@ -30,31 +29,19 @@ abstract class ApiTestCase extends WebTestCase
         $schemaTool->createSchema($metadata);
     }
 
-    /**
-     * Persists an order with one item and returns it.
-     */
-    protected function seedOrder(string $status = 'PENDING'): Order
+    protected function seedPayment(string $status = Payment::STATUS_INITIATED, ?Uuid $orderId = null): Payment
     {
-        $order = new Order();
-        $order->setUserId(Uuid::v4());
-        $order->setUserEmail('buyer@example.com');
-        $order->setStatus($status);
-        $order->setTotalAmount(1999);
+        $payment = new Payment($orderId ?? Uuid::v4(), 1999);
+        $payment->setStripeSessionId('cs_test_seed');
+        $payment->setStatus($status);
 
-        $item = new OrderItem();
-        $item->setOrderRef($order);
-        $item->setProductId(Uuid::v4());
-        $item->setProductName('Canon PG-540 Black');
-        $item->setPrice(1999);
-        $item->setQuantity(1);
-        $order->getItems()->add($item);
-
-        $this->em->persist($order);
+        $this->em->persist($payment);
         $this->em->flush();
 
-        return $order;
+        return $payment;
     }
 
+    /** A non-privileged service token (read-level). */
     protected function serviceToken(): string
     {
         $jwt = static::getContainer()->get(JWTTokenManagerInterface::class);
@@ -62,11 +49,24 @@ abstract class ApiTestCase extends WebTestCase
         return $jwt->create(new InMemoryUser('service-test', null, ['ROLE_USER']));
     }
 
-    protected function adminToken(): string
+    /** A service token allowed to create payment sessions. */
+    protected function paymentAdminToken(): string
     {
         $jwt = static::getContainer()->get(JWTTokenManagerInterface::class);
 
-        return $jwt->create(new InMemoryUser('service-admin', null, ['ROLE_USER', 'ROLE_ADMIN']));
+        return $jwt->create(new InMemoryUser('service-payment', null, ['ROLE_USER', 'ROLE_PAYMENT_ADMIN']));
+    }
+
+    /**
+     * Builds a valid Stripe-Signature header for the payload using the test
+     * webhook secret, so the real signature-verification path is exercised.
+     */
+    protected function stripeSignature(string $payload, string $secret = 'whsec_test_dummy'): string
+    {
+        $timestamp = time();
+        $signed = hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
+
+        return sprintf('t=%d,v1=%s', $timestamp, $signed);
     }
 
     /**

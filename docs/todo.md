@@ -1,3 +1,130 @@
+# Фаза 6 — Виокремлення Payment Service (Stripe) з order-service — ПЛАН, очікує апрув
+
+> **Мета:** винести Stripe-платежі у власний `payment-service` (FrankenPHP, `db-payment`, :8005).
+> Зараз Payment «зашитий» в order-service (`StripeCheckoutService` + `CheckoutController` +
+> `StripeWebhookController`), і webhook **напряму мутує Order-агрегат** (PENDING→PAID/FAILED). Виносимо
+> цю відповідальність і розриваємо прямий зв'язок через **події** (цільова Saga §4.2). Гілка: `feat/phase6-payment-service`.
+> **Узгоджені рішення:** (1) перехід Order-статусу — через події `PaymentSucceeded`/`PaymentFailed`
+> (JSON, спільний FQCN; переюз RabbitMQ-backbone), НЕ HTTP-колбек; (2) **refunds відкладено** (флоу
+> повернень ніде нема) — лише таблиця `payments`; (3) інфра як завжди — FrankenPHP, `db-payment`, :8005,
+> спільний keypair, S2S JWT; `compose.prod` + CI окремим кроком.
+
+## Цільовий потік (після виносу)
+```
+order-svc CheckoutController: Order(PENDING)+items, емітить OrderCreated, flush
+   └─HTTP(S2S JWT)─► payment-svc POST /api/payments {orderId,amount,lineItems,success/cancelUrl}
+                        → Stripe session (order_id у metadata) → payments row INITIATED → {url, sessionId}
+   ◄── order-svc зберігає stripeSessionId, повертає {orderId, url} моноліту → redirect на Stripe
+Stripe ─webhook─► payment-svc /stripe/webhook (public, підпис Stripe)
+   checkout.session.completed → payments SUCCEEDED + outbox PaymentSucceeded {orderId,...}
+   payment_intent.payment_failed → payments FAILED   + outbox PaymentFailed   {orderId,...}
+      └─relay→RabbitMQ (routing key payment.*)─► order-svc консюмер (queue order_payment_events, bind payment.*)
+            PaymentSucceeded → Order PAID   + outbox OrderPaid      (Saga до catalog БЕЗ ЗМІН)
+            PaymentFailed    → Order FAILED + outbox OrderCancelled (реліз HELD-резерву)
+```
+Ключова зміна: `OrderPaid`/`OrderCancelled` тепер емітить **консюмер Payment-подій** order-service, а не Stripe-webhook.
+
+## Крок 1 — Скелет payment-service + інфра ✅
+- [x] `services/payment-service/` за патерном order-service (FrankenPHP; повний dep-набір, вкл. `stripe/stripe-php`,
+      messenger/amqp/lexik — щоб уникнути повторних composer install; bundles вмикаються покроково);
+      `compose.yaml`: `db-payment` (postgres16, `payment_service`) + `payment-service` (:8005); монтаж `../../config/jwt:ro`;
+      named-volumes `psvc_vendor`/`psvc_var`; `HealthController` (/health/live, /health/ready з пінгом БД)
+- [x] ✅ Verify: контейнер up; **health/live 200** `{"status":"ok"}`; **/ready db ok** (50ms); **404** на невідомому роуті
+
+## Крок 2 — Домен + БД + create-session API ✅
+- [x] Entity `App\Entity\Payment` (власна БД `public`, без schema:): id(uuid), orderId(uuid **UNIQUE** →
+      ідемпотентність per-order), stripeSessionId, amount(int, центи), currency, status
+      (INITIATED/SUCCEEDED/FAILED), createdAt/updatedAt(touch); `PaymentRepository`
+      (findOneByOrderId, findByStripeSessionId, save). Міграція `Version20260706163348` (diff; down очищено)
+- [x] `StripeCheckoutService` (перенесено з order-service; `createSession(orderId:string, ...)` — сервіс НЕ
+      володіє Order, лише кладе order_id у Stripe metadata) + `PaymentController` `POST /api/payments`
+      (400 top-level / 422 lineItems; upsert-ідемпотентність за orderId; 502 при Stripe-fail → payment FAILED;
+      повертає `{paymentId, orderId, sessionId, url}` 201)
+- [x] `security.yaml` (+bundles Security/Lexik): `^/api` verify JWT (спільний keypair); `POST /api/payments` →
+      `ROLE_PAYMENT_ADMIN`; firewall `^/stripe/webhook` — **security:false** (публічний, підпис Stripe)
+- [x] ✅ Verify: migrate+schema:validate **[OK]**; phpunit **11 OK** (health 2 + unit 2 + payment API 7:
+      401/403/400/422×2/201/ідемпотентність); dev-runtime smoke: POST no-token→401, health→200
+
+## Крок 3 — Webhook + вихідний контракт подій (outbox/relay) ✅
+- [x] `StripeWebhookController` у payment-service: `checkout.session.completed`→Payment SUCCEEDED;
+      `payment_intent.payment_failed`→FAILED; переходи **лише з INITIATED** (ідемпотентність повторних вебхуків);
+      резолвить свій Payment за `metadata.order_id`, Order НЕ чіпає
+- [x] Messaging-інфра (дзеркало order-service): `OutboxMessage`+repo, `OutboxRecorder`, `OutboxRelay`,
+      `OutboxRelayCommand` (`app:outbox:relay`) + `events` транспорт (JSON, `IntegrationEvent` той самий FQCN).
+      Webhook атомарно: Payment-статус + `outbox record('payment','PaymentSucceeded'|'PaymentFailed',
+      {orderId, paymentId, amount, currency})` в одному flush. Міграція `Version20260706164631` (outbox)
+- [x] Dockerfile amqp (вже був); compose: `payment-relay` (`app:outbox:relay`) на мережах `[default, monolith]`
+      (`task-25_default`, як order-relay/catalog-worker)
+- [x] ✅ Verify: phpunit **15 OK** (webhook 4: 400-підпис/SUCCEEDED+event/FAILED+event/ідемпотентний replay);
+      migrate+schema:validate **[OK]**; **реальний E2E-probe** проти монолітного брокера: outbox→relay→RabbitMQ,
+      рядок `published_at` set, повідомлення в probe-черзі з **routing key `payment.PaymentSucceeded`** + JSON-тіло
+
+## Крок 4 — order-service: HTTP-клієнт + консюмер + прибрати Stripe (семантично один крок) ✅
+- [x] `PaymentClient` (HttpClient + S2S JWT `ROLE_PAYMENT_ADMIN` через `JWTTokenManager`, дзеркало
+      CartClient; **write-strict** — кидає на не-201/порожній url): `createSession(orderId, lineItems,
+      success/cancelUrl) → {sessionId, url}`. `.env` `PAYMENT_SERVICE_URL`. **+`symfony/http-client`** (не було)
+- [x] `CheckoutController`: `PaymentClient->createSession((string)order->getId(), ...)` замість Stripe;
+      зберегти `stripeSessionId` з відповіді; `failOrder()` на будь-який виняток (write-strict → 502)
+- [x] Консюмер Payment-подій: **окремий receive-транспорт `payment_events`** (черга `order_payment_events`,
+      binding `payment.*`, JSON) — `events` лишається send-only для публікації order.*; `PaymentEventHandler`
+      (#[AsMessageHandler]): `PaymentSucceeded`→PENDING→PAID + outbox `OrderPaid`; `PaymentFailed`→PENDING→
+      FAILED + outbox `OrderCancelled` (ідемпотентно — лише з PENDING). compose: `order-worker`
+      `messenger:consume payment_events` на `[default, monolith]`
+- [x] **Видалено** з order-service: `StripeWebhookController`, `StripeCheckoutService`, `stripe/stripe-php`,
+      `STRIPE_*` env, мертвий webhook-firewall; емісія `OrderPaid`/`OrderCancelled` переїхала у `PaymentEventHandler`
+- [x] ⚠️ order-service вперше **підписує** S2S JWT → потрібен `JWT_PASSPHRASE` (dev: `.env.local` gitignored;
+      прод — Крок 5). Тести підписують тестовим passphrase-free keypair + стаблять PaymentClient
+- [x] ✅ Verify: phpunit order-service **24 OK** (CheckoutApiTest стабить PaymentClient: 201/400/401/**502-fail→
+      OrderCancelled**; PaymentEventHandlerTest 4: PAID+OrderPaid / FAILED+OrderCancelled / replay-ідемпотентний /
+      unknown-order no-op); `WebhookTest` видалено; `debug:messenger` показує IntegrationEvent→PaymentEventHandler;
+      schema:validate **[OK]**; dev-smoke checkout no-token→401, health→200
+
+## Крок 5 — Прод-деплой (compose.prod + CI) + E2E ✅
+- [x] `payment-service/compose.prod.yaml`: db `${PAYMENT_DB_PASSWORD}`, env (`STRIPE_SECRET_KEY`,
+      `STRIPE_WEBHOOK_SECRET`, `APP_SECRET`, `DATABASE_URL`, `MESSENGER_EVENTS_DSN`), `ports: !reset []`,
+      мережа `task-25_default`, `restart`; `payment-relay` (публікує payment.*). (Payment лише verify JWT — passphrase не треба)
+- [x] order-service `compose.prod.yaml`: `PAYMENT_SERVICE_URL: http://payment-service` + **`JWT_PASSPHRASE`**
+      (order вперше підписує!) у `order-service`; прибрано `STRIPE_*`; **+`order-worker`** (consume payment_events)
+- [x] `.gitlab-ci.yml`: build/test/deploy `payment-service` (deploy needs `test:payment-service`);
+      **`deploy:order-service` тепер needs `deploy:payment-service`** (order кличе живий payment на checkout)
+- [x] **nginx-проксі `/stripe/webhook` → `payment-service:80`** (`docker/nginx/default.conf`; був `order-service:80`).
+      Публічний Stripe-URL `e-commerce.it.com/stripe/webhook` **НЕ змінюється** → Stripe Dashboard і
+      `STRIPE_WEBHOOK_SECRET` чіпати НЕ треба. Деплой сам `--force-recreate nginx` (single-file mount)
+- [x] ⚠️ Дії користувача — **лише 1 нова CI var:** `PAYMENT_DB_PASSWORD` (новий пароль db-payment).
+      Решта (`APP_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `JWT_PASSPHRASE`) **вже існують** як
+      project CI vars (переюз). Stripe Dashboard — БЕЗ ЗМІН. Після merge: CI-деплой + e2e checkout (4242)
+- [x] ✅ Verify локально: `docker compose config` VALID (обидва overlay: порти прибрано, task-25_default,
+      order-worker, STRIPE зник з order); `.gitlab-ci.yml` валідний; **реальний крос-сервіс E2E** (живі
+      контейнери): підписаний webhook→payment-service `200` → Payment **SUCCEEDED**+`PaymentSucceeded`(published)
+      → RabbitMQ `payment.*` → order-worker → Order **PAID**+`OrderPaid`(published). Прод-деплой — на runner при merge
+
+## Підсумок Фази 6
+Payment Service виокремлено зі order-service (FrankenPHP, `db-payment`, :8005). payment-service володіє Stripe:
+`POST /api/payments` (create-session, `ROLE_PAYMENT_ADMIN`) + `/stripe/webhook` (public) + таблиця `payments`
+(ідемпотентна per-order). Перехід Order-статусу тепер через **події**: webhook → `PaymentSucceeded`/
+`PaymentFailed` (JSON, спільний FQCN, транзакційний outbox) → order-service консюмить (`payment_events`,
+binding `payment.*`) → Order PAID/FAILED + `OrderPaid`/`OrderCancelled` (Saga до catalog БЕЗ ЗМІН). Stripe
+повністю вирізано з order-service. order-service вперше **підписує** S2S JWT (`PaymentClient`). Refunds —
+відкладено. Комміти: `2f1cf71`(1) `1d3a59d`(2) `f34b432`(3) `91f68a9`(4) + Крок 5.
+⚠️ Прод (єдина ручна дія): додати CI var `PAYMENT_DB_PASSWORD`. Stripe webhook маршрутизує nginx
+(`/stripe/webhook`→payment-service) — публічний URL і `STRIPE_WEBHOOK_SECRET` НЕ змінюються.
+
+## Ризики / підводні камені
+1. **Зміщення емісії OrderPaid/OrderCancelled** — з webhook у консюмер Payment-подій. Ризик подвоєння/втрати:
+   ідемпотентність по Order-статусу (лише з PENDING) + at-least-once relay — покрити тестом на повтор.
+2. **Webhook URL** — головний прод-нюанс: Stripe шле на **payment-service**, не order-service. Забути → оплати
+   застрягнуть PENDING (прецедент інциденту 2026-06-27). Оновити в Stripe Dashboard при cutover.
+3. **Два нові контракти подій** (`PaymentSucceeded/Failed`) — JSON + спільний FQCN `IntegrationEvent`
+   (патерн Фази 5); стару логіку прямої мутації Order прибрати повністю (не лишати dual-path).
+4. **order-service стає консюмером** — раніше лише емітив (outbox→relay). Додається consume-воркер +
+   binding `payment.*`; перевірити, що це не конфліктує з наявним relay-воркером.
+5. **payment-service outbox** — щоб уникнути dual-write (payments-статус + подія), тримати транзакційний
+   outbox (як моноліт/order). Не спокушатися прямою публікацією в RabbitMQ у вебхуку.
+6. **Redirect лишається синхронним** — order→payment HTTP write-strict: якщо payment лежить, checkout падає
+   явно (502 + failOrder), а не мовчки. Прийнятно (як зараз зі Stripe).
+
+---
+
 # Фаза — Виокремлення Cart Service (Strangler-Fig крок 4) — В РОБОТІ
 
 > **Мета:** винести персистентний кошик залогінених у власний `cart-service` (FrankenPHP, `db-cart`, :8004),

@@ -61,6 +61,31 @@ services:
       db-order:
         condition: service_healthy
 
+  # Saga consumer: reads payment-service events (payment.*) off the monolith's
+  # RabbitMQ and transitions the order (PaymentSucceeded→PAID, PaymentFailed→
+  # FAILED), emitting OrderPaid/OrderCancelled. Same image/volumes as the relay;
+  # joins the monolith network to reach the broker as `rabbitmq`.
+  order-worker:
+    image: printzone/order-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console messenger:consume payment_events --time-limit=3600 -v
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/app
+      - osvc_vendor:/app/vendor
+      - osvc_var:/app/var
+      - ../../config/jwt:/jwt:ro
+    networks:
+      - default
+      - monolith
+    depends_on:
+      db-order:
+        condition: service_healthy
+
 volumes:
   db_order_data:
   osvc_vendor:

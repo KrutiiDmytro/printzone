@@ -2,10 +2,10 @@
 
 namespace App\Controller;
 
+use App\Client\PaymentClient;
 use App\Entity\Order;
 use App\Entity\OrderItem;
 use App\Messaging\Application\OutboxRecorder;
-use App\Service\StripeCheckoutService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -14,16 +14,17 @@ use Symfony\Component\Uid\Uuid;
 
 /**
  * Checkout entrypoint for the monolith. The monolith reads the cart, then POSTs
- * the line items here; this service owns the Order aggregate and the Stripe
- * Checkout session. Success/cancel URLs are the monolith's (it renders those
- * pages and clears the cart), so they arrive in the request body.
+ * the line items here; this service owns the Order aggregate and delegates the
+ * Stripe Checkout session to payment-service (over HTTP). Success/cancel URLs are
+ * the monolith's (it renders those pages and clears the cart), so they arrive in
+ * the request body.
  */
 #[Route('/api/checkout')]
 class CheckoutController
 {
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly StripeCheckoutService $stripeCheckoutService,
+        private readonly PaymentClient $paymentClient,
         private readonly OutboxRecorder $outboxRecorder,
     ) {
     }
@@ -92,20 +93,14 @@ class CheckoutController
         $this->entityManager->flush();
 
         try {
-            $session = $this->stripeCheckoutService->createSession($order, $lineItems, $successUrl, $cancelUrl);
-        } catch (\Exception $e) {
+            $session = $this->paymentClient->createSession((string) $order->getId(), $lineItems, $successUrl, $cancelUrl);
+        } catch (\Throwable $e) {
             $this->failOrder($order);
 
             return new JsonResponse(['error' => 'Payment service is unavailable'], 502);
         }
 
-        if (null === $session['url']) {
-            $this->failOrder($order);
-
-            return new JsonResponse(['error' => 'Could not initiate payment session'], 502);
-        }
-
-        $order->setStripeSessionId($session['id']);
+        $order->setStripeSessionId($session['sessionId']);
         $this->entityManager->flush();
 
         return new JsonResponse([

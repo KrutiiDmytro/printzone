@@ -1,0 +1,73 @@
+services:
+  db-payment:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: payment_service
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: changeme
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "payment_service", "-U", "app"]
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - db_payment_data:/var/lib/postgresql/data:rw
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/payment-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8005:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - psvc_vendor:/app/vendor
+      - psvc_var:/app/var
+      # Shared RS256 keypair with the monolith → validates service-to-service tokens.
+      - ../../config/jwt:/jwt:ro
+    depends_on:
+      db-payment:
+        condition: service_healthy
+
+  # Transactional-outbox relay: publishes unpublished payment.* events to the
+  # monolith's RabbitMQ. Same image/volumes as payment-service; `monolith` (the
+  # monolith compose network) reaches the shared broker directly as `rabbitmq`.
+  payment-relay:
+    image: printzone/payment-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console app:outbox:relay --time-limit=3600
+    restart: unless-stopped
+    # The FrankenPHP image bakes in an HTTP healthcheck, but this container runs a
+    # CLI worker (no HTTP server) → it would always report "unhealthy". Disable it.
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/app
+      - psvc_vendor:/app/vendor
+      - psvc_var:/app/var
+      - ../../config/jwt:/jwt:ro
+    networks:
+      - default
+      - monolith
+    depends_on:
+      db-payment:
+        condition: service_healthy
+
+volumes:
+  db_payment_data:
+  psvc_vendor:
+  psvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default

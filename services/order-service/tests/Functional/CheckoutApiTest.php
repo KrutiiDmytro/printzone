@@ -2,8 +2,8 @@
 
 namespace App\Tests\Functional;
 
+use App\Client\PaymentClient;
 use App\Entity\Order;
-use App\Service\StripeCheckoutService;
 
 class CheckoutApiTest extends ApiTestCase
 {
@@ -21,22 +21,22 @@ class CheckoutApiTest extends ApiTestCase
     }
 
     /**
-     * Replaces the real Stripe gateway with a stub so no network call is made.
+     * Replaces payment-service with a stub so no HTTP call is made.
      */
-    private function stubStripe(): void
+    private function stubPayment(): void
     {
-        $stub = new class extends StripeCheckoutService {
+        $stub = new class extends PaymentClient {
             public function __construct()
             {
             }
 
-            public function createSession(Order $order, array $lineItems, string $successUrl, string $cancelUrl): array
+            public function createSession(string $orderId, array $lineItems, string $successUrl, string $cancelUrl): array
             {
-                return ['id' => 'cs_test_123', 'url' => 'https://stripe.test/pay/cs_test_123'];
+                return ['sessionId' => 'cs_test_123', 'url' => 'https://stripe.test/pay/cs_test_123'];
             }
         };
 
-        static::getContainer()->set(StripeCheckoutService::class, $stub);
+        static::getContainer()->set(PaymentClient::class, $stub);
     }
 
     public function testCheckoutRequiresAuth(): void
@@ -55,7 +55,7 @@ class CheckoutApiTest extends ApiTestCase
 
     public function testCheckoutCreatesPendingOrderAndReturnsUrl(): void
     {
-        $this->stubStripe();
+        $this->stubPayment();
 
         $this->send('POST', '/api/checkout', $this->validBody(), $this->serviceToken());
 
@@ -72,5 +72,33 @@ class CheckoutApiTest extends ApiTestCase
         $outbox = $this->em->getRepository(\App\Entity\OutboxMessage::class)->findAll();
         self::assertCount(1, $outbox);
         self::assertSame('OrderCreated', $outbox[0]->getEventName());
+    }
+
+    public function testCheckoutFailsOrderWhenPaymentUnavailable(): void
+    {
+        $failing = new class extends PaymentClient {
+            public function __construct()
+            {
+            }
+
+            public function createSession(string $orderId, array $lineItems, string $successUrl, string $cancelUrl): array
+            {
+                throw new \RuntimeException('payment-service down');
+            }
+        };
+        static::getContainer()->set(PaymentClient::class, $failing);
+
+        $this->send('POST', '/api/checkout', $this->validBody(), $this->serviceToken());
+
+        self::assertResponseStatusCodeSame(502);
+
+        // The order is created then marked FAILED, and OrderCancelled releases the
+        // HELD reservation (OrderCreated + OrderCancelled both in the outbox).
+        $events = array_map(
+            fn (\App\Entity\OutboxMessage $m) => $m->getEventName(),
+            $this->em->getRepository(\App\Entity\OutboxMessage::class)->findAll()
+        );
+        self::assertContains('OrderCreated', $events);
+        self::assertContains('OrderCancelled', $events);
     }
 }
