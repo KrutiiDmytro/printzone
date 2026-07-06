@@ -59,19 +59,25 @@ Stripe ─webhook─► payment-svc /stripe/webhook (public, підпис Stripe
       migrate+schema:validate **[OK]**; **реальний E2E-probe** проти монолітного брокера: outbox→relay→RabbitMQ,
       рядок `published_at` set, повідомлення в probe-черзі з **routing key `payment.PaymentSucceeded`** + JSON-тіло
 
-## Крок 4 — order-service: HTTP-клієнт + консюмер + прибрати Stripe (семантично один крок)
-- [ ] `PaymentClient` (HttpClient + S2S JWT `ROLE_PAYMENT_ADMIN`, дзеркало CatalogClient/CartClient; **write-strict**):
-      `createSession(orderId, amount, lineItems, success/cancelUrl) → {url, sessionId}`. `.env` `PAYMENT_SERVICE_URL`
-- [ ] `CheckoutController`: замість `StripeCheckoutService->createSession()` → `PaymentClient->createSession()`;
-      зберегти `stripeSessionId` з відповіді; `failOrder()` на виняток/порожній url (як зараз)
-- [ ] Консюмер Payment-подій: `events` транспорт **consume** (черга `order_payment_events`, binding `payment.*`,
-      JSON); `PaymentEventHandler` (#[AsMessageHandler] для IntegrationEvent):
-      `PaymentSucceeded`→Order PENDING→PAID + outbox `OrderPaid`; `PaymentFailed`→PENDING→FAILED + outbox
-      `OrderCancelled` (ідемпотентно — лише з PENDING). compose: `order-worker` consume `events` (bind payment.*)
-- [ ] **Видалити** з order-service: `StripeWebhookController`, `StripeCheckoutService`, `stripe/stripe-php`,
-      `STRIPE_*` env; емісія `OrderPaid`/`OrderCancelled` переїхала в `PaymentEventHandler`
-- [ ] Verify: phpunit order-service (CheckoutControllerTest мокає PaymentClient; PaymentEventHandlerTest —
-      PAID/FAILED/ідемпотентність); `WebhookTest` видалено/перенесено; schema:validate [OK]
+## Крок 4 — order-service: HTTP-клієнт + консюмер + прибрати Stripe (семантично один крок) ✅
+- [x] `PaymentClient` (HttpClient + S2S JWT `ROLE_PAYMENT_ADMIN` через `JWTTokenManager`, дзеркало
+      CartClient; **write-strict** — кидає на не-201/порожній url): `createSession(orderId, lineItems,
+      success/cancelUrl) → {sessionId, url}`. `.env` `PAYMENT_SERVICE_URL`. **+`symfony/http-client`** (не було)
+- [x] `CheckoutController`: `PaymentClient->createSession((string)order->getId(), ...)` замість Stripe;
+      зберегти `stripeSessionId` з відповіді; `failOrder()` на будь-який виняток (write-strict → 502)
+- [x] Консюмер Payment-подій: **окремий receive-транспорт `payment_events`** (черга `order_payment_events`,
+      binding `payment.*`, JSON) — `events` лишається send-only для публікації order.*; `PaymentEventHandler`
+      (#[AsMessageHandler]): `PaymentSucceeded`→PENDING→PAID + outbox `OrderPaid`; `PaymentFailed`→PENDING→
+      FAILED + outbox `OrderCancelled` (ідемпотентно — лише з PENDING). compose: `order-worker`
+      `messenger:consume payment_events` на `[default, monolith]`
+- [x] **Видалено** з order-service: `StripeWebhookController`, `StripeCheckoutService`, `stripe/stripe-php`,
+      `STRIPE_*` env, мертвий webhook-firewall; емісія `OrderPaid`/`OrderCancelled` переїхала у `PaymentEventHandler`
+- [x] ⚠️ order-service вперше **підписує** S2S JWT → потрібен `JWT_PASSPHRASE` (dev: `.env.local` gitignored;
+      прод — Крок 5). Тести підписують тестовим passphrase-free keypair + стаблять PaymentClient
+- [x] ✅ Verify: phpunit order-service **24 OK** (CheckoutApiTest стабить PaymentClient: 201/400/401/**502-fail→
+      OrderCancelled**; PaymentEventHandlerTest 4: PAID+OrderPaid / FAILED+OrderCancelled / replay-ідемпотентний /
+      unknown-order no-op); `WebhookTest` видалено; `debug:messenger` показує IntegrationEvent→PaymentEventHandler;
+      schema:validate **[OK]**; dev-smoke checkout no-token→401, health→200
 
 ## Крок 5 — Прод-деплой (compose.prod + CI) + E2E
 - [ ] `payment-service/compose.prod.yaml`: db `${PAYMENT_DB_PASSWORD}`, env (`STRIPE_SECRET_KEY`,

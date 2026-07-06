@@ -70,19 +70,6 @@ abstract class ApiTestCase extends WebTestCase
     }
 
     /**
-     * Builds a valid Stripe-Signature header for the given payload using the
-     * test webhook secret, so the real signature verification path is exercised.
-     */
-    protected function stripeSignature(string $payload, string $secret = 'whsec_test_dummy'): string
-    {
-        // Current time so the signature stays inside Stripe's default tolerance.
-        $timestamp = time();
-        $signed = hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
-
-        return sprintf('t=%d,v1=%s', $timestamp, $signed);
-    }
-
-    /**
      * @param array<string, mixed> $body
      */
     protected function send(string $method, string $uri, array $body = [], ?string $token = null): void

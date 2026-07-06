@@ -18,6 +18,26 @@ framework:
                     max_retries: 3
                     multiplier: 2
 
+            # Inbound: payment-service events (payment.*) from the same `events`
+            # topic exchange. Receive-only (never in `routing`) — own queue so the
+            # order-worker consumes PaymentSucceeded/PaymentFailed without touching
+            # the order.* we publish. Same shared FQCN in the `type` header decodes
+            # the JSON back into our App\Messaging\Domain\IntegrationEvent.
+            payment_events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        order_payment_events:
+                            binding_keys: ['payment.*']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
         default_bus: messenger.bus.default
         buses:
             messenger.bus.default: []
@@ -30,3 +50,4 @@ when@test:
         messenger:
             transports:
                 events: 'in-memory://'
+                payment_events: 'in-memory://'
