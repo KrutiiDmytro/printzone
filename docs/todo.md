@@ -45,15 +45,19 @@ Stripe ─webhook─► payment-svc /stripe/webhook (public, підпис Stripe
 - [x] ✅ Verify: migrate+schema:validate **[OK]**; phpunit **11 OK** (health 2 + unit 2 + payment API 7:
       401/403/400/422×2/201/ідемпотентність); dev-runtime smoke: POST no-token→401, health→200
 
-## Крок 3 — Webhook + вихідний контракт подій (outbox/relay)
-- [ ] Перенести `StripeWebhookController` у payment-service: `checkout.session.completed`→`payments` SUCCEEDED;
-      `payment_intent.payment_failed`→FAILED; переходи лише з INITIATED (ідемпотентність повторних вебхуків)
-- [ ] Messaging-інфра (переюз order-service): outbox-таблиця + `OutboxRecorder` + `OutboxRelay` + relay-воркер
-      + `events` транспорт (JSON, `IntegrationEvent` той самий FQCN). Webhook атомарно: `payments`-статус +
-      `outbox record('payment','PaymentSucceeded'|'PaymentFailed', {orderId, amount, ...})` в одному flush
-- [ ] Dockerfile: +`amqp`; compose: `payment-worker` (relay). Мережа — до `task-25_default` (як catalog-worker)
-- [ ] Verify: phpunit (webhook 200/400-підпис/ідемпотентність); E2E-probe: payments row + рядок outbox published;
-      routing key `payment.PaymentSucceeded` у брокері (mgmt API)
+## Крок 3 — Webhook + вихідний контракт подій (outbox/relay) ✅
+- [x] `StripeWebhookController` у payment-service: `checkout.session.completed`→Payment SUCCEEDED;
+      `payment_intent.payment_failed`→FAILED; переходи **лише з INITIATED** (ідемпотентність повторних вебхуків);
+      резолвить свій Payment за `metadata.order_id`, Order НЕ чіпає
+- [x] Messaging-інфра (дзеркало order-service): `OutboxMessage`+repo, `OutboxRecorder`, `OutboxRelay`,
+      `OutboxRelayCommand` (`app:outbox:relay`) + `events` транспорт (JSON, `IntegrationEvent` той самий FQCN).
+      Webhook атомарно: Payment-статус + `outbox record('payment','PaymentSucceeded'|'PaymentFailed',
+      {orderId, paymentId, amount, currency})` в одному flush. Міграція `Version20260706164631` (outbox)
+- [x] Dockerfile amqp (вже був); compose: `payment-relay` (`app:outbox:relay`) на мережах `[default, monolith]`
+      (`task-25_default`, як order-relay/catalog-worker)
+- [x] ✅ Verify: phpunit **15 OK** (webhook 4: 400-підпис/SUCCEEDED+event/FAILED+event/ідемпотентний replay);
+      migrate+schema:validate **[OK]**; **реальний E2E-probe** проти монолітного брокера: outbox→relay→RabbitMQ,
+      рядок `published_at` set, повідомлення в probe-черзі з **routing key `payment.PaymentSucceeded`** + JSON-тіло
 
 ## Крок 4 — order-service: HTTP-клієнт + консюмер + прибрати Stripe (семантично один крок)
 - [ ] `PaymentClient` (HttpClient + S2S JWT `ROLE_PAYMENT_ADMIN`, дзеркало CatalogClient/CartClient; **write-strict**):

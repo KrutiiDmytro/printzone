@@ -35,7 +35,39 @@ services:
       db-payment:
         condition: service_healthy
 
+  # Transactional-outbox relay: publishes unpublished payment.* events to the
+  # monolith's RabbitMQ. Same image/volumes as payment-service; `monolith` (the
+  # monolith compose network) reaches the shared broker directly as `rabbitmq`.
+  payment-relay:
+    image: printzone/payment-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console app:outbox:relay --time-limit=3600
+    restart: unless-stopped
+    # The FrankenPHP image bakes in an HTTP healthcheck, but this container runs a
+    # CLI worker (no HTTP server) → it would always report "unhealthy". Disable it.
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/app
+      - psvc_vendor:/app/vendor
+      - psvc_var:/app/var
+      - ../../config/jwt:/jwt:ro
+    networks:
+      - default
+      - monolith
+    depends_on:
+      db-payment:
+        condition: service_healthy
+
 volumes:
   db_payment_data:
   psvc_vendor:
   psvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default
