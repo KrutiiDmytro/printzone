@@ -389,7 +389,7 @@ test:catalog-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/catalog-service:latest
-      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
 test:user-service:
@@ -404,7 +404,7 @@ test:user-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/user-service:latest
-      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
 test:order-service:
@@ -419,7 +419,7 @@ test:order-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/order-service:latest
-      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
 test:cart-service:
@@ -434,7 +434,7 @@ test:cart-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/cart-service:latest
-      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
 test:payment-service:
@@ -449,7 +449,7 @@ test:payment-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/payment-service:latest
-      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && vendor/bin/phpunit --colors=never"
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
 deploy:catalog-service:
