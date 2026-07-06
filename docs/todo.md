@@ -87,10 +87,12 @@ Stripe ─webhook─► payment-svc /stripe/webhook (public, підпис Stripe
       (order вперше підписує!) у `order-service`; прибрано `STRIPE_*`; **+`order-worker`** (consume payment_events)
 - [x] `.gitlab-ci.yml`: build/test/deploy `payment-service` (deploy needs `test:payment-service`);
       **`deploy:order-service` тепер needs `deploy:payment-service`** (order кличе живий payment на checkout)
-- [x] ⚠️ Дії користувача: CI vars `PAYMENT_DB_PASSWORD`, `APP_SECRET`, `STRIPE_SECRET_KEY`,
-      `STRIPE_WEBHOOK_SECRET`, `JWT_PASSPHRASE` (order-service тепер підписує); **перенаправити Stripe webhook
-      endpoint URL → payment-service** (новий endpoint може дати НОВИЙ `whsec_` → оновити `STRIPE_WEBHOOK_SECRET`);
-      прод після merge — CI-деплой + e2e checkout (4242)
+- [x] **nginx-проксі `/stripe/webhook` → `payment-service:80`** (`docker/nginx/default.conf`; був `order-service:80`).
+      Публічний Stripe-URL `e-commerce.it.com/stripe/webhook` **НЕ змінюється** → Stripe Dashboard і
+      `STRIPE_WEBHOOK_SECRET` чіпати НЕ треба. Деплой сам `--force-recreate nginx` (single-file mount)
+- [x] ⚠️ Дії користувача — **лише 1 нова CI var:** `PAYMENT_DB_PASSWORD` (новий пароль db-payment).
+      Решта (`APP_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `JWT_PASSPHRASE`) **вже існують** як
+      project CI vars (переюз). Stripe Dashboard — БЕЗ ЗМІН. Після merge: CI-деплой + e2e checkout (4242)
 - [x] ✅ Verify локально: `docker compose config` VALID (обидва overlay: порти прибрано, task-25_default,
       order-worker, STRIPE зник з order); `.gitlab-ci.yml` валідний; **реальний крос-сервіс E2E** (живі
       контейнери): підписаний webhook→payment-service `200` → Payment **SUCCEEDED**+`PaymentSucceeded`(published)
@@ -104,7 +106,8 @@ Payment Service виокремлено зі order-service (FrankenPHP, `db-payme
 binding `payment.*`) → Order PAID/FAILED + `OrderPaid`/`OrderCancelled` (Saga до catalog БЕЗ ЗМІН). Stripe
 повністю вирізано з order-service. order-service вперше **підписує** S2S JWT (`PaymentClient`). Refunds —
 відкладено. Комміти: `2f1cf71`(1) `1d3a59d`(2) `f34b432`(3) `91f68a9`(4) + Крок 5.
-⚠️ Прод: перенаправити Stripe webhook URL на payment-service + додати CI vars (див. Крок 5).
+⚠️ Прод (єдина ручна дія): додати CI var `PAYMENT_DB_PASSWORD`. Stripe webhook маршрутизує nginx
+(`/stripe/webhook`→payment-service) — публічний URL і `STRIPE_WEBHOOK_SECRET` НЕ змінюються.
 
 ## Ризики / підводні камені
 1. **Зміщення емісії OrderPaid/OrderCancelled** — з webhook у консюмер Payment-подій. Ризик подвоєння/втрати:
