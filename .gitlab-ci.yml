@@ -377,6 +377,16 @@ build:payment-service:
   needs: []
   rules: *rules_mr_develop
 
+build:delivery-service:
+  stage: build
+  script:
+    - docker build -f services/delivery-service/Dockerfile
+      -t printzone/delivery-service:$CI_COMMIT_SHA
+      -t printzone/delivery-service:latest
+      services/delivery-service
+  needs: []
+  rules: *rules_mr_develop
+
 test:catalog-service:
   stage: test
   needs:
@@ -449,6 +459,21 @@ test:payment-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/payment-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:delivery-service:
+  stage: test
+  needs:
+    - build:delivery-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/delivery-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/delivery-service:latest
       sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
@@ -607,10 +632,12 @@ deploy:order-service:
       echo "order-service healthy"
   # Deploy order-service FIRST (independently of the monolith), so it is live
   # and healthy before the monolith cutover drops its order tables. It also calls
-  # payment-service at checkout, so payment-service must be live first.
+  # payment-service at checkout (must be live first) and consumes shipment.* from
+  # delivery-service to advance the order lifecycle (deploy delivery-service first).
   needs:
     - test:order-service
     - deploy:payment-service
+    - deploy:delivery-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 
@@ -731,5 +758,65 @@ deploy:payment-service:
   # has a live Stripe boundary to call at checkout.
   needs:
     - test:payment-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:delivery-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    DSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast if the DB password is missing — otherwise delivery-service comes
+    # up unreachable and shipments would never be created from OrderPaid.
+    - |
+      if [ -z "$DELIVERY_DB_PASSWORD" ]; then
+        echo "ERROR: DELIVERY_DB_PASSWORD is not set. Aborting."; exit 1
+      fi
+    # delivery-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/delivery-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/delivery-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/delivery-service/" "$DEPLOY_DIR/services/delivery-service/"
+    - cd "$DEPLOY_DIR/services/delivery-service"
+    - echo "--- Starting db-delivery ---"
+    - $DSVC up -d db-delivery
+    - |
+      i=0
+      until $DSVC exec -T db-delivery pg_isready -U app -d delivery_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-delivery not ready"; $DSVC logs db-delivery --tail=20; exit 1; }
+        echo "Waiting for db-delivery ($i/30)..."; sleep 2
+      done
+    - $DSVC exec -T db-delivery psql -U app -d delivery_service -c "ALTER USER app WITH PASSWORD '${DELIVERY_DB_PASSWORD}';"
+    - echo "--- Starting service + worker + relay (pre-built image) ---"
+    - $DSVC up -d --no-build
+    - $DSVC exec -T delivery-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in dsvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $DSVC exec -T delivery-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $DSVC exec -T delivery-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Shipments are created at runtime from OrderPaid — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $DSVC exec -T delivery-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: delivery-service health failed"; $DSVC logs delivery-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "delivery-service healthy"
+  # Deploy delivery-service before order-service: order-service now consumes
+  # shipment.* to advance the order lifecycle (SHIPPED/DELIVERED).
+  needs:
+    - test:delivery-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'

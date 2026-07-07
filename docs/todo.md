@@ -101,19 +101,45 @@ NP webhook / simulate-команда ─► tracking_events append (IN_TRANSIT/D
       → **order SHIPPED**; simulate DELIVERED → append + ShipmentDelivered → **order DELIVERED**; ES-лог 2 append-only
       записи, проєкція = DELIVERED. ⚠️ PHPUnit 11 має final `status()` — хелпер назвати інакше
 
-## Крок 5 — Прод-деплой (compose.prod + CI) + E2E ⏳
-- [ ] `delivery-service/compose.prod.yaml`: db `${DELIVERY_DB_PASSWORD}`, env (APP_SECRET, DATABASE_URL,
-      MESSENGER_EVENTS_DSN, DELIVERY_PROVIDER, NOVA_POSHTA_API_KEY), `ports: !reset []`, мережа
-      `task-25_default`, restart; `delivery-relay` (публікує shipment.*) + `delivery-worker`
-      (consume delivery_events). (Delivery лише verify JWT — passphrase не треба)
-- [ ] *(якщо 4b)* order-service `compose.prod.yaml`: +`order-worker` consume `shipment_events`
-- [ ] `.gitlab-ci.yml`: build/test/deploy `delivery-service` (deploy needs test:delivery-service);
-      `deploy:order-service` needs `deploy:delivery-service` (order консюмить shipment.* у 4b)
-- [ ] ⚠️ Дії користувача — нові CI vars: **`DELIVERY_DB_PASSWORD`** (обов'язково), `NOVA_POSHTA_API_KEY`
-      (опц. — без нього працює FakeProvider). `APP_SECRET`/`JWT_PASSPHRASE` — вже є (переюз)
-- [ ] ✅ Verify локально: `docker compose config` VALID (overlay + order); `.gitlab-ci.yml` валідний;
-      **крос-сервіс E2E**: OrderPaid → delivery → Shipment+ShipmentCreated → simulate DELIVERED →
-      ShipmentDelivered → *(4b)* Order DELIVERED. Прод-деплой — на runner при merge
+## Крок 5 — Прод-деплой (compose.prod + CI) + E2E ✅
+- [x] `delivery-service/compose.prod.yaml`: db `${DELIVERY_DB_PASSWORD}`, env (APP_SECRET, DATABASE_URL,
+      MESSENGER_EVENTS_DSN, `DELIVERY_PROVIDER:-fake`, `NOVA_POSHTA_API_KEY:-`), `ports: !reset []`, мережа
+      `task-25_default`, restart; `delivery-relay` (shipment.*) + `delivery-worker` (consume delivery_events).
+      (Delivery лише verify JWT — passphrase НЕ треба)
+- [x] *(4b)* order-service `compose.prod.yaml` — **без змін**: `order-worker` успадковує `command` з base
+      compose (`messenger:consume payment_events shipment_events`), тож prod-overlay чіпати не довелось
+- [x] `.gitlab-ci.yml`: build/test/deploy `delivery-service` (deploy needs test:delivery-service, fail-fast
+      на `DELIVERY_DB_PASSWORD`, self-rsync як payment/order); **`deploy:order-service` needs
+      `deploy:delivery-service`** (order консюмить shipment.* у 4b; delivery деплоїться першим — не залежить від order)
+- [x] ⚠️ Дії користувача — нові CI vars: **`DELIVERY_DB_PASSWORD`** (обов'язково), `NOVA_POSHTA_API_KEY`
+      + `DELIVERY_PROVIDER=nova_poshta` (опц. — без них працює FakeProvider). `APP_SECRET` — вже є (переюз)
+- [x] ✅ Verify локально: `docker compose config` VALID (delivery-overlay: порти прибрано, task-25_default,
+      provider=fake, worker→`delivery_events`, relay→`app:outbox:relay`; order-overlay: worker→`payment_events
+      shipment_events`); `.gitlab-ci.yml` валідний YAML (3 delivery-джоби, order needs delivery); **повний
+      крос-сервіс E2E** (Крок 4): OrderPaid → Shipment+ShipmentCreated → order SHIPPED → simulate DELIVERED →
+      ShipmentDelivered → order DELIVERED. Прод-деплой — на runner при merge
+
+## Підсумок Фази 6 (частина 2) — Delivery Service
+Delivery Service виокремлено (FrankenPHP, `db-delivery`, :8006) як **greenfield**-домен доставки+трекінгу.
+Консюмить `OrderPaid` → створює `Shipment` (ідемпотентно per-order) через провайдер (`FakeProvider` default /
+`NovaPoshtaClient` за env) → веде **Event-Sourced** append-only `tracking_events` → публікує `ShipmentCreated`/
+`TrackingUpdated`/`ShipmentDelivered`. Адресу доставки прокинуто наскрізь (checkout-форма → моноліт →
+order-service `Order.shipping_address` → payload `OrderPaid`), заодно полагоджено мертве поле форми. NP-трекінг
+через public webhook + команду-симулятор. order lifecycle завершено: order-service консюмить `shipment.*`
+(PAID→SHIPPED→DELIVERED). Прод: compose.prod + CI (build/test/deploy). Коміти: `b824988`(1a) `e458ba7`(1b)
+`ac97e35`(2) `64f4bf5`(3) `23fad03`(4) + Крок 5.
+⚠️ Прод (ручні дії): CI var `DELIVERY_DB_PASSWORD` (обов'язк.); `NOVA_POSHTA_API_KEY`+`DELIVERY_PROVIDER=nova_poshta`
+опц. (без них FakeProvider). Real NP-webhook URL у NP-кабінеті — лише якщо перемкнути на реальний провайдер.
+
+## Ризики (підсумок реалізації)
+1. **Адреса — розірваний канал**: полагоджено (Крок 1); `shipping_address` nullable → старі PAID-замовлення цілі.
+2. **`order.OrderPaid` два консюмери** (catalog-worker `order.*` + delivery-worker `order.OrderPaid`): різні черги,
+   topic-фанаут, конфлікту нема (доведено E2E).
+3. **Event Sourcing**: `tracking_events` тільки append; `Shipment.status` — проєкція. `TrackingRecorder` — єдиний
+   шлях запису (webhook+команда), ідемпотентність за (shipment, occurredAt, status).
+4. **Order↔Delivery двонаправлені події**: не цикл — обидва читають з черг, буферизуються; deploy delivery→order.
+5. **NovaPoshta**: недетермінована → FakeProvider default; real лише за env-ключем. `/health/ready` пінгує провайдер.
+6. **PHPUnit 11**: `status()` — final метод; хелпери назвати інакше (напр. `orderStatus`).
 
 ## Ризики / підводні камені
 1. **Адреса — розірваний канал** (Крок 1): найризиковіший, бо чіпає моноліт+order-service+міграцію Order.

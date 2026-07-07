@@ -1133,9 +1133,18 @@ public function ready(Connection $db): JsonResponse
 
 Ціль: Фінансовий та логістичний домени ізольовані.
 
-- [ ] Обробники Stripe/LiqPay webhook у Payment Service
-- [ ] Інтеграція Нової Пошти у Delivery Service
-- [ ] Event Sourcing для `tracking_events` (append-only)
+- [x] **Payment Service** виокремлено (`db-payment`, :8005): Stripe checkout-сесія + webhook, події
+      `PaymentSucceeded`/`PaymentFailed` → order-service керує статусом Order через події.
+- [x] **Delivery Service** виокремлено (`db-delivery`, :8006): консюмить `OrderPaid` → `Shipment`
+      (ідемпотентно per-order) через провайдер (FakeProvider default / NovaPoshtaClient за env),
+      публікує `ShipmentCreated`/`TrackingUpdated`/`ShipmentDelivered`. Адресу доставки прокинуто
+      наскрізь (checkout → `Order.shipping_address` → `OrderPaid`).
+- [x] Інтеграція Нової Пошти у Delivery Service — адаптер `DeliveryProviderInterface` + `NovaPoshtaClient`
+      (v2.0 API, за `NOVA_POSHTA_API_KEY`); public tracking-webhook + команда-симулятор.
+- [x] Event Sourcing для `tracking_events` (append-only; `Shipment.status` — проєкція).
+- [x] order lifecycle: order-service консюмить `shipment.*` → PAID→SHIPPED→DELIVERED.
+- [ ] LiqPay як другий платіжний провайдер — поза MVP (лишається Stripe).
+- [ ] Двосторонні tracking-провайдери (Укрпошта/DHL) + Polling Scheduler — поза MVP (Нова Пошта webhook).
 
 ### Фаза 7 — Виокремлення Export + Notification + Storage Services
 
