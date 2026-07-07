@@ -46,6 +46,17 @@ class Order
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $stripeSessionId = null;
 
+    /**
+     * Delivery snapshot captured at checkout (firstName, lastName, address,
+     * city, country, postcode, phone). Nullable so pre-existing orders stay
+     * valid; carried into the OrderPaid event for delivery-service.
+     *
+     * @var array<string, string>|null
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true)]
+    #[Groups(['order:read'])]
+    private ?array $shippingAddress = null;
+
     #[ORM\OneToMany(mappedBy: 'orderRef', targetEntity: OrderItem::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[Groups(['order:read'])]
     private Collection $items;
@@ -178,6 +189,24 @@ class Order
     public function setStripeSessionId(?string $stripeSessionId): static
     {
         $this->stripeSessionId = $stripeSessionId;
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, string>|null
+     */
+    public function getShippingAddress(): ?array
+    {
+        return $this->shippingAddress;
+    }
+
+    /**
+     * @param array<string, string>|null $shippingAddress
+     */
+    public function setShippingAddress(?array $shippingAddress): static
+    {
+        $this->shippingAddress = $shippingAddress;
 
         return $this;
     }

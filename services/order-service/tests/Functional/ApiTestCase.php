@@ -40,6 +40,10 @@ abstract class ApiTestCase extends WebTestCase
         $order->setUserEmail('buyer@example.com');
         $order->setStatus($status);
         $order->setTotalAmount(1999);
+        $order->setShippingAddress([
+            'firstName' => 'Ada', 'lastName' => 'Lovelace', 'address' => '1 Analytical St',
+            'city' => 'Kyiv', 'country' => 'UA', 'postcode' => '01001', 'phone' => '+380001112233',
+        ]);
 
         $item = new OrderItem();
         $item->setOrderRef($order);

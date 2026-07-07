@@ -40,11 +40,15 @@ class CheckoutController
         $userId = (string) ($data['userId'] ?? '');
         $userEmail = (string) ($data['userEmail'] ?? '');
         $items = $data['items'] ?? [];
+        $shippingAddress = $data['shippingAddress'] ?? [];
         $successUrl = (string) ($data['successUrl'] ?? '');
         $cancelUrl = (string) ($data['cancelUrl'] ?? '');
 
         if (!Uuid::isValid($userId) || '' === $userEmail || !is_array($items) || [] === $items) {
             return new JsonResponse(['error' => 'Missing or invalid fields: userId, userEmail, items'], 400);
+        }
+        if (!is_array($shippingAddress) || [] === $shippingAddress) {
+            return new JsonResponse(['error' => 'Missing or invalid field: shippingAddress'], 400);
         }
         if ('' === $successUrl || '' === $cancelUrl) {
             return new JsonResponse(['error' => 'Missing successUrl/cancelUrl'], 400);
@@ -54,6 +58,7 @@ class CheckoutController
         $order->setUserId(Uuid::fromString($userId));
         $order->setUserEmail($userEmail);
         $order->setStatus('PENDING');
+        $order->setShippingAddress(array_map(strval(...), $shippingAddress));
 
         $total = 0;
         $lineItems = [];

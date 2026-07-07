@@ -36,6 +36,10 @@ class PaymentEventHandlerTest extends ApiTestCase
 
         self::assertSame('PAID', $this->em->getRepository(Order::class)->find($order->getId())->getStatus());
         self::assertContains('OrderPaid', $this->outboxEventNames());
+
+        // OrderPaid carries the delivery snapshot so delivery-service can ship it.
+        $paid = $this->em->getRepository(OutboxMessage::class)->findOneBy(['eventName' => 'OrderPaid']);
+        self::assertSame('Kyiv', $paid->getPayload()['shippingAddress']['city'] ?? null);
     }
 
     public function testPaymentFailedMarksOrderFailedAndEmitsOrderCancelled(): void
