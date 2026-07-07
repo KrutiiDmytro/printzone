@@ -22,6 +22,11 @@ class ShipmentRepository extends ServiceEntityRepository
         return $this->findOneBy(['orderId' => $orderId]);
     }
 
+    public function findOneByTrackingNumber(string $trackingNumber): ?Shipment
+    {
+        return $this->findOneBy(['trackingNumber' => $trackingNumber]);
+    }
+
     public function save(Shipment $shipment, bool $flush = true): void
     {
         $this->getEntityManager()->persist($shipment);

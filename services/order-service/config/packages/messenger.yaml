@@ -38,6 +38,25 @@ framework:
                     max_retries: 3
                     multiplier: 2
 
+            # Inbound: delivery-service events (shipment.*) from the same `events`
+            # topic exchange. Receive-only — own queue so the order-worker advances
+            # the order lifecycle (ShipmentCreated→SHIPPED, ShipmentDelivered→
+            # DELIVERED) without touching the order.* we publish.
+            shipment_events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        order_shipment_events:
+                            binding_keys: ['shipment.*']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
         default_bus: messenger.bus.default
         buses:
             messenger.bus.default: []
@@ -51,3 +70,4 @@ when@test:
             transports:
                 events: 'in-memory://'
                 payment_events: 'in-memory://'
+                shipment_events: 'in-memory://'

@@ -2,12 +2,14 @@
 
 namespace App\Tests\Functional;
 
+use App\Entity\Shipment;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\Security\Core\User\InMemoryUser;
+use Symfony\Component\Uid\Uuid;
 
 abstract class ApiTestCase extends WebTestCase
 {
@@ -27,6 +29,19 @@ abstract class ApiTestCase extends WebTestCase
             $schemaTool->dropSchema($metadata);
             $schemaTool->createSchema($metadata);
         }
+    }
+
+    protected function seedShipment(string $trackingNumber = 'FAKE_SEED_1', ?Uuid $orderId = null): Shipment
+    {
+        $shipment = new Shipment($orderId ?? Uuid::v4(), 'fake', [
+            'firstName' => 'Ada', 'lastName' => 'Lovelace', 'city' => 'Kyiv',
+        ]);
+        $shipment->setTrackingNumber($trackingNumber);
+
+        $this->em->persist($shipment);
+        $this->em->flush();
+
+        return $shipment;
     }
 
     /** A non-privileged service token (read-level). */

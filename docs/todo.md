@@ -82,17 +82,24 @@ NP webhook / simulate-команда ─► tracking_events append (IN_TRANSIT/D
       → delivery-worker → Shipment **PENDING** (fake, tracking `FAKE…`) + TrackingEvent "registered" +
       **ShipmentCreated PUBLISHED** (delivery-relay)
 
-## Крок 4 — Трекінг (Event Sourcing) + webhook + API читання ⏳
-- [ ] `ShipmentController`: `GET /api/shipments/{id}`, `GET /api/shipments/order/{orderId}`,
-      `GET /api/shipments/{id}/tracking` (лог подій за occurredAt DESC)
-- [ ] `NovaPoshtaWebhookController` `POST /api/webhooks/novaposhta`: мапить статус НП → append `TrackingEvent`
-      (**ніколи не UPDATE** — Event Sourcing) + оновлює `Shipment.status` (проєкція) + outbox
-      `TrackingUpdated`/`ShipmentDelivered` (при DELIVERED). Ідемпотентність за (shipment, occurredAt, status)
-- [ ] Команда `app:delivery:simulate-tracking <shipmentId> <status>` — той самий append-шлях (демо ES без НП)
-- [ ] *(4b, опц.)* order-service: consume-транспорт `shipment_events` (binding `shipment.*`) +
-      `ShipmentEventHandler`: ShipmentCreated→Order SHIPPED, ShipmentDelivered→DELIVERED (лише вперед по статусу)
-- [ ] ✅ Verify: phpunit delivery-service (webhook append + проєкція + DELIVERED-подія; tracking-API;
-      ідемпотентний replay); *(4b)* order-service статус рухається PAID→SHIPPED→DELIVERED; schema:validate [OK]
+## Крок 4 — Трекінг (Event Sourcing) + webhook + API читання ✅
+- [x] `ShipmentController`: `GET /api/shipments/{id}`, `/order/{orderId}`, `/{id}/tracking` (лог за
+      occurredAt DESC); JWT-protected (uuid-requirements щоб /order/{orderId} не колізив з /{id})
+- [x] `TrackingRecorder` (спільний append-шлях: existsFor-ідемпотентність → append TrackingEvent
+      **ніколи не UPDATE** → оновити `Shipment.status` проєкцію → outbox `TrackingUpdated` /
+      `ShipmentDelivered` при DELIVERED, один flush)
+- [x] `NovaPoshtaWebhookController` `POST /api/webhooks/novaposhta` (public firewall): резолвить shipment
+      за trackingNumber (404), приймає canonical `status` або НП `statusCode` (`NovaPoshtaStatusMapper`),
+      400 на брак status/тіла; ідемпотентність за (shipment, occurredAt, status)
+- [x] Команда `app:delivery:simulate-tracking <shipmentId> <status>` — той самий `TrackingRecorder` (демо ES без НП)
+- [x] *(4b)* order-service: consume-транспорт `shipment_events` (черга `order_shipment_events`, binding
+      `shipment.*`) + `ShipmentEventHandler`: ShipmentCreated→SHIPPED (з PAID), ShipmentDelivered→DELIVERED
+      (з PAID/SHIPPED); forward-only + ідемпотентно. order-worker consume `payment_events shipment_events`
+- [x] ✅ Verify: delivery-service **21 OK** (webhook 6: canonical/statusCode-map/DELIVERED/replay/404/400;
+      shipment-API 5: 401/200/404/by-order/tracking); order-service **30 OK** (+5 ShipmentEventHandler);
+      schema:validate [OK]. **Повний крос-сервіс E2E** (живі брокер+воркери): OrderPaid → Shipment+ShipmentCreated
+      → **order SHIPPED**; simulate DELIVERED → append + ShipmentDelivered → **order DELIVERED**; ES-лог 2 append-only
+      записи, проєкція = DELIVERED. ⚠️ PHPUnit 11 має final `status()` — хелпер назвати інакше
 
 ## Крок 5 — Прод-деплой (compose.prod + CI) + E2E ⏳
 - [ ] `delivery-service/compose.prod.yaml`: db `${DELIVERY_DB_PASSWORD}`, env (APP_SECRET, DATABASE_URL,

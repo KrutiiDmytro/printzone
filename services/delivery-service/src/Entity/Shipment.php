@@ -27,6 +27,15 @@ class Shipment
     public const STATUS_DELIVERED = 'DELIVERED';
     public const STATUS_FAILED = 'FAILED';
 
+    public const STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_PICKED_UP,
+        self::STATUS_IN_TRANSIT,
+        self::STATUS_OUT_FOR_DELIVERY,
+        self::STATUS_DELIVERED,
+        self::STATUS_FAILED,
+    ];
+
     #[ORM\Id]
     #[ORM\Column(type: 'uuid', unique: true)]
     #[Groups(['shipment:read'])]
