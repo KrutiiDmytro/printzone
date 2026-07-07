@@ -50,15 +50,28 @@ class CheckoutControllerTest extends WebTestCase
     {
         $stripeUrl = 'https://checkout.stripe.com/c/pay/cs_test_123';
         $mock = $this->createMock(OrderClient::class);
-        $mock->method('createCheckout')->willReturn(['orderId' => (string) Uuid::v4(), 'url' => $stripeUrl]);
+        // The delivery snapshot from the form must reach order-service.
+        $mock->expects($this->once())->method('createCheckout')
+            ->with($this->callback(static fn (array $p): bool => 'Kyiv' === ($p['shippingAddress']['city'] ?? null)))
+            ->willReturn(['orderId' => (string) Uuid::v4(), 'url' => $stripeUrl]);
 
         [$client] = $this->authWithCart([$this->line('Stripe Test Product', 2000)], $mock);
 
-        $client->request('POST', '/checkout/place-order');
+        $client->request('POST', '/checkout/place-order', $this->shippingParams());
 
         // Order creation + Stripe session now live in order-service; the monolith
         // just delegates and redirects the user to the returned payment URL.
         $this->assertResponseRedirects($stripeUrl);
+    }
+
+    public function testPlaceOrderRequiresShippingDetails(): void
+    {
+        [$client] = $this->authWithCart([$this->line('No Address Product', 2000)]);
+
+        // Missing delivery fields → bounce back to the checkout form, no order.
+        $client->request('POST', '/checkout/place-order');
+
+        $this->assertResponseRedirects('/checkout');
     }
 
     public function testPlaceOrderHandlesOrderServiceFailure(): void
@@ -68,10 +81,21 @@ class CheckoutControllerTest extends WebTestCase
 
         [$client] = $this->authWithCart([$this->line('Stripe Fail Product', 1500)], $mock);
 
-        $client->request('POST', '/checkout/place-order');
+        $client->request('POST', '/checkout/place-order', $this->shippingParams());
 
         // Failure is surfaced as a flash and the user is sent back to checkout.
         $this->assertResponseRedirects('/checkout');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function shippingParams(): array
+    {
+        return [
+            'firstName' => 'Ada', 'lastName' => 'Lovelace', 'address' => '1 Analytical St',
+            'city' => 'Kyiv', 'country' => 'UA', 'postcode' => '01001', 'phone' => '+380001112233',
+        ];
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Order\Client\OrderClient;
 use App\Service\CartService;
 use App\User\Domain\Entity\User;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
@@ -44,7 +45,7 @@ class CheckoutController extends AbstractController
 
     #[Route('/checkout/place-order', name: 'app_checkout_place_order', methods: ['POST'])]
     #[IsGranted('ROLE_USER')]
-    public function pay(): Response
+    public function pay(Request $request): Response
     {
         $cart = $this->cartService->getCart();
 
@@ -52,6 +53,13 @@ class CheckoutController extends AbstractController
             $this->addFlash('error', 'Your cart is empty');
 
             return $this->redirectToRoute('app_cart');
+        }
+
+        $shippingAddress = $this->shippingAddress($request);
+        if (null === $shippingAddress) {
+            $this->addFlash('error', 'Please fill in all required delivery details.');
+
+            return $this->redirectToRoute('app_checkout');
         }
 
         $user = $this->getUser();
@@ -78,6 +86,7 @@ class CheckoutController extends AbstractController
                 'userId' => (string) $user->getId(),
                 'userEmail' => (string) $user->getEmail(),
                 'items' => $items,
+                'shippingAddress' => $shippingAddress,
                 'successUrl' => $successUrl,
                 'cancelUrl' => $cancelUrl,
             ]);
@@ -88,6 +97,30 @@ class CheckoutController extends AbstractController
         }
 
         return $this->redirect($result['url']);
+    }
+
+    /**
+     * Reads the delivery details from the checkout form. Returns null when a
+     * required field is missing so the caller can bounce back to the form.
+     * This snapshot is forwarded to order-service and, on payment, carried in
+     * the OrderPaid event so delivery-service can create the shipment.
+     *
+     * @return array{firstName: string, lastName: string, address: string, city: string, country: string, postcode: string, phone: string}|null
+     */
+    private function shippingAddress(Request $request): ?array
+    {
+        $fields = ['firstName', 'lastName', 'address', 'city', 'country', 'postcode', 'phone'];
+
+        $address = [];
+        foreach ($fields as $field) {
+            $value = trim((string) $request->request->get($field, ''));
+            if ('' === $value) {
+                return null;
+            }
+            $address[$field] = $value;
+        }
+
+        return $address;
     }
 
     #[Route('/checkout/success', name: 'app_checkout_success')]
