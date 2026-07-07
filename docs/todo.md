@@ -47,12 +47,15 @@ NP webhook / simulate-команда ─► tracking_events append (IN_TRANSIT/D
       order-service **25 OK** (+1 requires-shippingAddress; OrderPaid payload несе city); phpstan [OK];
       `migrate`+`schema:validate [OK]`
 
-## Крок 2 — Скелет delivery-service + інфра ⏳
-- [ ] `services/delivery-service/` за патерном payment-service (FrankenPHP; composer: doctrine, messenger,
-      amqp, lexik, symfony/http-client; БЕЗ stripe); `compose.yaml`: `db-delivery` (postgres16,
-      `delivery_service`) + `delivery-service` (:8006); монтаж `../../config/jwt:ro`; named-volumes
-      `dsvc_vendor`/`dsvc_var`; `HealthController` (/health/live, /health/ready з пінгом БД)
-- [ ] ✅ Verify: контейнер up; health/live 200; /ready db ok; 404 на невідомому роуті
+## Крок 2 — Скелет delivery-service + інфра ✅
+- [x] `services/delivery-service/` за патерном payment-service (FrankenPHP; composer: doctrine, migrations,
+      orm, messenger, amqp, lexik, symfony/http-client, security, serializer; БЕЗ stripe); `compose.yaml`:
+      `db-delivery` (postgres16, `delivery_service`) + `delivery-service` (:8006); монтаж `../../config/jwt:ro`;
+      named-volumes `dsvc_vendor`/`dsvc_var`; `HealthController` (/health/live, /health/ready з пінгом БД).
+      Крок-2 bundles.php вмикає лише Framework/Doctrine/Migrations (Security/Lexik/Messenger — Крок 3).
+      phpunit без Unit-suite (додам у Кроці 3 з тестом entity — уникаю CI-фейлу порожньої директорії)
+- [x] ✅ Verify: образ зібрано, `composer install` (89 пакетів); контейнер up; **health/live 200**;
+      **/ready db ok** (25ms); **404** на невідомому роуті; phpunit **3 OK** (live/ready/404)
 
 ## Крок 3 — Домен + БД + провайдер + консюмер OrderPaid ⏳
 - [ ] Entity `Shipment` (id uuid, orderId uuid **UNIQUE** → ідемпотентність per-order, provider,

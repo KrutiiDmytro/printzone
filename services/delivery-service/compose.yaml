@@ -1,0 +1,47 @@
+services:
+  db-delivery:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: delivery_service
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: changeme
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "delivery_service", "-U", "app"]
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - db_delivery_data:/var/lib/postgresql/data:rw
+
+  delivery-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/delivery-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8006:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - dsvc_vendor:/app/vendor
+      - dsvc_var:/app/var
+      # Shared RS256 keypair with the monolith → validates service-to-service tokens.
+      - ../../config/jwt:/jwt:ro
+    depends_on:
+      db-delivery:
+        condition: service_healthy
+
+volumes:
+  db_delivery_data:
+  dsvc_vendor:
+  dsvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default
