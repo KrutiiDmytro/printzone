@@ -57,26 +57,30 @@ NP webhook / simulate-команда ─► tracking_events append (IN_TRANSIT/D
 - [x] ✅ Verify: образ зібрано, `composer install` (89 пакетів); контейнер up; **health/live 200**;
       **/ready db ok** (25ms); **404** на невідомому роуті; phpunit **3 OK** (live/ready/404)
 
-## Крок 3 — Домен + БД + провайдер + консюмер OrderPaid ⏳
-- [ ] Entity `Shipment` (id uuid, orderId uuid **UNIQUE** → ідемпотентність per-order, provider,
-      trackingNumber, status ENUM PENDING/PICKED_UP/IN_TRANSIT/OUT_FOR_DELIVERY/DELIVERED/FAILED,
-      address JSON, estimatedAt, createdAt) + `TrackingEvent` (append-only: id, shipment_id, status,
-      location, description, occurredAt, recordedAt; index (shipment_id, occurredAt DESC)); репозиторії;
-      міграція (`diff`)
-- [ ] `DeliveryProviderInterface` (createShipment(address, items): {trackingNumber, provider, estimatedAt}) +
-      `FakeProvider` (детермінований tracking#, default) + `NovaPoshtaClient` (HttpClient, за
-      `NOVA_POSHTA_API_KEY`); вибір через env `DELIVERY_PROVIDER` (fake|nova_poshta); wiring у services.yaml
-- [ ] Messaging-інфра (дзеркало payment-service): `OutboxMessage`+repo, `OutboxRecorder`, `OutboxRelay`,
-      `OutboxRelayCommand`; `events` транспорт JSON (спільний FQCN `IntegrationEvent`); **consume**-транспорт
-      `delivery_events` (черга `delivery_shipment_events`, binding `order.OrderPaid`)
-- [ ] `OrderPaidHandler` (#[AsMessageHandler]): OrderPaid → upsert Shipment(PENDING, ідемпотентно за orderId)
-      → provider.createShipment → перший `TrackingEvent` + outbox
-      `ShipmentCreated {shipmentId,orderId,trackingNumber,provider}` (один flush)
-- [ ] `security.yaml`: `^/api` verify JWT (спільний keypair); write-роути → `ROLE_DELIVERY_ADMIN`;
-      `^/api/webhooks/novaposhta` — security:false (публічний)
-- [ ] ✅ Verify: migrate+schema:validate [OK]; phpunit (health + Shipment-домен + OrderPaidHandler:
-      create/ідемпотентний replay/unknown); **реальний probe**: OrderPaid у брокер → delivery-worker →
-      Shipment рядок + ShipmentCreated published
+## Крок 3 — Домен + БД + провайдер + консюмер OrderPaid ✅
+- [x] Entity `Shipment` (id uuid, orderId uuid **UNIQUE**, provider, trackingNumber, status
+      PENDING/PICKED_UP/IN_TRANSIT/OUT_FOR_DELIVERY/DELIVERED/FAILED, address JSON, estimatedAt, createdAt) +
+      `TrackingEvent` (append-only: shipment_id, status, location, description, occurredAt, recordedAt;
+      index (shipment_id, occurredAt)) + `OutboxMessage`; репозиторії (findOneByOrderId, findByShipment,
+      existsFor-ідемпотентність, findUnpublished); міграція `Version20260707175017` (diff, причесано)
+- [x] `DeliveryProviderInterface` (createShipment(orderId, address): `ShipmentDraft`; isAvailable) +
+      `FakeProvider` (детермінований tracking# з sha256(orderId), default) + `NovaPoshtaClient` (HttpClient,
+      v2.0 InternetDocument, за `NOVA_POSHTA_API_KEY`) + `DeliveryProviderFactory`; вибір через env
+      `DELIVERY_PROVIDER` у services.yaml. `/health/ready` пінгує провайдер
+- [x] Messaging-інфра (дзеркало payment-service): outbox/recorder/relay/command; `events` транспорт JSON
+      (спільний FQCN `IntegrationEvent`); **consume**-транспорт `delivery_events` (черга
+      `delivery_shipment_events`, binding **`order.OrderPaid`** — не весь order.*). compose: `delivery-worker`
+      + `delivery-relay` на `[default, monolith]`
+- [x] `OrderPaidHandler` (#[AsMessageHandler]): OrderPaid → Shipment(PENDING, ідемпотентно за orderId)
+      → provider.createShipment → перший `TrackingEvent` (creation) + outbox `ShipmentCreated` (один flush)
+- [x] bundles Security/Lexik/Messenger; `security.yaml`: `^/api` verify JWT (спільний keypair);
+      write `^/api/shipments` → `ROLE_DELIVERY_ADMIN`; `^/api/webhooks/novaposhta` — security:false;
+      jwt-test keypair скопійовано
+- [x] ✅ Verify: migrate+schema:validate **[OK]**; phpunit **10 OK** (health 3 + unit 3 + OrderPaidHandler 4:
+      create/ідемпотентний replay/other-event-ignored/invalid-orderId); ⚠️ `cache:clear --env=test` після нових
+      сервісів. **Реальний крос-сервіс probe**: order-service outbox `order.OrderPaid` → order-relay → RabbitMQ
+      → delivery-worker → Shipment **PENDING** (fake, tracking `FAKE…`) + TrackingEvent "registered" +
+      **ShipmentCreated PUBLISHED** (delivery-relay)
 
 ## Крок 4 — Трекінг (Event Sourcing) + webhook + API читання ⏳
 - [ ] `ShipmentController`: `GET /api/shipments/{id}`, `GET /api/shipments/order/{orderId}`,

@@ -35,6 +35,53 @@ services:
       db-delivery:
         condition: service_healthy
 
+  # Consumes order.OrderPaid from the monolith's RabbitMQ (own queue, bound to
+  # order.OrderPaid) → creates shipments. Joins the monolith network to reach the
+  # shared broker directly as `rabbitmq`.
+  delivery-worker:
+    image: printzone/delivery-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console messenger:consume delivery_events --time-limit=3600
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/app
+      - dsvc_vendor:/app/vendor
+      - dsvc_var:/app/var
+      - ../../config/jwt:/jwt:ro
+    networks:
+      - default
+      - monolith
+    depends_on:
+      db-delivery:
+        condition: service_healthy
+
+  # Transactional-outbox relay: publishes unpublished shipment.* events to the
+  # monolith's RabbitMQ. Same image/volumes as delivery-service.
+  delivery-relay:
+    image: printzone/delivery-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console app:outbox:relay --time-limit=3600
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/app
+      - dsvc_vendor:/app/vendor
+      - dsvc_var:/app/var
+      - ../../config/jwt:/jwt:ro
+    networks:
+      - default
+      - monolith
+    depends_on:
+      db-delivery:
+        condition: service_healthy
+
 volumes:
   db_delivery_data:
   dsvc_vendor:

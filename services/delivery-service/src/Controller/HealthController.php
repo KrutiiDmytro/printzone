@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Delivery\DeliveryProviderInterface;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
@@ -15,7 +16,7 @@ class HealthController
     }
 
     #[Route('/health/ready', name: 'health_ready', methods: ['GET'])]
-    public function ready(Connection $db): JsonResponse
+    public function ready(Connection $db, DeliveryProviderInterface $provider): JsonResponse
     {
         try {
             $start = microtime(true);
@@ -30,6 +31,8 @@ class HealthController
                 'checks' => ['database' => ['status' => 'error', 'detail' => $e->getMessage()]],
             ], 503);
         }
+
+        $checks['provider'] = ['status' => $provider->isAvailable() ? 'ok' : 'error'];
 
         return new JsonResponse(['status' => 'ok', 'checks' => $checks]);
     }
