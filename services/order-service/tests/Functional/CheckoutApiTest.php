@@ -17,6 +17,10 @@ class CheckoutApiTest extends ApiTestCase
             'items' => [
                 ['productId' => (string) \Symfony\Component\Uid\Uuid::v4(), 'name' => 'Ink', 'price' => 1999, 'quantity' => 2],
             ],
+            'shippingAddress' => [
+                'firstName' => 'Ada', 'lastName' => 'Lovelace', 'address' => '1 Analytical St',
+                'city' => 'Kyiv', 'country' => 'UA', 'postcode' => '01001', 'phone' => '+380001112233',
+            ],
         ];
     }
 
@@ -53,6 +57,16 @@ class CheckoutApiTest extends ApiTestCase
         self::assertResponseStatusCodeSame(400);
     }
 
+    public function testCheckoutRequiresShippingAddress(): void
+    {
+        $body = $this->validBody();
+        unset($body['shippingAddress']);
+
+        $this->send('POST', '/api/checkout', $body, $this->serviceToken());
+
+        self::assertResponseStatusCodeSame(400);
+    }
+
     public function testCheckoutCreatesPendingOrderAndReturnsUrl(): void
     {
         $this->stubPayment();
@@ -68,6 +82,7 @@ class CheckoutApiTest extends ApiTestCase
         self::assertSame('PENDING', $order->getStatus());
         self::assertSame('cs_test_123', $order->getStripeSessionId());
         self::assertSame(3998, $order->getTotalAmount());
+        self::assertSame('Kyiv', $order->getShippingAddress()['city'] ?? null);
 
         $outbox = $this->em->getRepository(\App\Entity\OutboxMessage::class)->findAll();
         self::assertCount(1, $outbox);

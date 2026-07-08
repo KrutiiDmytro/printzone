@@ -28,7 +28,7 @@ class OrderClient
     /**
      * Creates a PENDING order + Stripe Checkout session.
      *
-     * @param array{userId: string, userEmail: string, items: list<array{productId: string, name: string, price: int, quantity: int}>, successUrl: string, cancelUrl: string} $payload
+     * @param array{userId: string, userEmail: string, items: list<array{productId: string, name: string, price: int, quantity: int}>, shippingAddress: array<string, string>, successUrl: string, cancelUrl: string} $payload
      *
      * @return array{orderId: string, url: string}
      */

@@ -1,0 +1,59 @@
+# Production overlay for delivery-service. Deployed in-place under the monolith
+# tree (/var/www/app/services/delivery-service), so ../../config/jwt resolves to
+# the monolith's shared keypair. Reached over the shared task-25_default network
+# as `delivery-service` (no public port in prod). Consumes order.OrderPaid and
+# emits shipment.* events; Nova Poshta posts tracking webhooks here.
+services:
+  db-delivery:
+    environment:
+      POSTGRES_PASSWORD: ${DELIVERY_DB_PASSWORD}
+    restart: unless-stopped
+
+  delivery-service:
+    image: printzone/delivery-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${DELIVERY_DB_PASSWORD}@db-delivery:5432/delivery_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # fake by default; set DELIVERY_PROVIDER=nova_poshta + NOVA_POSHTA_API_KEY
+      # (CI vars) to use the real carrier. delivery-service only VERIFIES JWTs
+      # (never signs) → no JWT_PASSPHRASE needed.
+      DELIVERY_PROVIDER: ${DELIVERY_PROVIDER:-fake}
+      NOVA_POSHTA_API_KEY: ${NOVA_POSHTA_API_KEY:-}
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      - default
+      - monolith
+
+  # Creates shipments from order.OrderPaid → needs the active provider.
+  delivery-worker:
+    image: printzone/delivery-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${DELIVERY_DB_PASSWORD}@db-delivery:5432/delivery_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      DELIVERY_PROVIDER: ${DELIVERY_PROVIDER:-fake}
+      NOVA_POSHTA_API_KEY: ${NOVA_POSHTA_API_KEY:-}
+    restart: unless-stopped
+
+  # Publishes shipment.* events (ShipmentCreated/TrackingUpdated/ShipmentDelivered)
+  # to the monolith's RabbitMQ; order-service consumes them. No provider/JWT.
+  delivery-relay:
+    image: printzone/delivery-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${DELIVERY_DB_PASSWORD}@db-delivery:5432/delivery_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+    restart: unless-stopped
+
+networks:
+  monolith:
+    external: true
+    name: task-25_default

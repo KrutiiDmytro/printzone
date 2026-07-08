@@ -1,3 +1,163 @@
+# Фаза 6 (частина 2) — Виокремлення Delivery Service (Нова Пошта) — ПЛАН, очікує апрув
+
+> **Мета:** новий мікросервіс `delivery-service` (FrankenPHP, `db-delivery`, :8006) — домен доставки
+> та відстеження. Консюмить `OrderPaid` → створює відправлення через провайдера (Нова Пошта) → веде
+> **Event-Sourced** лог `tracking_events` (append-only) → публікує `ShipmentCreated`/`TrackingUpdated`/
+> `ShipmentDelivered`. Це **greenfield-фіча**, а не Strangler-виніс: домену доставки в моноліті НЕМАЄ.
+> Гілка: `feat/phase6-delivery-service`.
+>
+> **Зафіксовані рішення (2026-07-07):**
+> 1. **Адреса — повне прокидання.** Checkout-форма вже збирає `address`+`city` (required), але
+>    `CheckoutController::pay()` їх ВИКИДАЄ (не читає `$request`) — прихований баг. Прокидаємо адресу
+>    наскрізь: форма → моноліт-контролер → `OrderClient` → order-service `Order` (нове поле JSONB) →
+>    payload `OrderPaid` → delivery-service. Так Delivery отримує реальну адресу й баг лагодиться.
+> 2. **Нова Пошта — адаптер + Fake.** `DeliveryProviderInterface` + детермінований `FakeProvider`
+>    (default: генерує tracking#, симулює tracking-події) + `NovaPoshtaClient` (реальний, за env-ключем
+>    `NOVA_POSHTA_API_KEY`). Тести/CI детерміновані; real-provider — скелет точки інтеграції.
+> 3. **Трекінг-апдейти:** webhook-ендпоінт `/api/webhooks/novaposhta` + консольна команда-симулятор
+>    (`app:delivery:simulate-tracking`) для демонстрації Event Sourcing. Polling-scheduler — відкладено.
+> 4. **Order lifecycle:** order-service консюмить `shipment.*` → PAID→SHIPPED (ShipmentCreated) →
+>    DELIVERED (ShipmentDelivered). Завершує ланцюг статусів (зараз застигає на PAID). *(Крок 4b)*
+
+## Цільовий потік
+```
+checkout-форма (address, city, recipient, phone) ─POST─► моноліт CheckoutController::pay
+   читає $request → OrderClient->createCheckout({..., shippingAddress:{...}})
+      └─HTTP─► order-service /api/checkout: Order(+shippingAddress JSONB), OrderCreated, Stripe-сесія
+... (оплата як зараз) ... payment.PaymentSucceeded ─► order-service PaymentEventHandler
+   Order PAID + outbox OrderPaid {orderId,userId,userEmail,totalAmount,paidAt, shippingAddress}  ◄── НОВЕ поле
+      └─relay→RabbitMQ (order.OrderPaid)─► delivery-service консюмер (queue delivery_events, bind order.OrderPaid)
+            OrderPaid → shipment(PENDING) → provider.createShipment(address) → tracking# → перший TrackingEvent
+            outbox ShipmentCreated {shipmentId,orderId,trackingNumber,provider}
+NP webhook / simulate-команда ─► tracking_events append (IN_TRANSIT/DELIVERED) → outbox TrackingUpdated/ShipmentDelivered
+      └─(Крок 4b) order-service консюмить shipment.* → Order SHIPPED / DELIVERED
+```
+
+## Крок 1 — Прокидання адреси (моноліт + order-service) ✅
+> Пре-реквізит: без адреси Delivery нема з чого створювати відправлення. Атомарний зріз каналу.
+- [x] ⚠️ **Знахідка:** checkout-форма ВЖЕ має `firstName/lastName/address/city/country/postcode/phone`
+      (усі required) — шаблон чіпати НЕ треба, лише читати. Обсяг менший, ніж планувалося.
+- [x] Моноліт `CheckoutController::pay(Request $request)`: приватний `shippingAddress()` читає 7 полів,
+      валідує (будь-яке порожнє → flash + redirect на /checkout); передає `shippingAddress` у `createCheckout`
+- [x] Моноліт `OrderClient::createCheckout`: payload форвардиться як є → лише оновлено PHPDoc-тип
+- [x] order-service `Order`: `+shippingAddress` (JSON, nullable) + getter/setter; ручна міграція
+      `Version20260707120000` (ADD COLUMN); `CheckoutController::create` валідує (400 без адреси) + сетить
+- [x] order-service `PaymentEventHandler::onSucceeded`: `shippingAddress` додано у payload `OrderPaid`
+- [x] ✅ Verify: моноліт **136 OK** (+2 checkout: requires-details / address-reaches-service),
+      order-service **25 OK** (+1 requires-shippingAddress; OrderPaid payload несе city); phpstan [OK];
+      `migrate`+`schema:validate [OK]`
+
+## Крок 2 — Скелет delivery-service + інфра ✅
+- [x] `services/delivery-service/` за патерном payment-service (FrankenPHP; composer: doctrine, migrations,
+      orm, messenger, amqp, lexik, symfony/http-client, security, serializer; БЕЗ stripe); `compose.yaml`:
+      `db-delivery` (postgres16, `delivery_service`) + `delivery-service` (:8006); монтаж `../../config/jwt:ro`;
+      named-volumes `dsvc_vendor`/`dsvc_var`; `HealthController` (/health/live, /health/ready з пінгом БД).
+      Крок-2 bundles.php вмикає лише Framework/Doctrine/Migrations (Security/Lexik/Messenger — Крок 3).
+      phpunit без Unit-suite (додам у Кроці 3 з тестом entity — уникаю CI-фейлу порожньої директорії)
+- [x] ✅ Verify: образ зібрано, `composer install` (89 пакетів); контейнер up; **health/live 200**;
+      **/ready db ok** (25ms); **404** на невідомому роуті; phpunit **3 OK** (live/ready/404)
+
+## Крок 3 — Домен + БД + провайдер + консюмер OrderPaid ✅
+- [x] Entity `Shipment` (id uuid, orderId uuid **UNIQUE**, provider, trackingNumber, status
+      PENDING/PICKED_UP/IN_TRANSIT/OUT_FOR_DELIVERY/DELIVERED/FAILED, address JSON, estimatedAt, createdAt) +
+      `TrackingEvent` (append-only: shipment_id, status, location, description, occurredAt, recordedAt;
+      index (shipment_id, occurredAt)) + `OutboxMessage`; репозиторії (findOneByOrderId, findByShipment,
+      existsFor-ідемпотентність, findUnpublished); міграція `Version20260707175017` (diff, причесано)
+- [x] `DeliveryProviderInterface` (createShipment(orderId, address): `ShipmentDraft`; isAvailable) +
+      `FakeProvider` (детермінований tracking# з sha256(orderId), default) + `NovaPoshtaClient` (HttpClient,
+      v2.0 InternetDocument, за `NOVA_POSHTA_API_KEY`) + `DeliveryProviderFactory`; вибір через env
+      `DELIVERY_PROVIDER` у services.yaml. `/health/ready` пінгує провайдер
+- [x] Messaging-інфра (дзеркало payment-service): outbox/recorder/relay/command; `events` транспорт JSON
+      (спільний FQCN `IntegrationEvent`); **consume**-транспорт `delivery_events` (черга
+      `delivery_shipment_events`, binding **`order.OrderPaid`** — не весь order.*). compose: `delivery-worker`
+      + `delivery-relay` на `[default, monolith]`
+- [x] `OrderPaidHandler` (#[AsMessageHandler]): OrderPaid → Shipment(PENDING, ідемпотентно за orderId)
+      → provider.createShipment → перший `TrackingEvent` (creation) + outbox `ShipmentCreated` (один flush)
+- [x] bundles Security/Lexik/Messenger; `security.yaml`: `^/api` verify JWT (спільний keypair);
+      write `^/api/shipments` → `ROLE_DELIVERY_ADMIN`; `^/api/webhooks/novaposhta` — security:false;
+      jwt-test keypair скопійовано
+- [x] ✅ Verify: migrate+schema:validate **[OK]**; phpunit **10 OK** (health 3 + unit 3 + OrderPaidHandler 4:
+      create/ідемпотентний replay/other-event-ignored/invalid-orderId); ⚠️ `cache:clear --env=test` після нових
+      сервісів. **Реальний крос-сервіс probe**: order-service outbox `order.OrderPaid` → order-relay → RabbitMQ
+      → delivery-worker → Shipment **PENDING** (fake, tracking `FAKE…`) + TrackingEvent "registered" +
+      **ShipmentCreated PUBLISHED** (delivery-relay)
+
+## Крок 4 — Трекінг (Event Sourcing) + webhook + API читання ✅
+- [x] `ShipmentController`: `GET /api/shipments/{id}`, `/order/{orderId}`, `/{id}/tracking` (лог за
+      occurredAt DESC); JWT-protected (uuid-requirements щоб /order/{orderId} не колізив з /{id})
+- [x] `TrackingRecorder` (спільний append-шлях: existsFor-ідемпотентність → append TrackingEvent
+      **ніколи не UPDATE** → оновити `Shipment.status` проєкцію → outbox `TrackingUpdated` /
+      `ShipmentDelivered` при DELIVERED, один flush)
+- [x] `NovaPoshtaWebhookController` `POST /api/webhooks/novaposhta` (public firewall): резолвить shipment
+      за trackingNumber (404), приймає canonical `status` або НП `statusCode` (`NovaPoshtaStatusMapper`),
+      400 на брак status/тіла; ідемпотентність за (shipment, occurredAt, status)
+- [x] Команда `app:delivery:simulate-tracking <shipmentId> <status>` — той самий `TrackingRecorder` (демо ES без НП)
+- [x] *(4b)* order-service: consume-транспорт `shipment_events` (черга `order_shipment_events`, binding
+      `shipment.*`) + `ShipmentEventHandler`: ShipmentCreated→SHIPPED (з PAID), ShipmentDelivered→DELIVERED
+      (з PAID/SHIPPED); forward-only + ідемпотентно. order-worker consume `payment_events shipment_events`
+- [x] ✅ Verify: delivery-service **21 OK** (webhook 6: canonical/statusCode-map/DELIVERED/replay/404/400;
+      shipment-API 5: 401/200/404/by-order/tracking); order-service **30 OK** (+5 ShipmentEventHandler);
+      schema:validate [OK]. **Повний крос-сервіс E2E** (живі брокер+воркери): OrderPaid → Shipment+ShipmentCreated
+      → **order SHIPPED**; simulate DELIVERED → append + ShipmentDelivered → **order DELIVERED**; ES-лог 2 append-only
+      записи, проєкція = DELIVERED. ⚠️ PHPUnit 11 має final `status()` — хелпер назвати інакше
+
+## Крок 5 — Прод-деплой (compose.prod + CI) + E2E ✅
+- [x] `delivery-service/compose.prod.yaml`: db `${DELIVERY_DB_PASSWORD}`, env (APP_SECRET, DATABASE_URL,
+      MESSENGER_EVENTS_DSN, `DELIVERY_PROVIDER:-fake`, `NOVA_POSHTA_API_KEY:-`), `ports: !reset []`, мережа
+      `task-25_default`, restart; `delivery-relay` (shipment.*) + `delivery-worker` (consume delivery_events).
+      (Delivery лише verify JWT — passphrase НЕ треба)
+- [x] *(4b)* order-service `compose.prod.yaml` — **без змін**: `order-worker` успадковує `command` з base
+      compose (`messenger:consume payment_events shipment_events`), тож prod-overlay чіпати не довелось
+- [x] `.gitlab-ci.yml`: build/test/deploy `delivery-service` (deploy needs test:delivery-service, fail-fast
+      на `DELIVERY_DB_PASSWORD`, self-rsync як payment/order); **`deploy:order-service` needs
+      `deploy:delivery-service`** (order консюмить shipment.* у 4b; delivery деплоїться першим — не залежить від order)
+- [x] ⚠️ Дії користувача — нові CI vars: **`DELIVERY_DB_PASSWORD`** (обов'язково), `NOVA_POSHTA_API_KEY`
+      + `DELIVERY_PROVIDER=nova_poshta` (опц. — без них працює FakeProvider). `APP_SECRET` — вже є (переюз)
+- [x] ✅ Verify локально: `docker compose config` VALID (delivery-overlay: порти прибрано, task-25_default,
+      provider=fake, worker→`delivery_events`, relay→`app:outbox:relay`; order-overlay: worker→`payment_events
+      shipment_events`); `.gitlab-ci.yml` валідний YAML (3 delivery-джоби, order needs delivery); **повний
+      крос-сервіс E2E** (Крок 4): OrderPaid → Shipment+ShipmentCreated → order SHIPPED → simulate DELIVERED →
+      ShipmentDelivered → order DELIVERED. Прод-деплой — на runner при merge
+
+## Підсумок Фази 6 (частина 2) — Delivery Service
+Delivery Service виокремлено (FrankenPHP, `db-delivery`, :8006) як **greenfield**-домен доставки+трекінгу.
+Консюмить `OrderPaid` → створює `Shipment` (ідемпотентно per-order) через провайдер (`FakeProvider` default /
+`NovaPoshtaClient` за env) → веде **Event-Sourced** append-only `tracking_events` → публікує `ShipmentCreated`/
+`TrackingUpdated`/`ShipmentDelivered`. Адресу доставки прокинуто наскрізь (checkout-форма → моноліт →
+order-service `Order.shipping_address` → payload `OrderPaid`), заодно полагоджено мертве поле форми. NP-трекінг
+через public webhook + команду-симулятор. order lifecycle завершено: order-service консюмить `shipment.*`
+(PAID→SHIPPED→DELIVERED). Прод: compose.prod + CI (build/test/deploy). Коміти: `b824988`(1a) `e458ba7`(1b)
+`ac97e35`(2) `64f4bf5`(3) `23fad03`(4) + Крок 5.
+⚠️ Прод (ручні дії): CI var `DELIVERY_DB_PASSWORD` (обов'язк.); `NOVA_POSHTA_API_KEY`+`DELIVERY_PROVIDER=nova_poshta`
+опц. (без них FakeProvider). Real NP-webhook URL у NP-кабінеті — лише якщо перемкнути на реальний провайдер.
+
+## Ризики (підсумок реалізації)
+1. **Адреса — розірваний канал**: полагоджено (Крок 1); `shipping_address` nullable → старі PAID-замовлення цілі.
+2. **`order.OrderPaid` два консюмери** (catalog-worker `order.*` + delivery-worker `order.OrderPaid`): різні черги,
+   topic-фанаут, конфлікту нема (доведено E2E).
+3. **Event Sourcing**: `tracking_events` тільки append; `Shipment.status` — проєкція. `TrackingRecorder` — єдиний
+   шлях запису (webhook+команда), ідемпотентність за (shipment, occurredAt, status).
+4. **Order↔Delivery двонаправлені події**: не цикл — обидва читають з черг, буферизуються; deploy delivery→order.
+5. **NovaPoshta**: недетермінована → FakeProvider default; real лише за env-ключем. `/health/ready` пінгує провайдер.
+6. **PHPUnit 11**: `status()` — final метод; хелпери назвати інакше (напр. `orderStatus`).
+
+## Ризики / підводні камені
+1. **Адреса — розірваний канал** (Крок 1): найризиковіший, бо чіпає моноліт+order-service+міграцію Order.
+   Робити атомарно; старі рядки Order → `shippingAddress` nullable (не ламати наявні PAID-замовлення).
+2. **`order.OrderPaid` тепер має ДВОХ консюмерів** (catalog-worker вже слухає `order.*` для stock-commit +
+   новий delivery-worker). Різні черги/binding — топік-exchange фанаутить, конфлікту нема; перевірити,
+   що delivery не ловить зайві `order.*` (binding саме `order.OrderPaid`).
+3. **Event Sourcing tracking_events** — тільки append, ніколи UPDATE; `Shipment.status` — це **проєкція**
+   (не джерело правди). Не спокуситися оновлювати лог in-place.
+4. **Ідемпотентність** — relay at-least-once: Shipment UNIQUE(orderId) + tracking append за
+   (shipment, occurredAt, status); повторний OrderPaid не створює 2-ге відправлення.
+5. **NovaPoshta real API** — недетерміноване, потребує ключа → за замовчуванням FakeProvider; real лише
+   за env. `/health/ready` пінгує НП тільки коли provider=nova_poshta.
+6. **Order lifecycle (4b)** — order-service стає консюмером ще й `shipment.*` (додатковий воркер). Опційно;
+   якщо ріже обсяг — Order застигає на PAID (Delivery все одно самодостатній). Рух статусу лише вперед.
+
+---
+
 # Фаза 6 — Виокремлення Payment Service (Stripe) з order-service — ПЛАН, очікує апрув
 
 > **Мета:** винести Stripe-платежі у власний `payment-service` (FrankenPHP, `db-payment`, :8005).

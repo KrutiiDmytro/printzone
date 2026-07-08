@@ -64,6 +64,7 @@ final class PaymentEventHandler
             'userEmail' => $order->getUserEmail(),
             'totalAmount' => $order->getTotalAmount(),
             'paidAt' => (new \DateTimeImmutable())->format(\DateTimeInterface::ATOM),
+            'shippingAddress' => $order->getShippingAddress(),
         ]);
         $this->em->flush();
 

@@ -1,0 +1,52 @@
+framework:
+    messenger:
+        transports:
+            # Outbound integration events (shipment.*) → the monolith's RabbitMQ
+            # `events` topic exchange. Published by the outbox relay; the routing
+            # key is set per-message (e.g. shipment.ShipmentCreated). JSON on the
+            # wire; the `type` header carries the shared FQCN
+            # App\Messaging\Domain\IntegrationEvent.
+            events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
+            # Inbound: order-service's OrderPaid from the same `events` topic
+            # exchange. Receive-only (never in `routing`) — own queue bound to
+            # exactly order.OrderPaid so the delivery-worker only sees what it
+            # needs (not the whole order.*). Same shared FQCN decodes the JSON.
+            delivery_events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        delivery_shipment_events:
+                            binding_keys: ['order.OrderPaid']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
+        default_bus: messenger.bus.default
+        buses:
+            messenger.bus.default: []
+
+        routing:
+            App\Messaging\Domain\IntegrationEvent: events
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                events: 'in-memory://'
+                delivery_events: 'in-memory://'
