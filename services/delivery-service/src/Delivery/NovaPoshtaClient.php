@@ -53,7 +53,10 @@ final class NovaPoshtaClient implements DeliveryProviderInterface
         }
 
         try {
-            $this->call('Common', 'getTimeIntervals', []);
+            // getCargoTypes needs no method properties, so it is a clean liveness
+            // ping (unlike getTimeIntervals, which requires a RecipientCityRef and
+            // would report the provider as down even with a valid key).
+            $this->call('Common', 'getCargoTypes', []);
 
             return true;
         } catch (\Throwable) {
