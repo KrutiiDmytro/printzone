@@ -387,6 +387,16 @@ build:delivery-service:
   needs: []
   rules: *rules_mr_develop
 
+build:notification-service:
+  stage: build
+  script:
+    - docker build -f services/notification-service/Dockerfile
+      -t printzone/notification-service:$CI_COMMIT_SHA
+      -t printzone/notification-service:latest
+      services/notification-service
+  needs: []
+  rules: *rules_mr_develop
+
 test:catalog-service:
   stage: test
   needs:
@@ -474,6 +484,21 @@ test:delivery-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/delivery-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:notification-service:
+  stage: test
+  needs:
+    - build:notification-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/notification-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/notification-service:latest
       sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
@@ -818,5 +843,45 @@ deploy:delivery-service:
   # shipment.* to advance the order lifecycle (SHIPPED/DELIVERED).
   needs:
     - test:delivery-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:notification-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    NSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Stateless: no DB, no public port. Self-rsync the subtree first (services
+    # deploy before the monolith's rsync populates $DEPLOY_DIR/services/...; on the
+    # first deploy the directory does not exist yet). Idempotent — the monolith
+    # rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/notification-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/notification-service/" "$DEPLOY_DIR/services/notification-service/"
+    - cd "$DEPLOY_DIR/services/notification-service"
+    - echo "--- Starting service + worker (pre-built image) ---"
+    - $NSVC up -d --no-build
+    - $NSVC exec -T notification-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in nsvc_var) so the container is warm
+    # before the health check; prod does not auto-rebuild a stale cache.
+    - $NSVC exec -T notification-service php bin/console cache:clear --env=prod
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $NSVC exec -T notification-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: notification-service health failed"; $NSVC logs notification-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "notification-service healthy"
+  needs:
+    - test:notification-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'

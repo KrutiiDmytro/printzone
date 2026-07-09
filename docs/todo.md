@@ -51,12 +51,15 @@
 - [x] Тести: 3 unit (мок Mailer) + 3 functional (bus dispatch, реальний Twig+Mailer, MailerAssertions).
       **Живий e2e:** AMQP publish `order.OrderPaid` → worker → лист у Mailpit (перевірено через API).
 
-### Крок 3 — Cutover моноліту + прод
-- [ ] Прибрати email-гілку з монолітного `IntegrationEventHandler` (OrderPaid лист тепер у сервісі);
-      узгодити messenger-binding моноліту, щоб не дублювати лист
-- [ ] `compose.prod.yaml` + `.gitlab-ci.yml`: build/deploy `notification-service` + `notification-worker`,
-      прод-env (`MAILER_DSN`/SES, `MESSENGER_EVENTS_DSN`, sender/`ADMIN_EMAIL`)
-- [ ] Перевірити прод CI-змінні (ймовірно нових нема — SES creds уже є)
+### Крок 3 — Cutover моноліту + прод ✅
+- [x] **3a cutover (Варіант A):** монолітний `IntegrationEventHandler` → log-only спостерігач
+      (більше не шле лист, але й далі дренить catch-all `events_all`, щоб не переповнити RabbitMQ);
+      тест переписано; видалено невживаний `templates/email/order_paid.html.twig`.
+      Моноліт-worker/compose НЕ чіпав (варіант A). Тест зелений, `lint:container` exit 0.
+- [x] **3b прод:** `compose.prod.yaml` (service+worker, без db, без публічного порту) +
+      `.gitlab-ci.yml` build/test/deploy `notification-service` (дзеркало delivery, без db/міграцій).
+      **Нових CI-змінних нема** — `MAILER_DSN`/`ADMIN_EMAIL`/`APP_SECRET` вже існують.
+      YAML провалідовано, prod-overlay мержиться (порти скинуто).
 
 ## Edge cases (rule 3)
 
