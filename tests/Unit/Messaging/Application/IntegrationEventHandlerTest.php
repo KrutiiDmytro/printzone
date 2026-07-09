@@ -6,47 +6,34 @@ use App\Messaging\Application\IntegrationEventHandler;
 use App\Messaging\Domain\IntegrationEvent;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
-use Symfony\Bridge\Twig\Mime\TemplatedEmail;
-use Symfony\Component\Mailer\MailerInterface;
 
+/**
+ * The OrderPaid receipt moved to notification-service; the monolith handler is now
+ * a log-only observer that just drains the catch-all `events_all` queue.
+ */
 class IntegrationEventHandlerTest extends TestCase
 {
-    private function makeHandler(MailerInterface $mailer): IntegrationEventHandler
+    public function testObservesEventWithoutError(): void
     {
-        return new IntegrationEventHandler($mailer, $this->createMock(LoggerInterface::class), 'shop@example.com');
-    }
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('debug');
 
-    public function testOrderPaidSendsReceiptToCustomer(): void
-    {
-        $mailer = $this->createMock(MailerInterface::class);
-        $mailer->expects($this->once())
-            ->method('send')
-            ->with($this->callback(function (TemplatedEmail $email): bool {
-                $to = $email->getTo();
-
-                return 1 === \count($to) && 'buyer@example.com' === $to[0]->getAddress();
-            }));
-
-        $this->makeHandler($mailer)(new IntegrationEvent('order', 'OrderPaid', [
-            'orderId' => 1,
+        $handler = new IntegrationEventHandler($logger);
+        $handler(new IntegrationEvent('order', 'OrderPaid', [
+            'orderId' => 'o-1',
             'userEmail' => 'buyer@example.com',
             'totalAmount' => 5000,
         ]));
     }
 
-    public function testNonOrderPaidEventSendsNoEmail(): void
+    public function testHandlesAnyEventTypeAsNoOp(): void
     {
-        $mailer = $this->createMock(MailerInterface::class);
-        $mailer->expects($this->never())->method('send');
+        $handler = new IntegrationEventHandler($this->createMock(LoggerInterface::class));
 
-        $this->makeHandler($mailer)(new IntegrationEvent('user', 'UserRegistered', ['email' => 'x@example.com']));
-    }
+        // No handler-specific behaviour, no exception, regardless of the event.
+        $handler(new IntegrationEvent('payment', 'PaymentFailed', ['orderId' => 'o-2']));
+        $handler(new IntegrationEvent('delivery', 'ShipmentDelivered', ['shipmentId' => 's-1']));
 
-    public function testOrderPaidWithoutEmailSendsNothing(): void
-    {
-        $mailer = $this->createMock(MailerInterface::class);
-        $mailer->expects($this->never())->method('send');
-
-        $this->makeHandler($mailer)(new IntegrationEvent('order', 'OrderPaid', ['orderId' => 1]));
+        $this->expectNotToPerformAssertions();
     }
 }
