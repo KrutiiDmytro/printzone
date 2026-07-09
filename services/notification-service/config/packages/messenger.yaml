@@ -1,0 +1,32 @@
+framework:
+    messenger:
+        transports:
+            # Inbound only: the notification-service never publishes. Own queue on
+            # the monolith's `events` topic exchange, bound to exactly the routing
+            # keys we notify on (order.OrderPaid today). The shared FQCN
+            # App\Messaging\Domain\IntegrationEvent travels in the `type` header and
+            # decodes the JSON back into our matching class.
+            notification_events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        notification_events:
+                            binding_keys: ['order.OrderPaid']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
+        default_bus: messenger.bus.default
+        buses:
+            messenger.bus.default: []
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                notification_events: 'in-memory://'

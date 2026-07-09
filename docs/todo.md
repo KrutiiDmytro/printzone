@@ -40,14 +40,16 @@
 - [x] Спільний `IntegrationEvent` (копія FQCN) — для майбутнього consumer'а
 - [x] `tests/Functional/HealthTest` — live 200, ready 200 (null smtp), ready 503 (недосяжний smtp), 404
 
-### Крок 2 — Consumer + email-канал
-- [ ] `messenger.yaml`: вхідний `notification_events`, binding_keys для MVP-набору;
-      `when@test` → `in-memory://`
-- [ ] `NotificationChannelInterface` + `EmailChannel` (Mailer+Twig), `SmsChannel`/`PushChannel` (log-only)
-- [ ] `NotificationHandler` (`AsMessageHandler` на `IntegrationEvent`) → маршрутизує
-      за `eventName` до білдера листа; невідома подія = no-op
-- [ ] Twig-шаблони листів (перенести `order_paid`, додати receipt / shipment-created / delivered / welcome)
-- [ ] `tests/Functional/*` — in-memory transport + асерти на надіслані листи (кожна MVP-подія)
+### Крок 2 — Consumer + email-канал ✅
+- [x] `messenger.yaml`: вхідний `notification_events`, binding_key `order.OrderPaid`; `when@test` → `in-memory://`
+- [x] `EmailChannel` (Mailer+Twig). **Обсяг звужено до `OrderPaid`→email** (єдина подія з email у payload);
+      SMS/Push + інтерфейс каналів — відкладено (був би мертвий код, нічого не викликає).
+- [x] `NotificationHandler` (`AsMessageHandler` на `IntegrationEvent`) → `order.OrderPaid` → лист-квитанція;
+      невідома подія / без `userEmail` = no-op + warning
+- [x] Twig `email/order_paid.html.twig` (перенесено з моноліту)
+- [x] `mailer.yaml` (`%env(MAILER_DSN)%`); worker додано в `compose.yaml` (мережа monolith)
+- [x] Тести: 3 unit (мок Mailer) + 3 functional (bus dispatch, реальний Twig+Mailer, MailerAssertions).
+      **Живий e2e:** AMQP publish `order.OrderPaid` → worker → лист у Mailpit (перевірено через API).
 
 ### Крок 3 — Cutover моноліту + прод
 - [ ] Прибрати email-гілку з монолітного `IntegrationEventHandler` (OrderPaid лист тепер у сервісі);
@@ -91,3 +93,24 @@
   (image `axllent/mailpit`, :1025). `MAILER_DSN=smtp://mailer:1025` у dev.
 - **RabbitMQ не перевіряється в `/ready`** — за прецедентом delivery-service (тримаємо probe дешевою
   й self-contained). Реальна залежність від брокера з'явиться у worker'а (Крок 2).
+
+### Крок 2 (виконано)
+- Consumer `order.OrderPaid` → лист-квитанція клієнту. Повний живий шлях доведено:
+  AMQP publish → worker → `EmailChannel` → Mailpit (From `admin@example.com`, To з payload,
+  сума `99.99 €`, orderId у тілі).
+- 10 тестів зелені (17 asserts): 3 unit (мок Mailer) + 3 functional email + 4 health.
+
+### Скоригований обсяг (розвідка реальних payload'ів)
+Початковий MVP-набір (`Payment*`, `Shipment*`, `UserRegistered`) виявився нереальним: жодна з цих
+подій **не несе email отримувача** в payload, а `UserRegistered` взагалі не публікується. Єдина придатна
+подія — `OrderPaid` (`userEmail`+`totalAmount`). Ширші сповіщення (відправлення/доставка) потребують
+**збагачення продюсерів** (delivery-service має додати email у `Shipment*`) — це окрема задача поза
+Notification-фазою.
+
+### Уроки (rule 6 / self-improvement)
+- **Стала кеш при `APP_DEBUG=0`**: після додавання сервісів/конфігу в test — `rm -rf var/cache/*`,
+  інакше «No handler / ServiceNotFound» від закешованого контейнера (вже було з catalog-service).
+- **Витік env між тестами**: `HealthTest` мутував `$_ENV['MAILER_DSN']` і не відновлював → ламав
+  наступний `NotificationEmailTest`. Тести, що чіпають глобальний env, ЗАВЖДИ відновлюють його в tearDown.
+- **Не довіряй роадмапу щодо payload'ів** — перевіряй реальні `outboxRecorder->record(...)` продюсерів
+  перед плануванням споживачів.

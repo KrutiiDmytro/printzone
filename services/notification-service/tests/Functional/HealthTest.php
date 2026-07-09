@@ -6,6 +6,25 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 class HealthTest extends WebTestCase
 {
+    private ?string $originalMailerDsn;
+
+    protected function setUp(): void
+    {
+        $this->originalMailerDsn = $_ENV['MAILER_DSN'] ?? null;
+    }
+
+    protected function tearDown(): void
+    {
+        // Restore the env this test mutates so it can't leak a broken SMTP DSN
+        // into later tests (e.g. NotificationEmailTest booting a real mailer).
+        if (null === $this->originalMailerDsn) {
+            unset($_SERVER['MAILER_DSN'], $_ENV['MAILER_DSN']);
+        } else {
+            $_SERVER['MAILER_DSN'] = $_ENV['MAILER_DSN'] = $this->originalMailerDsn;
+        }
+        parent::tearDown();
+    }
+
     public function testLiveIsPublicAndOk(): void
     {
         $client = static::createClient();
