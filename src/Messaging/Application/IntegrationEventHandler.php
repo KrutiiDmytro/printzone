@@ -6,59 +6,32 @@ namespace App\Messaging\Application;
 
 use App\Messaging\Domain\IntegrationEvent;
 use Psr\Log\LoggerInterface;
-use Symfony\Bridge\Twig\Mime\TemplatedEmail;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
 /**
- * Consumes integration events delivered from RabbitMQ. Stands in for the future
- * Notification service: on OrderPaid it emails the customer a receipt.
+ * Consumes integration events delivered from RabbitMQ.
+ *
+ * The customer receipt on OrderPaid has moved to the standalone notification-service
+ * (Phase 7). This handler no longer sends anything — it stays as a log-only observer
+ * whose sole remaining job is to drain the monolith's catch-all `events_all` queue
+ * (bound to `#`) so it does not grow unbounded now that nothing else in the monolith
+ * consumes integration events. Removing the monolith's event consumption entirely
+ * (dropping the queue + the worker's `events` transport) is a separate teardown.
  */
 #[AsMessageHandler]
 final class IntegrationEventHandler
 {
     public function __construct(
-        private readonly MailerInterface $mailer,
         private readonly LoggerInterface $logger,
-        #[Autowire('%admin.email%')]
-        private readonly string $fromEmail,
     ) {
     }
 
     public function __invoke(IntegrationEvent $event): void
     {
-        $this->logger->info('Integration event received', [
+        $this->logger->debug('Integration event observed (no action in monolith)', [
             'event' => $event->eventName,
             'aggregate' => $event->aggregate,
             'traceId' => $event->traceId,
         ]);
-
-        if ('OrderPaid' === $event->eventName) {
-            $this->handleOrderPaid($event->payload);
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function handleOrderPaid(array $payload): void
-    {
-        $to = $payload['userEmail'] ?? null;
-        if (!is_string($to) || '' === $to) {
-            return;
-        }
-
-        $email = (new TemplatedEmail())
-            ->from($this->fromEmail)
-            ->to($to)
-            ->subject('Дякуємо! Ваше замовлення оплачено')
-            ->htmlTemplate('email/order_paid.html.twig')
-            ->context([
-                'orderId' => $payload['orderId'] ?? null,
-                'totalAmount' => $payload['totalAmount'] ?? 0,
-            ]);
-
-        $this->mailer->send($email);
     }
 }
