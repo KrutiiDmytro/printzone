@@ -1,0 +1,36 @@
+services:
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/notification-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8007:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - nsvc_vendor:/app/vendor
+      - nsvc_var:/app/var
+    # Joins the monolith network so the /health/ready SMTP probe can reach the
+    # shared Mailpit (dev). The event-consuming notification-worker (which also
+    # needs the shared RabbitMQ) is added here in Step 2.
+    networks:
+      - default
+      - monolith
+
+  # The notification-worker (messenger:consume) is added in Step 2, once the
+  # inbound transport and event handlers exist.
+
+volumes:
+  nsvc_vendor:
+  nsvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default

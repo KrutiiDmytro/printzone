@@ -1,0 +1,14 @@
+parameters:
+    admin.email: '%env(ADMIN_EMAIL)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Kernel.php'
+            # Shared cross-service contract, not a service.
+            - '../src/Messaging/Domain/'
