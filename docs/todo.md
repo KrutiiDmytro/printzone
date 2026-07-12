@@ -80,12 +80,14 @@ GET    /health/live | /health/ready    → ready = S3 HeadBucket ok | local dir 
 - [x] 3 Storage-юніт-тести перенесено в сервіс (Flysystem/Factory/FactoryS3); монолітний `ProductImageExtensionTest` оновлено.
 - [x] Моноліт 129 tests / 344 asserts зелений; сервіс 31 tests / 73 asserts; `lint:container` OK; live `app:verify-storage` → 200 ok.
 
-### Крок 4 — Prod overlay + CI
-- [ ] `compose.yaml` + `compose.prod.yaml` за зразком delivery/notification (web-сервіс, **без worker'а**);
-      мережі `default` + `monolith` (task-25_default).
-- [ ] `.gitlab-ci.yml`: build/test/deploy `storage-service` (дзеркало notification, без db/міграцій).
-- [ ] Міграція CI-змінних: `AWS_ACCESS_KEY_ID/SECRET/DEFAULT_REGION/S3_BUCKET/STORAGE_TYPE` → storage-service;
-      моноліт отримує `STORAGE_SERVICE_URL`; JWT public key/passphrase — як в інших сервісах.
+### Крок 4 — Prod overlay + CI ✅
+- [x] `services/storage-service/compose.prod.yaml` (дзеркало cart: image, prod env, `ports: !reset []`,
+      мережі `default`+`monolith`, **без worker'а/db**); `STORAGE_TYPE=s3` + AWS-секрети; `/jwt` mount з base compose.
+- [x] `.gitlab-ci.yml`: `build/test/deploy:storage-service` (дзеркало notification, без db/міграцій; deploy-gate `about`).
+- [x] Монолітний `compose.prod.yaml`: `php`+`worker` отримали `STORAGE_SERVICE_URL: http://storage-service`,
+      AWS-креденшали прибрано (переїхали в storage-service).
+- [x] **Нових CI-змінних нема** — `AWS_ACCESS_KEY_ID/SECRET/S3_BUCKET` + `APP_SECRET` уже існують (репойнт на сервіс).
+      Region/version — з baked `.env` сервісу.
 
 ## Edge cases (rule 3)
 
@@ -108,6 +110,21 @@ GET    /health/live | /health/ready    → ready = S3 HeadBucket ok | local dir 
 - **Повний S2S write-e2e (моноліт підписує → сервіс валідує токен)** доведено автотестами (роль-based accept/reject
   у сервісі + ідентичний прод-механізм cart/order); живий verify-storage б'є public `/health`. Реальний
   авторизований запис моноліт→сервіс підтвердимо в прод-smoke Кроку 4.
+
+### Крок 4 (виконано)
+- Prod-overlay сервісу + 3 CI-джоби; міграція AWS-секретів у storage-service, моноліт → `STORAGE_SERVICE_URL`.
+- Обидва compose-оверлеї (сервіс + моноліт) валідно мержаться (`docker compose config`); CI-YAML валідний.
+- Prod-smoke сервісу (як CI deploy): `APP_ENV=prod`, `STORAGE_TYPE=s3`, `composer install --no-dev` +
+  `cache:clear --env=prod` + `about` exit 0 + `/health/live` 200.
+
+### Відхилення / прод-нотатки Кроку 4
+- **Прод — той самий S3-бакет**, що моноліт використовував раніше → міграція даних НЕ потрібна (зображення
+  `products/` та експорти вже в S3; storage-service читає той самий bucket).
+- **AWS_* лишаються в base `compose.yaml` моноліту** (dev через `.env.local`; у проді `.env.local` видаляється,
+  у `.env` вони порожні) — мертвий безпечний залишок; глибоке прибирання base-compose поза обсягом (ризик для dev).
+- **`STORAGE_TYPE` моноліту** береться з committed `.env` (=s3) → `supportsPresign()` працює в проді без CI-var.
+- Порядок деплою: сервіс і моноліт у одному `deploy`-стейджі; короткий стартовий вікон (як cart/order) —
+  читання зображень деградує до `/media`, а не падає.
 
 ## Тест-кейси (rule 3)
 

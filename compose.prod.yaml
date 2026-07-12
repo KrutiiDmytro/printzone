@@ -30,14 +30,13 @@ services:
       ORDER_SERVICE_URL: "http://order-service"
       # cart-service owns the persistent cart of authenticated users.
       CART_SERVICE_URL: "http://cart-service"
+      # storage-service owns the object backend (S3); AWS creds live there now.
+      STORAGE_SERVICE_URL: "http://storage-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       MAILER_DSN: ${MAILER_DSN}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
@@ -56,6 +55,8 @@ services:
       ORDER_SERVICE_URL: "http://order-service"
       # Present for parity so any cart resolution in a queued handler can reach the service.
       CART_SERVICE_URL: "http://cart-service"
+      # Export's ProcessExportHandler writes result files through the storage-service.
+      STORAGE_SERVICE_URL: "http://storage-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       # The worker delivers queued emails (SendEmailMessage on the async transport),
       # so it needs the real mailer DSN — otherwise it falls back to null:// and drops them.
@@ -63,9 +64,6 @@ services:
       # From-address for the receipt email; must be a verified identity in SES (sandbox
       # rejects unverified senders), otherwise the send fails and the email is dropped.
       ADMIN_EMAIL: ${ADMIN_EMAIL}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}

@@ -1,0 +1,28 @@
+# Production overlay for storage-service. Deployed in-place under the monolith
+# tree (/var/www/app/services/storage-service), so ../../config/jwt (mounted in
+# the base compose.yaml) resolves to the monolith's shared keypair used to verify
+# S2S tokens. Reached by the monolith over the shared task-25_default network as
+# `storage-service` (no public port — browsers hit S3 directly via presigned URLs).
+# The object backend is S3 in production; region/version come from the baked .env.
+services:
+  storage-service:
+    image: printzone/storage-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      STORAGE_TYPE: s3
+      # Reuses the monolith's existing AWS CI vars — no new secrets introduced.
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      - default
+      - monolith
+
+networks:
+  monolith:
+    external: true
+    name: task-25_default
