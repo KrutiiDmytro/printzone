@@ -12,7 +12,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 final class ProductImageExtensionTest extends TestCase
 {
-    private function makeExtension(string $storageType = 'local'): ProductImageExtension
+    private function makeExtension(): ProductImageExtension
     {
         $storage = $this->createMock(FileStorageInterface::class);
         $storage->method('publicUrl')->willReturn(null);
@@ -22,7 +22,7 @@ final class ProductImageExtensionTest extends TestCase
             fn (string $route, array $params) => '/media?key='.($params['key'] ?? '')
         );
 
-        $service = new ProductImageService($storage, $urlGenerator, $storageType);
+        $service = new ProductImageService($storage, $urlGenerator);
 
         return new ProductImageExtension($service);
     }

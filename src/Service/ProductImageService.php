@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Storage\FileStorageInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
@@ -19,8 +18,6 @@ final class ProductImageService
     public function __construct(
         private readonly FileStorageInterface $storage,
         private readonly UrlGeneratorInterface $urlGenerator,
-        #[Autowire('%env(STORAGE_TYPE)%')]
-        private readonly string $storageType,
     ) {
     }
 
@@ -38,17 +35,16 @@ final class ProductImageService
         }
 
         if (str_starts_with($image, self::PREFIX)) {
-            // Приватний S3: прямий getObjectUrl часто дає 403; показ через проксі.
-            if ('s3' === strtolower(trim($this->storageType))) {
-                return $this->urlGenerator->generate('app_media', ['key' => $image]);
+            // Presigned GET lets the browser fetch a private-bucket object directly
+            // from S3 (null in local mode). If storage is unavailable we degrade to
+            // the /media proxy rather than breaking the page render.
+            try {
+                $public = $this->storage->publicUrl($image);
+            } catch (\Throwable) {
+                $public = null;
             }
 
-            $public = $this->storage->publicUrl($image);
-            if (null !== $public) {
-                return $public;
-            }
-
-            return $this->urlGenerator->generate('app_media', ['key' => $image]);
+            return $public ?? $this->urlGenerator->generate('app_media', ['key' => $image]);
         }
 
         return '/img/'.$image;

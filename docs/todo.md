@@ -66,13 +66,19 @@ GET    /health/live | /health/ready    → ready = S3 HeadBucket ok | local dir 
 - [~] Стрімінг великих файлів — **відкладено** (read через `read()` у памʼять, як у монолітному `MediaController` зараз;
       справжній `readStream` — окрема оптимізація, поведінка не гіршає).
 
-### Крок 3 — Cutover моноліту
-- [ ] `src/Storage/Client/StorageClient.php implements FileStorageInterface` (S2S JWT, стрім, degrade/strict за `CartClient`).
-- [ ] `storage.yaml`: rebind `FileStorageInterface` → `StorageClient`; прибрати `FileStorageFactory` + AWS-біндинги.
-- [ ] `ProductImagePresignService` → тонкий проксі в сервіс `/presign` (без `S3Client`).
-- [ ] `ProductImageService::getUrlForDisplay` (S3) → presigned-GET через сервіс; local → проксі.
-- [ ] Видалити з моноліту `FlysystemFileStorage`, `FileStorageFactory`, `aws.yaml`, AWS env;
-      `VerifyStorageCommand` → перевірка `/health/ready`.
+### Крок 3 — Cutover моноліту ✅ (розбито на 3a/3b за rule 4)
+**3a — шов:**
+- [x] `src/Storage/Client/StorageClient.php implements FileStorageInterface` (S2S JWT `ROLE_STORAGE_ADMIN`, strict; degrade — на боці викликачів).
+- [x] `storage.yaml`: rebind `FileStorageInterface` → `StorageClient`; `.env` +`STORAGE_SERVICE_URL`.
+- [x] `StorageClientTest` (MockHttpClient); повний набір моноліту 143 зелений.
+
+**3b — presign/display/verify + прибирання:**
+- [x] `ProductImagePresignService` → тонкий проксі (`StorageClient::presignPut`); `STORAGE_TYPE` лишається в моноліті для `supportsPresign()`.
+- [x] `ProductImageService::getUrlForDisplay` → presigned-GET (`publicUrl`), degrade→`/media` проксі; прибрано `storageType`.
+- [x] `VerifyStorageCommand` → GET `/health/ready` сервісу (без `S3Client`).
+- [x] Видалено `FlysystemFileStorage`, `FileStorageFactory`, `aws.yaml`, exclude у `services.yaml`, factory-def у `storage.yaml`, запис у phpstan-baseline.
+- [x] 3 Storage-юніт-тести перенесено в сервіс (Flysystem/Factory/FactoryS3); монолітний `ProductImageExtensionTest` оновлено.
+- [x] Моноліт 129 tests / 344 asserts зелений; сервіс 31 tests / 73 asserts; `lint:container` OK; live `app:verify-storage` → 200 ok.
 
 ### Крок 4 — Prod overlay + CI
 - [ ] `compose.yaml` + `compose.prod.yaml` за зразком delivery/notification (web-сервіс, **без worker'а**);
@@ -89,6 +95,19 @@ GET    /health/live | /health/ready    → ready = S3 HeadBucket ok | local dir 
 - Великі експорти → стрімінг, не тримати в памʼяті.
 - Cutover: моноліт віддає AWS env сервісу **до** видалення власних креденшалів (інакше подвійний доступ/розрив).
 - Presigned-GET протухає (~15хв) — сторінка щоразу генерується заново; але не кешувати URL надовго.
+
+### Крок 3 (виконано)
+- Cutover через незмінний шов `FileStorageInterface`: rebind → `StorageClient`, 6 споживачів не чіпано.
+  Presign/display/verify перенаправлено в сервіс; AWS SDK+креденшали видалено з бізнес-логіки моноліту.
+- Розбито на 3a (шов) + 3b (прибирання) за CLAUDE.md rule 4 (>3 файли).
+- Моноліт 129/344 + сервіс 31/73 зелені; `lint:container` OK; live verify-storage через host.docker.internal:8008.
+
+### Відхилення Кроку 3 (свідомі)
+- **`STORAGE_TYPE` лишається в моноліті** (не секрет) — щоб адмін-UI знав, чи пропонувати direct-S3 upload,
+  без зайвого round-trip у сервіс. `AWS_*` env поки лишаються в `.env` (мертві) — прибирання в Кроці 4.
+- **Повний S2S write-e2e (моноліт підписує → сервіс валідує токен)** доведено автотестами (роль-based accept/reject
+  у сервісі + ідентичний прод-механізм cart/order); живий verify-storage б'є public `/health`. Реальний
+  авторизований запис моноліт→сервіс підтвердимо в прод-smoke Кроку 4.
 
 ## Тест-кейси (rule 3)
 

@@ -1,14 +1,4 @@
-parameters:
-    local_storage_root: '%kernel.project_dir%/var/storage'
-
 services:
-    App\Storage\FileStorageFactory:
-        arguments:
-            $localRoot: '%local_storage_root%'
-            $s3Client: '@Aws\S3\S3Client'
-            $s3Bucket: '%aws.s3.bucket%'
-            $storageType: '%env(STORAGE_TYPE)%'
-
     # Storage is now a separate service; the monolith talks to it over S2S HTTP.
     # StorageClient implements the same interface, so consumers stay unchanged.
     App\Storage\FileStorageInterface: '@App\Storage\Client\StorageClient'

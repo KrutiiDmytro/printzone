@@ -98,6 +98,44 @@ class StorageClient implements FileStorageInterface
     }
 
     /**
+     * Presigned PUT for a direct browser→S3 upload. Not part of
+     * FileStorageInterface — used only by ProductImagePresignService.
+     *
+     * @return array{url: string, key: string, method: string, headers: array<string, string>}
+     */
+    public function presignPut(string $filename, string $contentType): array
+    {
+        try {
+            $response = $this->httpClient->request('POST', $this->url('/api/storage/presign'), [
+                'auth_bearer' => $this->token(),
+                'timeout' => 10,
+                'json' => ['filename' => $filename, 'contentType' => $contentType],
+            ]);
+            $status = $response->getStatusCode();
+
+            // Validation errors (bad MIME/filename, or local mode) → surface as a
+            // client error so the controller answers 400 rather than 500.
+            if (400 === $status) {
+                throw new \InvalidArgumentException($response->toArray(false)['error'] ?? 'Invalid presign request.');
+            }
+            if ($status >= 400) {
+                throw new \RuntimeException(sprintf('Storage Service returned HTTP %d for presign', $status));
+            }
+
+            /** @var array{url: string, key: string, method: string, headers: array<string, string>} $payload */
+            $payload = $response->toArray(false);
+
+            return $payload;
+        } catch (\InvalidArgumentException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            $this->logger->error('Storage Service presign failed', ['error' => $e->getMessage()]);
+
+            throw new \RuntimeException('Storage Service presign failed', 0, $e);
+        }
+    }
+
+    /**
      * @param array<string, mixed> $options
      */
     private function request(string $method, string $path, array $options = []): \Symfony\Contracts\HttpClient\ResponseInterface
