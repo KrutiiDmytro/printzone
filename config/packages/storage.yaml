@@ -9,5 +9,6 @@ services:
             $s3Bucket: '%aws.s3.bucket%'
             $storageType: '%env(STORAGE_TYPE)%'
 
-    App\Storage\FileStorageInterface:
-        factory: ['@App\Storage\FileStorageFactory', 'create']
+    # Storage is now a separate service; the monolith talks to it over S2S HTTP.
+    # StorageClient implements the same interface, so consumers stay unchanged.
+    App\Storage\FileStorageInterface: '@App\Storage\Client\StorageClient'
