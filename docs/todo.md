@@ -55,12 +55,16 @@ GET    /health/live | /health/ready    → ready = S3 HeadBucket ok | local dir 
 - [x] Перенесено `FileStorageInterface`/`FlysystemFileStorage`/`FileStorageFactory` (FQCN `App\Storage\` як у моноліті).
 - [x] `/health/live`=200; `/health/ready` — S3 HeadBucket (s3) / writable-dir (local). Живий smoke `curl :8008` → 200/200.
 
-### Крок 2 — Storage API + S2S security + тести
-- [ ] Контролери під контракт вище; ключі санітизуються (`sanitizeKey`, `..`-guard).
-- [ ] `security.yaml`: `/api/storage/*` під `ROLE_STORAGE_ADMIN`; `/health/*` public.
-- [ ] Presign-логіка з `ProductImagePresignService` → в сервіс (MIME allow-list, префікс `products/`, +15хв).
-- [ ] Стрімінг для великих файлів (`StreamedResponse` + HttpClient stream).
-- [ ] Тести: unit (presign/санітизація) + functional (health, CRUD round-trip, 401/403). Живий smoke.
+### Крок 2 — Storage API + S2S security + тести ✅
+- [x] `StorageController`: presign(POST) / presign-get(GET) / list(GET) / read(GET+HEAD) / write(PUT) / delete(DELETE);
+      ключі санітизуються (`..`-guard у Flysystem → 400).
+- [x] `security.yaml`: `^/api/storage` [POST,PUT,DELETE]→`ROLE_STORAGE_ADMIN`; `^/api`→автентифікований; `^/health` public.
+      Bundles Security+Lexik зареєстровано; lexik лише верифікує (public key з `/jwt` mount; test-keypair `config/jwt-test`).
+- [x] `PresignService`: presign PUT (MIME allow-list, `products/`, +15хв) + presign GET (короткий URL / null у local).
+- [x] Тести: 5 unit (presign/MIME/traversal) + 8 functional (round-trip, list, 401/403/404, local-guard) — 17 tests / 39 asserts зелені.
+- [x] Живий smoke (dev, реальні ключі): health=200, `/api/storage/*` без токена=401, `lint:container` OK.
+- [~] Стрімінг великих файлів — **відкладено** (read через `read()` у памʼять, як у монолітному `MediaController` зараз;
+      справжній `readStream` — окрема оптимізація, поведінка не гіршає).
 
 ### Крок 3 — Cutover моноліту
 - [ ] `src/Storage/Client/StorageClient.php implements FileStorageInterface` (S2S JWT, стрім, degrade/strict за `CartClient`).
@@ -113,3 +117,17 @@ GET    /health/live | /health/ready    → ready = S3 HeadBucket ok | local dir 
   firewall+`security.yaml` вмикаються разом з API (інакше health вимагав би JWT-ключів уже зараз).
 - **S3-fail health тестується як misconfig (порожній bucket → 503)**, а не мережевим падінням — щоб
   тест лишався герметичним; реальний HeadBucket-fail покриється живим smoke у s3-режимі (Крок 2/прод).
+
+### Крок 2 (виконано)
+- S2S API `StorageController` (6 маршрутів) + `PresignService` (PUT/GET presign). Firewall за зразком
+  cart-service: писання→`ROLE_STORAGE_ADMIN`, читання→будь-який валідний токен, health→public.
+- HEAD на read-маршруті короткозамикає (не читає байти) — дешева `exists`-проба.
+- 17 тестів зелені (39 asserts): 5 unit + 8 functional. `lint:container` OK; dev-smoke з реальними ключами моноліту.
+
+### Відхилення Кроку 2 (свідомі)
+- **Presign-логіка перенесена, монолітний `ProductImagePresignService` ще НЕ чіпав** — це Крок 3 (cutover).
+  Зараз обидва існують; жодного подвійного ефекту (моноліт ще не дзвонить у сервіс).
+- **`readStream` не додавав** — `read()` у памʼять зберігає теперішню поведінку `MediaController`; стрімінг —
+  окрема оптимізація, не регресія (експорти/зображення помірні).
+- **Traversal-guard на об'єктному ключі** тестується через `..`-prefix у `list` (query виживає) + unit на
+  `PresignService`; шлях `/objects/../x` нормалізується браузером до маршрутизації, тож не тестується по URL.
