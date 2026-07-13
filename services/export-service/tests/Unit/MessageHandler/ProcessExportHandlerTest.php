@@ -13,6 +13,7 @@ use App\MessageHandler\ProcessExportHandler;
 use App\Repository\ExportJobRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Symfony\Component\Mailer\MailerInterface;
 
 class ProcessExportHandlerTest extends TestCase
@@ -35,6 +36,25 @@ class ProcessExportHandlerTest extends TestCase
 
         self::assertSame(ExportStatus::Completed, $job->getStatus());
         self::assertStringStartsWith('exports/products/csv/', (string) $job->getFilePath());
+    }
+
+    public function testEmailFailureStillMarksCompleted(): void
+    {
+        $job = new ExportJob(ExportType::Products, ExportFormat::Csv, 'admin@example.com');
+
+        $product = $this->createMock(ExportExtractorInterface::class);
+        $product->method('extract')->willReturn([['id' => '1']]);
+
+        $storage = $this->createMock(StorageClient::class);
+        $storage->expects(self::once())->method('write');
+
+        $mailer = $this->createMock(MailerInterface::class);
+        $mailer->method('send')->willThrowException(new \RuntimeException('ses bridge missing'));
+
+        // The export succeeded (file written); a mailer failure must not fail the job.
+        $this->handler($job, $product, $storage, $mailer)(new ProcessExportMessage((string) $job->getId()));
+
+        self::assertSame(ExportStatus::Completed, $job->getStatus());
     }
 
     public function testExtractorFailureMarksFailedAndEmails(): void
@@ -93,6 +113,7 @@ class ProcessExportHandlerTest extends TestCase
             $noopExtractor,
             $storage,
             $mailer,
+            new NullLogger(),
             'admin@example.com',
         );
     }
