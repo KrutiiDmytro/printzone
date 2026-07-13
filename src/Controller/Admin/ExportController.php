@@ -54,7 +54,7 @@ final class ExportController extends AbstractController
             return $this->redirectToRoute('admin_export');
         }
 
-        $filters = array_filter($request->request->all('filters') ?? []);
+        $filters = array_filter($request->request->all('filters'));
 
         /** @var \App\User\Domain\Entity\User $user */
         $user = $this->getUser();
