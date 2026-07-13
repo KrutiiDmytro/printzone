@@ -16,6 +16,7 @@ use App\Formatter\XmlFormatter;
 use App\Message\ProcessExportMessage;
 use App\Repository\ExportJobRepository;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Component\Mime\Email;
@@ -32,6 +33,7 @@ final class ProcessExportHandler
         private readonly ExportExtractorInterface $userExtractor,
         private readonly StorageClient $storage,
         private readonly MailerInterface $mailer,
+        private readonly LoggerInterface $logger,
         private readonly string $adminEmail,
     ) {
     }
@@ -128,6 +130,16 @@ final class ProcessExportHandler
             ->subject($subject)
             ->html($html);
 
-        $this->mailer->send($email);
+        // The export file is already written + the job persisted; a notification
+        // failure (misconfigured mailer, transient SMTP/SES error) must never fail
+        // the job or trigger a retry. Best-effort: log and move on.
+        try {
+            $this->mailer->send($email);
+        } catch (\Throwable $e) {
+            $this->logger->error('Export notification email failed', [
+                'jobId' => $jobId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
