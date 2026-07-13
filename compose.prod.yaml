@@ -32,6 +32,8 @@ services:
       CART_SERVICE_URL: "http://cart-service"
       # storage-service owns the object backend (S3); AWS creds live there now.
       STORAGE_SERVICE_URL: "http://storage-service"
+      # export-service owns async report generation; admin proxies to it.
+      EXPORT_SERVICE_URL: "http://export-service"
       JWT_PASSPHRASE: ${JWT_PASSPHRASE}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}

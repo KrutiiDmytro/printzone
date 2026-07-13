@@ -407,6 +407,16 @@ build:storage-service:
   needs: []
   rules: *rules_mr_develop
 
+build:export-service:
+  stage: build
+  script:
+    - docker build -f services/export-service/Dockerfile
+      -t printzone/export-service:$CI_COMMIT_SHA
+      -t printzone/export-service:latest
+      services/export-service
+  needs: []
+  rules: *rules_mr_develop
+
 test:catalog-service:
   stage: test
   needs:
@@ -524,6 +534,21 @@ test:storage-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/storage-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:export-service:
+  stage: test
+  needs:
+    - build:export-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/export-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/export-service:latest
       sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
@@ -868,6 +893,63 @@ deploy:delivery-service:
   # shipment.* to advance the order lifecycle (SHIPPED/DELIVERED).
   needs:
     - test:delivery-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:export-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    ESVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast if the DB password is missing — otherwise export-service comes up
+    # unreachable and the admin export page could not queue or list jobs.
+    - |
+      if [ -z "$EXPORT_DB_PASSWORD" ]; then
+        echo "ERROR: EXPORT_DB_PASSWORD is not set. Aborting."; exit 1
+      fi
+    # export-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/export-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/export-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/export-service/" "$DEPLOY_DIR/services/export-service/"
+    - cd "$DEPLOY_DIR/services/export-service"
+    - echo "--- Starting db-export ---"
+    - $ESVC up -d db-export
+    - |
+      i=0
+      until $ESVC exec -T db-export pg_isready -U app -d export_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-export not ready"; $ESVC logs db-export --tail=20; exit 1; }
+        echo "Waiting for db-export ($i/30)..."; sleep 2
+      done
+    - $ESVC exec -T db-export psql -U app -d export_service -c "ALTER USER app WITH PASSWORD '${EXPORT_DB_PASSWORD}';"
+    - echo "--- Starting service + worker (pre-built image) ---"
+    - $ESVC up -d --no-build
+    - $ESVC exec -T export-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in esvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $ESVC exec -T export-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $ESVC exec -T export-service php bin/console doctrine:migrations:migrate --no-interaction
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $ESVC exec -T export-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: export-service health failed"; $ESVC logs export-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "export-service healthy"
+  needs:
+    - test:export-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'
 

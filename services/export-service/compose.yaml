@@ -1,0 +1,72 @@
+services:
+  db-export:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: export_service
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: changeme
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "export_service", "-U", "app"]
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - db_export_data:/var/lib/postgresql/data:rw
+
+  export-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/export-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8009:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - esvc_vendor:/app/vendor
+      - esvc_var:/app/var
+      # Shared RS256 keypair with the monolith → verifies inbound and SIGNS the
+      # outbound S2S tokens the extractors/storage client use.
+      - ../../config/jwt:/jwt:ro
+    depends_on:
+      db-export:
+        condition: service_healthy
+
+  # Consumes the internal async queue (Doctrine) → runs the export: extract from
+  # catalog/order/user, format, write to storage-service, email. Joins the
+  # monolith network to reach those services + the mailer by name.
+  export-worker:
+    image: printzone/export-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console messenger:consume async --time-limit=3600
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/app
+      - esvc_vendor:/app/vendor
+      - esvc_var:/app/var
+      - ../../config/jwt:/jwt:ro
+    networks:
+      - default
+      - monolith
+    depends_on:
+      db-export:
+        condition: service_healthy
+
+volumes:
+  db_export_data:
+  esvc_vendor:
+  esvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default

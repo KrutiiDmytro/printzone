@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Export\Client\ExportClient;
 use App\Export\Enum\ExportFormat;
 use App\Export\Enum\ExportType;
-use App\Export\Service\ExportService;
-use App\Repository\ExportJobRepository;
+use App\Export\ViewModel\ExportJobView;
 use App\Storage\FileStorageInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
@@ -20,8 +20,7 @@ use Symfony\Component\Uid\Uuid;
 final class ExportController extends AbstractController
 {
     public function __construct(
-        private readonly ExportService $exportService,
-        private readonly ExportJobRepository $exportJobRepository,
+        private readonly ExportClient $exportClient,
         private readonly FileStorageInterface $storage,
     ) {
     }
@@ -30,7 +29,7 @@ final class ExportController extends AbstractController
     public function index(): Response
     {
         return $this->render('admin/export/index.html.twig', [
-            'jobs' => $this->exportJobRepository->findRecent(),
+            'jobs' => array_map(ExportJobView::fromArray(...), $this->exportClient->listRecent()),
             'export_types' => ExportType::cases(),
             'export_formats' => ExportFormat::cases(),
             'order_statuses' => ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'],
@@ -46,11 +45,8 @@ final class ExportController extends AbstractController
             return $this->redirectToRoute('admin_export');
         }
 
-        $typeValue = $request->request->getString('type');
-        $formatValue = $request->request->getString('format');
-
-        $type = ExportType::tryFrom($typeValue);
-        $format = ExportFormat::tryFrom($formatValue);
+        $type = ExportType::tryFrom($request->request->getString('type'));
+        $format = ExportFormat::tryFrom($request->request->getString('format'));
 
         if (null === $type || null === $format) {
             $this->addFlash('danger', 'Невірний тип або формат експорту.');
@@ -58,18 +54,22 @@ final class ExportController extends AbstractController
             return $this->redirectToRoute('admin_export');
         }
 
-        $filters = array_filter($request->request->all('filters') ?? []);
+        $filters = array_filter($request->request->all('filters'));
 
         /** @var \App\User\Domain\Entity\User $user */
         $user = $this->getUser();
-        $job = $this->exportService->dispatch($type, $format, $user->getEmail(), $filters);
 
-        $this->addFlash('success', sprintf(
-            'Завдання #%s на експорт %s (%s) поставлено в чергу.',
-            $job->getId(),
-            $type->value,
-            $format->value
-        ));
+        try {
+            $job = $this->exportClient->create($type, $format, $user->getEmail(), $filters);
+            $this->addFlash('success', sprintf(
+                'Завдання #%s на експорт %s (%s) поставлено в чергу.',
+                $job['id'] ?? '?',
+                $type->value,
+                $format->value
+            ));
+        } catch (\Throwable) {
+            $this->addFlash('danger', 'Не вдалося поставити завдання в чергу. Спробуйте пізніше.');
+        }
 
         return $this->redirectToRoute('admin_export');
     }
@@ -80,22 +80,23 @@ final class ExportController extends AbstractController
         if (!Uuid::isValid($id)) {
             throw $this->createNotFoundException('Файл не знайдено.');
         }
-        $job = $this->exportJobRepository->find(Uuid::fromString($id));
-        if (null === $job || null === $job->getFilePath()) {
+        $job = $this->exportClient->get($id);
+        if (null === $job || empty($job['filePath'])) {
             throw $this->createNotFoundException('Файл не знайдено.');
         }
 
         /** @var \App\User\Domain\Entity\User $user */
         $user = $this->getUser();
-        if ($job->getRequestedBy() !== $user->getEmail()) {
+        if (($job['requestedBy'] ?? null) !== $user->getEmail()) {
             throw $this->createAccessDeniedException();
         }
 
-        $filePath = $job->getFilePath();
+        $filePath = (string) $job['filePath'];
         $content = $this->storage->read($filePath);
         $filename = basename($filePath);
-        $contentType = 'csv' === $job->getFormat()->value ? 'text/csv'
-            : ('json' === $job->getFormat()->value ? 'application/json' : 'application/xml');
+        $format = (string) ($job['format'] ?? '');
+        $contentType = 'csv' === $format ? 'text/csv'
+            : ('json' === $format ? 'application/json' : 'application/xml');
 
         $response = new Response($content);
         $response->headers->set('Content-Type', $contentType);
