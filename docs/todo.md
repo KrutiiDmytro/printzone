@@ -71,17 +71,18 @@ worker: consume export_jobs → extract → format → storage.write → mark �
 - [x] Тести написані: unit (формати/`UserExtractor` mock/`ExportJob`) + functional (create→201 Pending, 401/403, 404). ⏳ прогін у Docker.
 - Примітка: async-черга = Doctrine-транспорт на db-export (self-contained, без RabbitMQ); лист = Mailer у сервісі (без TwigBundle).
 
-### Крок 3 — Cutover моноліту
-- [ ] `ExportClient` (S2S) у моноліті; `ExportController`: submit→`create`, index→`listRecent`,
-      download→(рішення 1) job+authz+`StorageClient::read`.
-- [ ] Видалити з моноліту: `ExportJob`/repo/`ExportService`/`ProcessExportHandler`/`ProcessExportMessage`/
+### Крок 3 — Cutover моноліту ✅
+- [x] `ExportClient` (S2S) у моноліті; `ExportController`: submit→`create`, index→`listRecent` (map→`ExportJobView`),
+      download→(рішення A) job+authz+`StorageClient::read`.
+- [x] Видалити з моноліту: `ExportJob`/repo/`ExportService`/`ProcessExportHandler`/`ProcessExportMessage`/
       extractors/formatters/`CatalogProductClient`/`RequeueExportJobsCommand`; messenger-routing; doctrine Export mapping.
-- [ ] Дроп `exports`-схеми/таблиць (міграція). Оновити/перенести монолітні Export-тести.
+      **Лишено `Enum/`** (словник для admin-форми) + новий `Client/ExportClient`+`ViewModel/ExportJobView`.
+- [x] Дроп `exports`-схеми/таблиць (міграція `Version20260713130000`). Монолітні Export-тести перенесено/переписано (мок `ExportClient`).
 
-### Крок 4 — Prod overlay + CI
-- [ ] `compose.yaml`+`compose.prod.yaml` (сервіс+worker+db, за зразком cart/order); мережі default+monolith.
-- [ ] `.gitlab-ci.yml`: build/test/deploy `export-service` (**з міграціями**, за зразком cart/order — не notification).
-- [ ] CI-змінні: `EXPORT_DB_PASSWORD` (нова, як `CART_DB_PASSWORD`); URL-и catalog/order/user/storage + JWT — уже є.
+### Крок 4 — Prod overlay + CI ✅
+- [x] `compose.yaml`+`compose.prod.yaml` (сервіс+worker+db-export; мережі default+monolith) — у Кроці 1.
+- [x] `.gitlab-ci.yml`: build/test/deploy `export-service` (**з міграціями**, за зразком delivery/order).
+- [x] CI-змінна: `EXPORT_DB_PASSWORD` (нова) — треба додати в GitLab. URL-и catalog/order/user/storage + JWT + APP_SECRET + MAILER — уже є.
 
 ## Edge cases (rule 3)
 - `UserExtractor` без фільтрів/пагінації в API → тягне всіх, фільтрує локально; великий обсяг → прийнятно (як зараз findAll).
@@ -99,4 +100,20 @@ worker: consume export_jobs → extract → format → storage.write → mark �
 - Моноліт після cutover: admin index/submit/download через `ExportClient` — зелені.
 
 ## Огляд результатів
-_(заповнюється в міру виконання)_
+
+**Статус 2026-07-13: код-компліт на `feat/phase7-export-service` (3 коміти), локально верифіковано.**
+
+- **Крок 1+2** (`8ca164b`): каркас + S2S API + async-worker. Образ зібрано; `composer.lock` згенеровано;
+  міграція `export_jobs`+`messenger_messages` → `doctrine:schema:validate` у синхроні; **18 тестів зелені**;
+  live-smoke: health/live+ready 200, unauth POST 401.
+- **Крок 3** (`8d17cd4`): cutover моноліту. **ExportControllerTest 9 зелених**; `lint:container` чистий (dev+test);
+  жодних застарілих посилань на видалені класи.
+- **Крок 4** (цей коміт): 3 CI-джоби (build/test/deploy з міграціями); `.gitlab-ci.yml` — валідний YAML.
+
+**Рішення:** async = Doctrine-транспорт на db-export (без RabbitMQ); лист = Mailer у сервісі inline (без Twig);
+download = моноліт читає storage напряму; `UserExtractor`→`UserClient` (локальна фільтрація).
+
+**Лишилось (не в цій гілці):**
+1. Додати CI-змінну **`EXPORT_DB_PASSWORD`** у GitLab (алфа-цифрова — урок delivery про URL-спецсимволи).
+2. Створити MR у `develop`; після merge — авто-деплой (build/test/deploy).
+3. Post-deploy e2e на prod: admin `/admin/export` → submit кожного типу → job Completed + файл у S3 + лист у Mailpit.
