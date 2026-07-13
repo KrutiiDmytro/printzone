@@ -32,12 +32,6 @@ doctrine:
                 dir: '%kernel.project_dir%/src/User/Domain/Entity'
                 prefix: 'App\User\Domain\Entity'
                 alias: User
-            Export:
-                type: attribute
-                is_bundle: false
-                dir: '%kernel.project_dir%/src/Export/Domain/Entity'
-                prefix: 'App\Export\Domain\Entity'
-                alias: Export
             Messaging:
                 type: attribute
                 is_bundle: false

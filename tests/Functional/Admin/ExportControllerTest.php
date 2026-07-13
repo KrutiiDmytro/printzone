@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional\Admin;
 
+use App\Export\Client\ExportClient;
 use App\Tests\Functional\WebTestCase;
+use App\User\Domain\Entity\User;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 
 final class ExportControllerTest extends WebTestCase
 {
@@ -23,7 +26,6 @@ final class ExportControllerTest extends WebTestCase
 
     public function testRegularUserCannotAccessExportPage(): void
     {
-        // User з брандмауера 'main' не має сесії брандмауера 'admin'
         $client = $this->createUserClient();
         $client->request('GET', '/admin/export');
 
@@ -32,7 +34,9 @@ final class ExportControllerTest extends WebTestCase
 
     public function testAdminCanAccessExportPage(): void
     {
-        $client = $this->createAdminClient();
+        [$client, $mock] = $this->adminClientWithMock();
+        $mock->method('listRecent')->willReturn([]);
+
         $client->request('GET', '/admin/export');
 
         $this->assertResponseIsSuccessful();
@@ -44,7 +48,9 @@ final class ExportControllerTest extends WebTestCase
 
     public function testSubmitWithValidDataRedirectsWithSuccessFlash(): void
     {
-        $client = $this->createAdminClient();
+        [$client, $mock] = $this->adminClientWithMock();
+        $mock->method('listRecent')->willReturn([]);
+        $mock->expects(self::once())->method('create')->willReturn(['id' => 'e1f2c3d4-0000-4000-8000-000000000000']);
 
         $crawler = $client->request('GET', '/admin/export');
         $csrfToken = $crawler->filter('input[name="_token"]')->attr('value');
@@ -60,9 +66,31 @@ final class ExportControllerTest extends WebTestCase
         $this->assertSelectorExists('.alert-success');
     }
 
+    public function testSubmitWhenServiceFailsShowsDangerFlash(): void
+    {
+        [$client, $mock] = $this->adminClientWithMock();
+        $mock->method('listRecent')->willReturn([]);
+        $mock->method('create')->willThrowException(new \RuntimeException('down'));
+
+        $crawler = $client->request('GET', '/admin/export');
+        $csrfToken = $crawler->filter('input[name="_token"]')->attr('value');
+
+        $client->request('POST', '/admin/export', [
+            'type' => 'products',
+            'format' => 'csv',
+            '_token' => $csrfToken,
+        ]);
+
+        $this->assertResponseRedirects('/admin/export');
+        $client->followRedirect();
+        $this->assertSelectorExists('.alert-danger');
+    }
+
     public function testSubmitWithInvalidTypeShowsDangerFlash(): void
     {
-        $client = $this->createAdminClient();
+        [$client, $mock] = $this->adminClientWithMock();
+        $mock->method('listRecent')->willReturn([]);
+        $mock->expects(self::never())->method('create');
 
         $crawler = $client->request('GET', '/admin/export');
         $csrfToken = $crawler->filter('input[name="_token"]')->attr('value');
@@ -80,7 +108,8 @@ final class ExportControllerTest extends WebTestCase
 
     public function testSubmitWithInvalidCsrfTokenShowsDangerFlash(): void
     {
-        $client = $this->createAdminClient();
+        [$client, $mock] = $this->adminClientWithMock();
+        $mock->method('listRecent')->willReturn([]);
 
         $client->request('POST', '/admin/export', [
             'type' => 'products',
@@ -97,7 +126,7 @@ final class ExportControllerTest extends WebTestCase
 
     public function testDownloadNonExistentJobReturns404(): void
     {
-        $client = $this->createAdminClient();
+        [$client] = $this->adminClientWithMock();
         $client->request('GET', '/admin/export/download/999999');
 
         $this->assertResponseStatusCodeSame(404);
@@ -112,5 +141,26 @@ final class ExportControllerTest extends WebTestCase
         $client->request('GET', '/admin/export/download/1');
 
         $this->assertResponseRedirects('/admin/login');
+    }
+
+    /**
+     * @return array{0: KernelBrowser, 1: ExportClient&\PHPUnit\Framework\MockObject\MockObject}
+     */
+    private function adminClientWithMock(): array
+    {
+        $client = static::createClient();
+        $client->disableReboot();
+
+        $container = static::getContainer();
+        $mock = $this->createMock(ExportClient::class);
+        $container->set(ExportClient::class, $mock);
+
+        $this->createSchema();
+        $this->loadFixtures();
+
+        $admin = $container->get('doctrine')->getRepository(User::class)->findOneBy(['email' => 'admin@example.com']);
+        $client->loginUser($admin, 'admin');
+
+        return [$client, $mock];
     }
 }
