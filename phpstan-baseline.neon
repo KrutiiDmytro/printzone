@@ -205,12 +205,6 @@ parameters:
 			path: src/Service/CartService.php
 
 		-
-			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
-			identifier: arrayValues.list
-			count: 1
-			path: src/Storage/FlysystemFileStorage.php
-
-		-
 			message: '#^Method App\\Twig\\BrandExtension\:\:getBrandModels\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1

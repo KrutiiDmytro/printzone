@@ -1,0 +1,12 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Kernel.php'
+            # Object-storage backend is wired manually in storage.yaml (factory
+            # selects local/S3; scalars + FilesystemOperator aren't autowireable).
+            - '../src/Storage/'

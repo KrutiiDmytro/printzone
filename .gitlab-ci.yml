@@ -397,6 +397,16 @@ build:notification-service:
   needs: []
   rules: *rules_mr_develop
 
+build:storage-service:
+  stage: build
+  script:
+    - docker build -f services/storage-service/Dockerfile
+      -t printzone/storage-service:$CI_COMMIT_SHA
+      -t printzone/storage-service:latest
+      services/storage-service
+  needs: []
+  rules: *rules_mr_develop
+
 test:catalog-service:
   stage: test
   needs:
@@ -499,6 +509,21 @@ test:notification-service:
       -w /app
       -e COMPOSER_HOME=/composer-cache
       printzone/notification-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:storage-service:
+  stage: test
+  needs:
+    - build:storage-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/storage-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/storage-service:latest
       sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
   rules: *rules_mr_develop
 
@@ -883,5 +908,45 @@ deploy:notification-service:
       echo "notification-service healthy"
   needs:
     - test:notification-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:storage-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    SSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Stateless: no DB, no public port. Self-rsync the subtree first (services
+    # deploy before the monolith's rsync populates $DEPLOY_DIR/services/...; on the
+    # first deploy the directory does not exist yet). Idempotent — the monolith
+    # rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/storage-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/storage-service/" "$DEPLOY_DIR/services/storage-service/"
+    - cd "$DEPLOY_DIR/services/storage-service"
+    - echo "--- Starting service (pre-built image) ---"
+    - $SSVC up -d --no-build
+    - $SSVC exec -T storage-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in ssvc_var) so the container is warm
+    # before the health check; prod does not auto-rebuild a stale cache.
+    - $SSVC exec -T storage-service php bin/console cache:clear --env=prod
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $SSVC exec -T storage-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: storage-service health failed"; $SSVC logs storage-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "storage-service healthy"
+  needs:
+    - test:storage-service
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop"'

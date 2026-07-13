@@ -1,0 +1,34 @@
+services:
+  storage-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/storage-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8008:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - ssvc_vendor:/app/vendor
+      - ssvc_var:/app/var
+      # Monolith's RS256 keypair (read-only) → verify S2S tokens it signs.
+      - ../../config/jwt:/jwt:ro
+    # Joins the monolith network so the monolith (and, later, export-service) can
+    # resolve `storage-service` over the shared task-25_default network for S2S calls.
+    networks:
+      - default
+      - monolith
+
+volumes:
+  ssvc_vendor:
+  ssvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default
