@@ -19,4 +19,4 @@ services:
             $productExtractor: '@App\Extractor\ProductExtractor'
             $orderExtractor: '@App\Extractor\OrderExtractor'
             $userExtractor: '@App\Extractor\UserExtractor'
-            $adminEmail: '%env(ADMIN_EMAIL)%'
+            $mailerFrom: '%env(MAILER_FROM)%'

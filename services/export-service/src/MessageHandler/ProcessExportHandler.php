@@ -34,7 +34,7 @@ final class ProcessExportHandler
         private readonly StorageClient $storage,
         private readonly MailerInterface $mailer,
         private readonly LoggerInterface $logger,
-        private readonly string $adminEmail,
+        private readonly string $mailerFrom,
     ) {
     }
 
@@ -125,7 +125,7 @@ final class ProcessExportHandler
         );
 
         $email = (new Email())
-            ->from($this->adminEmail)
+            ->from($this->mailerFrom)
             ->to($to)
             ->subject($subject)
             ->html($html);
