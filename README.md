@@ -1,94 +1,80 @@
-# PrintZone — інтернет-магазин витратних матеріалів для друку (Task-24)
+# PrintZone — інтернет-магазин витратних матеріалів для друку (Task-25)
 
-Symfony-додаток електронної комерції (друкарський магазин: картриджі, тонери, drum units, стрічки) з чистою архітектурою, принципами SOLID та сучасними найкращими практиками.
-Включає **REST API** на базі API Platform із захистом через **JWT-токени**, а також **OAuth 2.0 аутентифікацію** через Google та GitHub.
+Symfony-додаток електронної комерції (друкарський магазин: картриджі, тонери, drum units, стрічки) з чистою архітектурою, принципами SOLID та Domain-Driven Design.
+Включає **REST API** на базі API Platform із захистом через **JWT-токени**, **OAuth 2.0** (Google, GitHub) та **адмін-панель** EasyAdmin.
 
-**Task 24** додає **аналіз та планування мікросервісної архітектури**: визначення меж сервісів за DDD, проектування API контрактів, схем даних, патернів комунікації та стратегії міграції від монолита до мікросервісів.
+**Task 25** — **виконання** мікросервісної архітектури, спроектованої в Task 24: моноліт розділено на незалежні сервіси за межами DDD, кожен зі своєю базою даних, середовищами (dev / test / prod) та власним CI/CD-пайплайном.
+
+> Task 24 (`docs/microservices-architecture.md`) — це *аналіз і планування*. Task 25 — це *реалізація й деплой*: сервіси нижче реально побудовані, протестовані й працюють на проді.
 
 ---
 
-## Task 24: Мікросервісна архітектура
+## Task 25: Реалізована мікросервісна архітектура
 
-### Що зроблено
+Застосовано патерн **Strangler Fig** — моноліт поступово «обрізали», виносячи домен за доменом у окремий сервіс, доки кожен обмежений контекст (bounded context) не отримав власний код, БД і пайплайн. Моноліт лишився тонким web/admin-фронтом, що спілкується із сервісами.
 
-Проведено повний аналіз поточного монолита та спроектовано цільову мікросервісну архітектуру.
+### Сервіси
 
-### Ідентифіковані мікросервіси
+| Сервіс | Порт (dev) | Відповідальність | Власна БД | Стан |
+|---|---|---|---|---|
+| **User Service** | 8001 | Користувачі, автентифікація, JWT, OAuth | `db-user` | ✅ prod |
+| **Catalog Service** | 8002 | Продукти, категорії, бренди, атрибути | `db-catalog` | ✅ prod |
+| **Order Service** | 8003 | Замовлення, lifecycle статусів, checkout | `db-order` | ✅ prod |
+| **Cart Service** | 8004 | Кошик авторизованих користувачів | `db-cart` | ✅ prod |
+| **Payment Service** | 8005 | Оплата, webhook Stripe, події оплати | `db-payment` | ✅ prod |
+| **Delivery Service** | 8006 | Відправлення, event-sourced трекінг (Нова Пошта / fake) | `db-delivery` | ✅ prod |
+| **Notification Service** | 8007 | Email-сповіщення (stateless consumer) | — | ✅ prod¹ |
+| **Storage Service** | 8008 | Файли S3 / local (stateless об'єктний бекенд) | — | ✅ prod |
+| **Export Service** | 8009 | Async CSV/JSON/XML export jobs | `db-export` | ✅ prod |
+| **Monolith (web/admin)** | 8080 | Тонкий фронт: сторінки магазину, EasyAdmin, OAuth, гостьовий кошик | `database` | ✅ prod |
 
-| Сервіс | Відповідальності | БД |
-|---|---|---|
-| **User Service** | Реєстрація, автентифікація, JWT, OAuth | `db-users` |
-| **Catalog Service** | Продукти, категорії, атрибути, зображення | `db-catalog` |
-| **Cart Service** | Кошик (гість + авторизований), міграція | `db-cart` |
-| **Order Service** | Замовлення, lifecycle статусів, Checkout Saga | `db-orders` |
-| **Payment Service** | Оплата, webhook Stripe/LiqPay, повернення | `db-payments` |
-| **Delivery Service** | Відправлення, трекінг, Нова Пошта/DHL | `db-delivery` |
-| **Notification Service** | Email, SMS, push-сповіщення (stateless) | — |
-| **Export Service** | Async CSV/JSON/XML export jobs | `db-exports` |
-| **Storage Service** | Файли S3/local (stateless proxy) | — |
+> ¹ Notification Service задеплоєний і працює; доставка листів реальним покупцям потребує виводу Amazon SES із sandbox (production access). Деталі — див. нижче «Обмеження».
 
-> **User, Catalog, Cart, Order, Payment, Export, Storage** витягуються з наявних модулів коду. **Delivery** і **Notification** — нові (greenfield) сервіси: у поточному моноліті немає окремих доменів доставки чи сповіщень (сповіщення зараз надсилаються інлайн через Symfony Mailer).
+**User, Catalog, Cart, Order, Payment, Export, Storage** витягнуто з наявних модулів моноліту. **Delivery** і **Notification** — greenfield-сервіси (у моноліті не було окремих доменів доставки/сповіщень).
 
-### Застосовані патерни
+### Комунікація між сервісами
 
-| Патерн | Де застосовується |
-|---|---|
-| **Strangler Fig** | Поступова міграція монолита через API Gateway |
-| **Database per Service** | Окрема PostgreSQL на кожен сервіс |
-| **Choreography Saga** | Checkout: резервування → оплата → доставка |
-| **Outbox Pattern** | Гарантована доставка подій з DB транзакцією |
-| **CQRS** | Export Service читає через read-only API |
-| **BFF (Backend for Frontend)** | Окремі gateway для Mobile, Desktop, Public API |
-| **Circuit Breaker** | Захист від каскадних відмов між сервісами |
-| **Event Sourcing** | Immutable лог подій відстеження доставки |
-| **Idempotency Key** | Захист від дублювання webhook від Stripe/LiqPay |
-
-### BFF шар
+- **Синхронна (HTTP + S2S JWT):** сервіс підписує service-to-service JWT спільним ключем і викликає REST-ендпойнти іншого (напр. Export → Catalog/Order/User/Storage). Незмінний seam `FileStorageInterface` дозволив підмінити локальне сховище на Storage Service без правок споживачів.
+- **Асинхронна (RabbitMQ):** доменні події публікуються в topic exchanges (`order.*`, `payment.*`, `shipment.*`) через **Outbox Pattern** (гарантована доставка в межах DB-транзакції). Приклад ланцюжка checkout (**Choreography Saga**):
 
 ```
-Mobile App    →  BFF Mobile   (порт 8010)  ─┐
-Desktop Web   →  BFF Desktop  (порт 8011)  ─┼──→  Мікросервіси
-Public API    →  BFF Public   (порт 8012)  ─┘
+OrderPaid → Payment Service (webhook Stripe) 
+          → Order Service (PAID) 
+          → Delivery Service (Shipment + tracking) 
+          → Notification Service (email-квитанція)
 ```
 
-### Черга повідомлень
+### Застосовані патерни (реалізовані)
 
-**RabbitMQ** (замінює поточний `doctrine://` transport Symfony Messenger):
-- Topic exchanges на домен: `user.events`, `order.events`, `payment.events` тощо
-- 24 типи подій між сервісами (повний список у каталозі подій)
-
-### Документація
-
-| Файл | Зміст |
+| Патерн | Де |
 |---|---|
-| [`docs/microservices-architecture.md`](docs/microservices-architecture.md) | Повна архітектурна документація: межі сервісів, API endpoints, схеми БД, комунікація, безпека, стратегія міграції |
-| [`docs/event-catalog.md`](docs/event-catalog.md) | Каталог 24 асинхронних подій зі схемами payload та sequence diagrams |
+| **Strangler Fig** | Поетапне винесення доменів з моноліту |
+| **Database per Service** | Окрема PostgreSQL на кожен stateful-сервіс |
+| **Outbox Pattern** | Публікація подій разом із DB-транзакцією (delivery/order) |
+| **Choreography Saga** | Checkout: оплата → замовлення → доставка → сповіщення |
+| **Event Sourcing** | Immutable `tracking_events` у Delivery Service |
+| **Idempotency** | Захист від повторних webhook/подій (at-least-once) |
+| **CQRS-стиль** | Export читає дані через read-only API інших сервісів |
+
+> **BFF-шар** (Backend-for-Frontend для Mobile/Desktop/Public) був частиною *плану* Task 24, але в Task 25 **не реалізований** — фронт обслуговує моноліт.
 
 ---
 
-## Task 22–23: Файлове сховище (AWS S3)
+## Домен-керована розробка (DDD)
 
-**Task 22** додає **абстракцію файлового сховища** (локальна ФС або **Amazon S3**) через **AWS SDK для PHP** та **Flysystem**.
+Кожен сервіс володіє власним обмеженим контекстом; крос-сервісних FK немає. Типова структура сервісу:
 
-- Інтерфейс `FileStorageInterface`: `write`, `read`, `delete`, `exists`, `listKeys`, `publicUrl`
-- Фабрика `FileStorageFactory` перемикається через `STORAGE_TYPE=local|s3`
-- Presigned PUT URL для прямого завантаження в S3 з браузера
-- Детальна документація: [`docs/STORAGE_SETUP.md`](docs/STORAGE_SETUP.md)
+```
+services/<name>/src/
+├── Entity/                Доменні сутності (Doctrine)
+├── Repository/            Репозиторії
+├── Controller/            HTTP-ендпойнти + health
+├── MessageHandler/        Обробники подій/команд (Symfony Messenger)
+├── Messaging/Domain/      Integration events
+└── Service|Client/        Доменні сервіси та S2S-клієнти
+```
 
----
-
-## Функціонал
-
-- **Каталог товарів**: перегляд витратних матеріалів для друку за категоріями (inkjet / laser / dot-matrix) з атрибутами
-- **Файлове сховище**: локальне або S3 для зображень товарів
-- **Кошик покупок**: гібридний кошик (сесія для гостей, БД для авторизованих)
-- **Аутентифікація**: JWT-токени для API, реєстрація та вхід для веб-інтерфейсу
-- **OAuth 2.0**: вхід через Google та GitHub акаунти
-- **REST API**: повноцінний CRUD для товарів, категорій, замовлень, користувачів
-- **Документація API**: Swagger UI (OpenAPI 3.0) за адресою `/api/docs`
-- **Адмін-панель**: EasyAdmin для керування контентом та експорту даних
-- **Async Export**: експорт даних у CSV/JSON/XML через чергу повідомлень
-- **Чиста архітектура**: Domain-Driven Design з окремими доменами
+Моноліт зберігає повну модульну DDD-розкладку (`src/<Module>/Domain/Entity/`).
 
 ---
 
@@ -99,12 +85,12 @@ Public API    →  BFF Public   (порт 8012)  ─┘
 
 ---
 
-## Встановлення та запуск
+## Встановлення та запуск (моноліт)
 
 ### 1. Клонувати репозиторій
 ```bash
 git clone <repository-url>
-cd task-24
+cd task-25
 ```
 
 ### 2. Налаштувати змінні середовища
@@ -112,65 +98,104 @@ cd task-24
 cp .env .env.local
 ```
 
-Відредагуйте `.env.local`:
+Відредагуйте `.env.local` (OAuth, за потреби — S3):
 
 ```env
-# Google OAuth
-GOOGLE_CLIENT_ID=ваш_google_client_id
-GOOGLE_CLIENT_SECRET=ваш_google_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:8080/auth/google/callback
+# Google / GitHub OAuth
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
 
-# GitHub OAuth
-GITHUB_CLIENT_ID=ваш_github_client_id
-GITHUB_CLIENT_SECRET=ваш_github_client_secret
-GITHUB_REDIRECT_URI=http://localhost:8080/auth/github/callback
+# Сховище (local | s3)
+STORAGE_TYPE=local
+# для S3:
+# STORAGE_TYPE=s3
+# AWS_ACCESS_KEY_ID=...
+# AWS_SECRET_ACCESS_KEY=...
+# AWS_DEFAULT_REGION=eu-north-1
+# AWS_S3_BUCKET=...
 ```
 
-Для **S3** додайте:
-
-```env
-STORAGE_TYPE=s3
-AWS_ACCESS_KEY_ID=your-key-id
-AWS_SECRET_ACCESS_KEY=your-secret
-AWS_DEFAULT_REGION=eu-north-1
-AWS_S3_BUCKET=your-bucket-name
-```
-
-Для **локального** сховища: `STORAGE_TYPE=local`
-
-### 3. Зібрати образи та запустити контейнери
-
+### 3. Зібрати та запустити
 ```bash
 docker compose build php
 docker compose up -d
 docker compose exec php composer install
-```
-
-### 4. Налаштувати базу даних та ключі JWT
-
-```bash
 docker compose exec php php bin/console doctrine:migrations:migrate --no-interaction
 docker compose exec php php bin/console doctrine:fixtures:load --no-interaction
 docker compose exec php php bin/console lexik:jwt:generate-keypair
 ```
 
-Сайт доступний за адресою: [http://localhost:8080](http://localhost:8080)
+Сайт: [http://localhost:8080](http://localhost:8080)
+
+### 4. Запуск окремого сервісу
+
+Кожен сервіс самодостатній — має власний `compose.yaml`, `Dockerfile` та `.env`:
+
+```bash
+cd services/catalog-service
+docker compose up -d
+docker compose exec php composer install
+docker compose exec php php bin/console doctrine:migrations:migrate --no-interaction
+```
+
+Сервіси приєднуються до спільної мережі `task-25_default` і резолвляться за іменем (`http://catalog-service`).
+
+---
+
+## Середовища (ізоляція dev / test / prod)
+
+Кожен сервіс має три ізольовані конфігурації:
+
+| Середовище | Файл | Особливості |
+|---|---|---|
+| **dev** | `compose.yaml` + `.env` | Локальний Docker, Mailpit для пошти, порт 800x |
+| **test** | `.env.test` | In-memory SQLite, ізольовані фікстури |
+| **prod** | `compose.prod.yaml` | Оверлей: prod-образ, секрети з CI, без публічних портів |
+
+---
+
+## Тестування
+
+```bash
+# Моноліт
+docker compose exec php php bin/phpunit
+docker compose exec php php bin/phpunit --testsuite Unit
+docker compose exec php php bin/phpunit --testsuite Functional
+
+# Окремий сервіс (binary — vendor/bin/phpunit)
+cd services/order-service
+docker compose exec php vendor/bin/phpunit
+```
+
+Інтеграція перевіряється e2e: checkout → оплата (Stripe) → PAID → відправлення → DELIVERED, а також export → генерація файлу → email.
+
+---
+
+## Деплой (незалежний CI/CD)
+
+GitLab CI: кожен сервіс має власні `build` / `test` / `deploy:<service>` джоби — сервіси деплояться **незалежно** один від одного:
+
+```
+deploy:user-service      deploy:catalog-service   deploy:order-service
+deploy:cart-service      deploy:payment-service   deploy:delivery-service
+deploy:notification-service   deploy:storage-service   deploy:export-service
+```
+
+Прод — один DigitalOcean droplet; сервіси живуть під деревом моноліту (`/var/www/app/services/<name>`), спільна мережа `task-25_default`, спільний JWT-keypair. Merge у `develop` → пайплайн збирає, тестує й деплоїть змінені сервіси.
 
 ---
 
 ## Аутентифікація
 
 ### JWT API
-
 ```bash
-# Отримати токен
 curl -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin@example.com", "password": "admin123"}'
 
-# Використати токен
-curl http://localhost:8080/api/products \
-  -H "Authorization: Bearer <ваш_токен>"
+curl http://localhost:8080/api/products -H "Authorization: Bearer <токен>"
 ```
 
 ### Тестові облікові дані
@@ -181,11 +206,7 @@ curl http://localhost:8080/api/products \
 | Користувач | `user@example.com` | `user123` |
 
 ### OAuth 2.0
-
-- **Google**: [console.cloud.google.com](https://console.cloud.google.com) → Credentials → OAuth 2.0 Client ID
-- **GitHub**: [github.com/settings/developers](https://github.com/settings/developers) → New OAuth App
-
-Callback URL для обох: `http://localhost:8080/auth/{google|github}/callback`
+Callback: `http://localhost:8080/auth/{google|github}/callback`
 
 ---
 
@@ -193,74 +214,60 @@ Callback URL для обох: `http://localhost:8080/auth/{google|github}/callba
 
 Swagger UI: [http://localhost:8080/api/docs](http://localhost:8080/api/docs)
 
-| Ресурс | Endpoint | Методи |
-|---|---|---|
-| Категорії | `/api/categories` | GET, POST, PATCH, DELETE |
-| Товари | `/api/products` | GET, POST, PATCH, DELETE |
-| Атрибути товарів | `/api/product_attributes` | GET, POST, PATCH, DELETE |
-| Замовлення | `/api/orders` | GET, POST, PATCH, DELETE |
-| Елементи замовлень | `/api/order_items` | GET, POST, PATCH, DELETE |
-| Користувачі | `/api/users` | GET, POST |
-
-Підтримувані формати: `application/json`, `application/ld+json`, `application/xml`
+Формати: `application/json`, `application/ld+json`, `application/xml`
 
 ---
 
-## Структура проекту
+## Структура репозиторію
 
 ```
-src/
-├── Catalog/Domain/Entity/    Продукти, категорії, атрибути
-├── Cart/Domain/Entity/       Кошик та елементи кошика
-├── Order/Domain/Entity/      Замовлення та елементи замовлень
-├── User/Domain/Entity/       Користувачі
-├── Export/                   Async export jobs (Saga, handlers, formatters)
-├── Storage/                  Абстракція файлового сховища (S3 / local)
-├── Controller/               HTTP контролери (веб + адмін + OAuth)
-├── Repository/               Doctrine репозиторії
-├── Service/                  Бізнес-логіка (CartService, ProductImageService)
-└── EventListener/            LoginListener (міграція кошика при вході)
+src/                       Моноліт (web/admin фронт, тонкі клієнти до сервісів)
+├── <Module>/Domain/Entity/   DDD-модулі
+├── Controller/               Веб, адмін, OAuth
+├── Export/Client, Storage/Client   S2S-клієнти до сервісів
+└── ...
+
+services/                  Мікросервіси (кожен — самодостатній Symfony-застосунок)
+├── user-service/          :8001
+├── catalog-service/       :8002
+├── order-service/         :8003
+├── cart-service/          :8004
+├── payment-service/       :8005
+├── delivery-service/      :8006
+├── notification-service/  :8007
+├── storage-service/       :8008
+└── export-service/        :8009
 
 docs/
-├── microservices-architecture.md   Мікросервісна архітектура (Task 24)
-├── event-catalog.md                Каталог подій RabbitMQ (Task 24)
-└── STORAGE_SETUP.md                Налаштування S3 / local storage (Task 22)
+├── microservices-architecture.md   Проєктування архітектури (Task 24)
+├── microservices-analysis.md       Аналіз меж сервісів
+├── event-catalog.md                Каталог подій RabbitMQ
+├── STORAGE_SETUP.md                Налаштування S3 / local
+└── todo.md                         План і хід робіт
 ```
 
 ---
 
-## Тестування
+## Обмеження / технічний борг
 
-```bash
-# Всі тести
-docker compose exec php php bin/phpunit
-
-# За суітами
-docker compose exec php php bin/phpunit --testsuite Unit
-docker compose exec php php bin/phpunit --testsuite Functional
-
-# Окремі директорії
-docker compose exec php php bin/phpunit tests/Unit/Storage/
-docker compose exec php php bin/phpunit tests/Functional/Admin/
-
-# Діагностика S3
-docker compose exec php php bin/console app:verify-storage
-```
+- **Amazon SES sandbox** — export-листи адміну доходять (адреса верифікована); квитанції покупцям із Notification Service потребують SES production access (довільні адреси в sandbox відхиляються).
+- **Notification Service** потребує додавання `symfony/amazon-mailer` + verified-domain sender + best-effort надсилання перед виходом із sandbox (див. `docs/todo.md`).
+- **RabbitMQ teardown** — моноліт досі тримає catch-all `events_all` як log-only observer (свідоме рішення, щоб не осиротити prod-чергу).
 
 ---
 
-## Використані пакети
+## Технологічний стек
 
 | Пакет | Призначення |
 |---|---|
 | `symfony/framework-bundle` ^7.4 | Основний фреймворк |
-| `api-platform/core` ^4.2 | REST API (OpenAPI 3.0) |
-| `easycorp/easyadmin-bundle` ^4.27 | Адмін-панель |
-| `lexik/jwt-authentication-bundle` | JWT автентифікація |
-| `doctrine/orm` ^3.6 | ORM |
-| `league/oauth2-google` ^4.1 | Google OAuth 2.0 |
-| `league/oauth2-github` ^3.1 | GitHub OAuth 2.0 |
-| `aws/aws-sdk-php` ^3.0 | AWS SDK (S3, presigned URL) |
-| `league/flysystem` 3.x | Абстракція файлової системи |
-| `league/flysystem-aws-s3-v3` 3.x | Flysystem адаптер для S3 |
-| `symfony/messenger` | Async черга повідомлень |
+| `api-platform/core` ^4.x | REST API (OpenAPI 3.0) |
+| `easycorp/easyadmin-bundle` ^4.x | Адмін-панель |
+| `lexik/jwt-authentication-bundle` | JWT (API + S2S) |
+| `doctrine/orm` ^3.x | ORM, database-per-service |
+| `symfony/messenger` | Async черга (RabbitMQ / doctrine transport) |
+| `league/oauth2-google`, `league/oauth2-github` | OAuth 2.0 |
+| `aws/aws-sdk-php` ^3.x + `league/flysystem` | S3 / local сховище, presigned URL |
+| `symfony/amazon-mailer` | SES-доставка email (export-service) |
+
+**Інфраструктура:** PHP 8.2+, PostgreSQL 16, RabbitMQ, Docker Compose, GitLab CI/CD, DigitalOcean.
