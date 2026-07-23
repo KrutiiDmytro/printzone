@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PrintZone — Service API Specs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    body { margin: 0; background: #fafafa; }
+    .topbar { background: #1b1b2f; color: #fff; padding: 12px 20px; font-family: sans-serif; }
+    .topbar h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    .topbar p { margin: 4px 0 0; font-size: 12px; opacity: .7; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>PrintZone — Core Service API Specifications</h1>
+    <p>Use the dropdown (top-right) to switch between User, Catalog, Order and Cart services.</p>
+  </div>
+  <div id="swagger-ui"></div>
+
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js" crossorigin></script>
+  <script>
+    // Relative to this page when served from the repo root (e.g. /docs/openapi/index.html).
+    window.ui = SwaggerUIBundle({
+      urls: [
+        { name: "User Service (:8001)",    url: "../../services/user-service/openapi.yaml" },
+        { name: "Catalog Service (:8002)", url: "../../services/catalog-service/openapi.yaml" },
+        { name: "Order Service (:8003)",   url: "../../services/order-service/openapi.yaml" },
+        { name: "Cart Service (:8004)",    url: "../../services/cart-service/openapi.yaml" },
+      ],
+      dom_id: "#swagger-ui",
+      deepLinking: true,
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: "StandaloneLayout",
+    });
+  </script>
+</body>
+</html>

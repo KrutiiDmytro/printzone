@@ -1,119 +1,50 @@
-# Фаза 7 (крок 3) — Export Service
+# OpenAPI-специфікації для 4 ключових сервісів
 
-> Активний робочий план. Попередні плани фаз (Storage — MR !32; Notification та ін.) — в git-історії.
+> Активний робочий план. Попередні плани фаз (Export — Phase 7; Storage — MR !32; Notification та ін.) — в git-історії.
 
 ## Мета
 
-Виокремити **Export Service** (`:8009`) — асинхронний сервіс генерації звітів (CSV/JSON/XML)
-по продуктах/замовленнях/користувачах. Останнє винесення Phase 7. Власна БД (`export_jobs`),
-власний worker; дані тягне по HTTP з catalog/order/user, результат пише в **storage-service**
-(вже винесений), лист про завершення шле сам (Mailer).
+Закрити прогалину SOA-документації: додати **машиночитані OpenAPI-контракти** для 4 ключових
+сервісів. Декомпозиція вже виконана й задеплоєна, уся дизайн-документація існує
+(`microservices-architecture.md`, `-analysis.md`, `event-catalog.md`), але окремі мікросервіси
+працюють на звичайних Symfony-контролерах **без OpenAPI**. Моноліт генерує OpenAPI в runtime
+через API Platform — сервіси ні.
 
-## Що вже є (заземлення)
+## Рішення
 
-Модуль `src/Export/` уже майже сервіс-орієнтований:
+- **Обсяг:** User (:8001), Catalog (:8002), Order (:8003), Cart (:8004) — ядро e-commerce
+  («2-4 key services» з формулювання мети).
+- **Підхід:** вручну написані статичні `openapi.yaml` (OpenAPI 3.1.0) у кожному сервісі.
+  БЕЗ нових залежностей, БЕЗ змін у контролерах/конфігах.
+- **Перегляд:** Swagger UI з CDN у `docs/openapi/index.html`.
+- **Гілка:** `docs/openapi-specs` від `origin/develop`.
 
-| Компонент | Джерело даних | Готовність |
-|---|---|---|
-| `ProductExtractor` | `CatalogProductClient` → catalog-service `/api/products` (пагінація) | ✅ HTTP |
-| `OrderExtractor` | `OrderClient` → order-service `list()` | ✅ HTTP |
-| `UserExtractor` | **`EntityManager` → БД моноліту** (`User`) | ⚠️ треба на HTTP |
-| результат (`ProcessExportHandler`) | `FileStorageInterface` → **storage-service** | ✅ HTTP (щойно) |
-| лист про завершення | `Mailer` (прямо) | self-contained |
+## Чекліст
 
-- `ExportJob` (UUID, `exports`-схема): type/format/status/filePath/filters/requestedBy/timestamps.
-- `ExportService::dispatch` — persist job + `ProcessExportMessage` на async-транспорт.
-- `RequeueExportJobsCommand` (`app:export:requeue-pending`) — реквеню застряглих pending.
-- Admin UI: `ExportController` (index/submit/download) + `templates/admin/export/*`.
-- user-service `GET /api/users` (ROLE_ADMIN) → `{id,email,fullName,roles}` для ВСІХ (без фільтрів/пагінації).
+- [x] Крок 0: гілка `docs/openapi-specs` від `origin/develop` (стороння зміна `config/reference.php` не чіпається)
+- [x] `services/user-service/openapi.yaml` (auth, users, health)
+- [x] `services/catalog-service/openapi.yaml` (products, categories, brands, health)
+- [x] `services/order-service/openapi.yaml` (orders, checkout, health)
+- [x] `services/cart-service/openapi.yaml` (cart, health)
+- [x] `docs/openapi/index.html` — Swagger UI (перемикач 4 спек)
+- [x] `docs/openapi/README.md` — інструкція перегляду + валідації
+- [x] Верифікація: `redocly lint` усіх 4 → 0 errors
+- [x] Звірка `#[Route]` ↔ операції по кожному контролеру
+- [ ] (Опційно) посилання на спеки в кореневому `README.md`
+- [ ] Комміт лише нових файлів (не `-A` — виключити `config/reference.php`)
 
-## Ключові рішення
+## Review (результати)
 
-| Питання | Рішення |
-|---|---|
-| База даних | **Власна** (`db-export`, database-per-service) — на відміну від stateless Storage/Notification. Має міграції. |
-| Порт | **:8009** (після storage :8008). |
-| `UserExtractor` | Переписати на **`UserClient` → user-service `/api/users`** (S2S токен з `ROLE_ADMIN`), фільтрація email/role **локально** (API не фільтрує). |
-| Клієнти сервісу | `CatalogProductClient`, `OrderClient`, новий `UserClient`, `StorageClient` — усі S2S JWT (сервіс **підписує**, треба `JWT_PASSPHRASE`+приватний ключ). |
-| Тригер експорту | Моноліт-admin → **`ExportClient`** → export-service `POST /api/exports`. Admin UI лишається в моноліті (проксі). |
-| Лист про завершення | **Mailer у самому сервісі** (self-contained, як зараз); event→notification — окремо/пізніше. |
-| Стара історія job'ів | **Не мігруємо** (транзієнтна історія експортів); монолітні `export_jobs` дропаємо після cutover. |
-
-### Рішення, які треба підтвердити
-1. **Завантаження файлу:** (A) моноліт читає файл прямо зі storage-service власним `StorageClient` після
-   authz по `requestedBy` — **менше API, natural authz** *(рекоменд.)*; чи (B) export-service віддає
-   `GET /api/exports/{id}/download`, моноліт проксіює.
-2. **Лист:** Mailer у сервісі *(рекоменд.)* чи публікація `ExportCompleted`→notification-service.
-
-## Контракт сервісу
-
-```
-POST /api/exports              → створити+dispatch job {type,format,requestedBy,filters} → {id,status,...}
-GET  /api/exports              → останні job'и (для admin index)
-GET  /api/exports/{id}         → статус job'а
-GET  /api/exports/{id}/download → (лише якщо рішення 1B) стрім результату
-GET  /health/live | /health/ready → ready = БД + (опц.) storage-service
-worker: consume export_jobs → extract → format → storage.write → mark → email
-```
-
-## Кроки
-
-### Крок 1 — Каркас + БД + health
-- [x] `services/export-service/` (FrankenPHP, :8009), `db-export`, doctrine+migrations+lexik+security+mailer+messenger+http-client.
-- [x] Перенести `ExportJob`+`ExportJobRepository`+enums; міграція `export_jobs` (написана вручну — звірити `schema:validate`); `composer.lock` — ⏳ потребує Docker.
-- [x] `/health/live`; `/health/ready` (перевірка БД). Тестовий keypair `config/jwt-test`; `/jwt` mount у dev.
-
-### Крок 2 — API + worker + клієнти + S2S
-- [x] `ExportController` (`POST/GET /api/exports` + `GET /api/exports/{id}`) + `ExportService` (persist+dispatch).
-- [x] Перенести формати (CSV/JSON/XML) + екстрактори; `UserExtractor` → `UserClient` (user-service, ROLE_ADMIN, локальна фільтрація).
-- [x] Перенести `CatalogProductClient`+`OrderClient`+`StorageClient`(write); worker `ProcessExportHandler` (extract→format→storage.write→mark→email inline через `Email::html()`, ідемпотентність).
-- [x] `RequeueExportJobsCommand`. `security.yaml`: `^/api/exports`→`ROLE_EXPORT_ADMIN`; health public.
-- [x] Тести написані: unit (формати/`UserExtractor` mock/`ExportJob`) + functional (create→201 Pending, 401/403, 404). ⏳ прогін у Docker.
-- Примітка: async-черга = Doctrine-транспорт на db-export (self-contained, без RabbitMQ); лист = Mailer у сервісі (без TwigBundle).
-
-### Крок 3 — Cutover моноліту ✅
-- [x] `ExportClient` (S2S) у моноліті; `ExportController`: submit→`create`, index→`listRecent` (map→`ExportJobView`),
-      download→(рішення A) job+authz+`StorageClient::read`.
-- [x] Видалити з моноліту: `ExportJob`/repo/`ExportService`/`ProcessExportHandler`/`ProcessExportMessage`/
-      extractors/formatters/`CatalogProductClient`/`RequeueExportJobsCommand`; messenger-routing; doctrine Export mapping.
-      **Лишено `Enum/`** (словник для admin-форми) + новий `Client/ExportClient`+`ViewModel/ExportJobView`.
-- [x] Дроп `exports`-схеми/таблиць (міграція `Version20260713130000`). Монолітні Export-тести перенесено/переписано (мок `ExportClient`).
-
-### Крок 4 — Prod overlay + CI ✅
-- [x] `compose.yaml`+`compose.prod.yaml` (сервіс+worker+db-export; мережі default+monolith) — у Кроці 1.
-- [x] `.gitlab-ci.yml`: build/test/deploy `export-service` (**з міграціями**, за зразком delivery/order).
-- [x] CI-змінна: `EXPORT_DB_PASSWORD` (нова) — треба додати в GitLab. URL-и catalog/order/user/storage + JWT + APP_SECRET + MAILER — уже є.
-
-## Edge cases (rule 3)
-- `UserExtractor` без фільтрів/пагінації в API → тягне всіх, фільтрує локально; великий обсяг → прийнятно (як зараз findAll).
-- Extractor-клієнт лежить (catalog/order/user down) → job → Failed з повідомленням (як зараз try/catch у handler).
-- storage-service лежить при write → job Failed; retry Messenger.
-- Дублікат обробки (at-least-once) → job уже Completed → ідемпотентно пропустити (перевірка статусу).
-- Download неіснуючого/чужого job'а → 404/403 (authz по `requestedBy`).
-
-## Тест-кейси (rule 3)
-- Health: live=200; ready=200 при доступній БД; 503 коли БД впала.
-- `POST /api/exports` → job Pending + повідомлення в черзі; 401 без токена; 403 без `ROLE_EXPORT_ADMIN`.
-- Worker: кожен `type` → правильний екстрактор → форматер → `storage.write` виклик → job Completed + лист.
-- `UserExtractor` з фільтром email/role → локальна фільтрація повертає підмножину.
-- Extractor кидає → job Failed + errorMessage + лист про помилку.
-- Моноліт після cutover: admin index/submit/download через `ExportClient` — зелені.
-
-## Огляд результатів
-
-**Статус 2026-07-13: код-компліт на `feat/phase7-export-service` (3 коміти), локально верифіковано.**
-
-- **Крок 1+2** (`8ca164b`): каркас + S2S API + async-worker. Образ зібрано; `composer.lock` згенеровано;
-  міграція `export_jobs`+`messenger_messages` → `doctrine:schema:validate` у синхроні; **18 тестів зелені**;
-  live-smoke: health/live+ready 200, unauth POST 401.
-- **Крок 3** (`8d17cd4`): cutover моноліту. **ExportControllerTest 9 зелених**; `lint:container` чистий (dev+test);
-  жодних застарілих посилань на видалені класи.
-- **Крок 4** (цей коміт): 3 CI-джоби (build/test/deploy з міграціями); `.gitlab-ci.yml` — валідний YAML.
-
-**Рішення:** async = Doctrine-транспорт на db-export (без RabbitMQ); лист = Mailer у сервісі inline (без Twig);
-download = моноліт читає storage напряму; `UserExtractor`→`UserClient` (локальна фільтрація).
-
-**Лишилось (не в цій гілці):**
-1. Додати CI-змінну **`EXPORT_DB_PASSWORD`** у GitLab (алфа-цифрова — урок delivery про URL-спецсимволи).
-2. Створити MR у `develop`; після merge — авто-деплой (build/test/deploy).
-3. Post-deploy e2e на prod: admin `/admin/export` → submit кожного типу → job Completed + файл у S3 + лист у Mailpit.
+- **Створено 6 нових файлів**, жоден існуючий не редаговано; runtime сервісів не змінено.
+- **`redocly lint`: усі 4 спеки валідні** (лише косметичні warnings — відсутня license,
+  описи тегів, 4xx на health-probe). 0 errors.
+- **Виправлені під час валідації дефекти:**
+  1. Двокрапка+пробіл у незакавичених `description` (`Authorization: Bearer`, `items: []`)
+     ламала YAML-парсинг → взято в лапки.
+  2. `no-identical-paths`: `/{slug}` і `/{id}` — однаковий шаблон для OpenAPI (Symfony
+     розрізняє методом). Об'єднано GET-by-slug і мутації в один path item `/{id}`
+     з path-параметром-рядком (categories, brands).
+- **Покриття endpoints (звірено з контролерами):** user 4+2health, catalog 13+2health,
+  order 4+2health, cart 5+2health. Пропущених/зайвих шляхів немає.
+- **Не увійшло (свідомо):** Payment/Delivery/Notification/Storage/Export — поза обсягом
+  «ключових 4»; жодних змін у коді сервісів.
