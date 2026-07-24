@@ -50,12 +50,12 @@ OrderPaid → Payment Service (webhook Stripe)
 
 | Сервіс | Специфікація |
 |---|---|
-| User | `services/user-service/openapi.yaml` |
-| Catalog | `services/catalog-service/openapi.yaml` |
-| Order | `services/order-service/openapi.yaml` |
-| Cart | `services/cart-service/openapi.yaml` |
+| User | [`services/user-service/openapi.yaml`](services/user-service/openapi.yaml) |
+| Catalog | [`services/catalog-service/openapi.yaml`](services/catalog-service/openapi.yaml) |
+| Order | [`services/order-service/openapi.yaml`](services/order-service/openapi.yaml) |
+| Cart | [`services/cart-service/openapi.yaml`](services/cart-service/openapi.yaml) |
 
-Переглянути всі разом через Swagger UI: `docs/openapi/index.html` (інструкції та валідація — `docs/openapi/README.md`).
+Переглянути всі разом через Swagger UI: [`docs/openapi/index.html`](docs/openapi/index.html) (інструкції та валідація — [`docs/openapi/README.md`](docs/openapi/README.md)).
 
 ### Застосовані патерни (реалізовані)
 
