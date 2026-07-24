@@ -108,11 +108,16 @@ build:image:
   stage: test
   before_script:
     - docker volume create composer-cache-task25 || true
+    # APP_ENV=test so `bin/console importmap:install` boots the kernel with .env.test
+    # (which defines JWT_PASSPHRASE=). Without it the command defaults to dev, where the
+    # passphrase lives only in the gitignored .env.local (absent in CI) → the container
+    # fails to compile with "env var JWT_PASSPHRASE not found" via the easyadmin routes.
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -v "composer-cache-task25:/composer-cache" \
         -w /app \
+        -e APP_ENV=test \
         -e COMPOSER_HOME=/composer-cache \
         $LOCAL_IMAGE \
         sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test && rm -f var/test.db var/test.db-wal var/test.db-shm"
