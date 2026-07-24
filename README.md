@@ -44,6 +44,19 @@ OrderPaid → Payment Service (webhook Stripe)
           → Notification Service (email-квитанція)
 ```
 
+### API-специфікації (OpenAPI)
+
+Машиночитані контракти 4 ключових сервісів (OpenAPI 3.1) лежать поряд із кожним сервісом:
+
+| Сервіс | Специфікація |
+|---|---|
+| User | `services/user-service/openapi.yaml` |
+| Catalog | `services/catalog-service/openapi.yaml` |
+| Order | `services/order-service/openapi.yaml` |
+| Cart | `services/cart-service/openapi.yaml` |
+
+Переглянути всі разом через Swagger UI: `docs/openapi/index.html` (інструкції та валідація — `docs/openapi/README.md`).
+
 ### Застосовані патерни (реалізовані)
 
 | Патерн | Де |

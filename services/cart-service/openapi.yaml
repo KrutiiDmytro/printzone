@@ -1,0 +1,246 @@
+openapi: 3.1.0
+
+info:
+  title: Cart Service API
+  version: "1.0.0"
+  description: |
+    Persistent cart for authenticated users of the PrintZone platform.
+
+    The monolith is the only caller: it resolves products via the Catalog Service and sends
+    price/name snapshots here, so this service never talks to Catalog itself. Reads need any
+    valid service token; writes require an elevated `ROLE_CART_ADMIN` token (the monolith
+    acting on a user's behalf). Prices are integer cents.
+
+servers:
+  - url: http://localhost:8004
+    description: Local (docker compose)
+  - url: http://cart-service
+    description: In-cluster (shared network task-25_default)
+
+tags:
+  - name: Cart
+  - name: Health
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/carts/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/UserIdPath"
+    get:
+      tags: [Cart]
+      summary: Get a user's cart
+      description: "Returns an empty cart (`items: []`) if none exists yet."
+      responses:
+        "200":
+          description: The cart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Invalid userId (not a UUID).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [Cart]
+      summary: Clear a user's cart
+      description: Requires `ROLE_CART_ADMIN`. Idempotent — succeeds even if the cart is empty/absent.
+      responses:
+        "204": { description: Cart cleared. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Invalid userId (not a UUID).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/carts/{userId}/items:
+    parameters:
+      - $ref: "#/components/parameters/UserIdPath"
+    post:
+      tags: [Cart]
+      summary: Add an item (or increment quantity if already present)
+      description: Requires `ROLE_CART_ADMIN`. Creates the cart on first add.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, productName, price]
+              properties:
+                productId: { type: string, format: uuid }
+                productName: { type: string }
+                price: { type: integer, minimum: 0, description: "Unit price in cents." }
+                quantity: { type: integer, minimum: 1, default: 1 }
+            example:
+              productId: 0b8c5a2e-8f1a-4c0e-9b2a-1d2e3f4a5b6c
+              productName: Ink Cartridge XL
+              price: 2599
+              quantity: 2
+      responses:
+        "200":
+          description: Updated cart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Invalid userId (not a UUID).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Invalid item payload.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/carts/{userId}/items/{productId}:
+    parameters:
+      - $ref: "#/components/parameters/UserIdPath"
+      - name: productId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Cart]
+      summary: Set an item's quantity
+      description: Requires `ROLE_CART_ADMIN`. A quantity of 0 or less removes the item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer }
+            example: { quantity: 3 }
+      responses:
+        "200":
+          description: Updated cart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Invalid identifier or item not found.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Invalid quantity.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      tags: [Cart]
+      summary: Remove an item from the cart
+      description: Requires `ROLE_CART_ADMIN`. Idempotent.
+      responses:
+        "204": { description: Item removed (or was already absent). }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Invalid identifier (not a UUID).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Process is up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthLive" }
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe (checks the database)
+      security: []
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReady" }
+        "503":
+          description: A dependency is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReady" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: S2S RS256 JWT signed with the shared Lexik keypair.
+
+  parameters:
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+    Forbidden:
+      description: The token lacks `ROLE_CART_ADMIN`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Cart:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId: { type: string, format: uuid }
+              productName: { type: string }
+              price: { type: integer, description: "Unit price in cents." }
+              quantity: { type: integer }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    HealthLive:
+      type: object
+      properties:
+        status: { type: string, const: ok }
+
+    HealthReady:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, error] }
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status: { type: string }
+              latency_ms: { type: integer }
+              detail: { type: string }
