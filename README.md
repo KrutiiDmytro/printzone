@@ -44,6 +44,8 @@ OrderPaid → Payment Service (webhook Stripe)
           → Notification Service (email-квитанція)
 ```
 
+> 📄 **Звіт (Task 26)** — синхронна / асинхронна / event-driven / гібридна стратегії комунікації з мапінгом «стратегія → код»: [`docs/task-26-communication-strategies.md`](docs/task-26-communication-strategies.md).
+
 ### API-специфікації (OpenAPI)
 
 Машиночитані контракти 4 ключових сервісів (OpenAPI 3.1) лежать поряд із кожним сервісом:
