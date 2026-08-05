@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Twig;
 
-use App\Catalog\Domain\Entity\Category;
-use App\Repository\CategoryRepository;
+use App\Catalog\Client\CatalogClient;
+use App\Catalog\View\CategoryView;
 use App\Twig\CategoryExtension;
 use PHPUnit\Framework\TestCase;
 
@@ -13,8 +13,7 @@ final class CategoryExtensionTest extends TestCase
 {
     public function testGetFunctionsRegistersGetCategories(): void
     {
-        $repo = $this->createMock(CategoryRepository::class);
-        $extension = new CategoryExtension($repo);
+        $extension = new CategoryExtension($this->createMock(CatalogClient::class));
 
         $functions = $extension->getFunctions();
 
@@ -22,26 +21,26 @@ final class CategoryExtensionTest extends TestCase
         $this->assertSame('get_categories', $functions[0]->getName());
     }
 
-    public function testGetCategoriesDelegatesToRepository(): void
+    public function testGetCategoriesDelegatesToCatalogClient(): void
     {
-        $category = $this->createMock(Category::class);
+        $category = CategoryView::fromArray(['id' => 'c1', 'name' => 'Cat', 'slug' => 'cat']);
 
-        $repo = $this->createMock(CategoryRepository::class);
-        $repo->expects($this->once())
-            ->method('findAllRootCategories')
+        $catalog = $this->createMock(CatalogClient::class);
+        $catalog->expects($this->once())
+            ->method('rootCategories')
             ->willReturn([$category]);
 
-        $result = (new CategoryExtension($repo))->getCategories();
+        $result = (new CategoryExtension($catalog))->getCategories();
 
         $this->assertSame([$category], $result);
     }
 
     public function testGetCategoriesReturnsEmptyArrayWhenNoneExist(): void
     {
-        $repo = $this->createMock(CategoryRepository::class);
-        $repo->method('findAllRootCategories')->willReturn([]);
+        $catalog = $this->createMock(CatalogClient::class);
+        $catalog->method('rootCategories')->willReturn([]);
 
-        $result = (new CategoryExtension($repo))->getCategories();
+        $result = (new CategoryExtension($catalog))->getCategories();
 
         $this->assertSame([], $result);
     }

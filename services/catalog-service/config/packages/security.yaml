@@ -1,0 +1,24 @@
+security:
+    # Service-to-service tokens are signed by the monolith with the shared keypair.
+    # No user database here — the user is reconstructed from verified JWT claims.
+    providers:
+        jwt:
+            lexik_jwt: ~
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt))/
+            security: false
+
+        api:
+            pattern: ^/
+            stateless: true
+            provider: jwt
+            jwt: ~
+
+    access_control:
+        - { path: ^/health, roles: PUBLIC_ACCESS }
+        # Writes (admin proxy from the monolith) require an elevated service token.
+        - { path: ^/api, methods: [POST, PUT, PATCH, DELETE], roles: ROLE_CATALOG_ADMIN }
+        # Reads need any valid service token (storefront/cart/export).
+        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }

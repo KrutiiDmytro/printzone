@@ -20,8 +20,6 @@ services:
     # this creates a service per class whose id is the fully-qualified class name
     App\:
         resource: '../src/'
-        exclude:
-            - '../src/Storage/FileStorageFactory.php'
 
     App\Controller\GoogleAuthController:
         arguments:
@@ -34,13 +32,6 @@ services:
             $githubClientId: '%env(GITHUB_CLIENT_ID)%'
             $githubClientSecret: '%env(GITHUB_CLIENT_SECRET)%'
             $githubRedirectUri: '%env(GITHUB_REDIRECT_URI)%'
-
-    App\Export\MessageHandler\ProcessExportHandler:
-        arguments:
-            $adminEmail: '%admin.email%'
-            $productExtractor: '@App\Export\Extractor\ProductExtractor'
-            $orderExtractor: '@App\Export\Extractor\OrderExtractor'
-            $userExtractor: '@App\Export\Extractor\UserExtractor'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

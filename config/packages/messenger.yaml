@@ -12,6 +12,27 @@ framework:
                 retry_strategy:
                     max_retries: 3
                     multiplier: 2
+            # Outbound domain (integration) events → RabbitMQ topic exchange. Published by the
+            # outbox relay; the routing key is set per-message (e.g. order.OrderPaid).
+            events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                # JSON on the wire so a non-PHP-native consumer (catalog-service) can read it.
+                # The `type` header carries the FQCN App\Messaging\Domain\IntegrationEvent,
+                # which is duplicated in catalog-service so its Messenger maps the message back.
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    # Single catch-all queue for the monolith consumer. Future services
+                    # bind their own queues with specific keys (e.g. order.*).
+                    queues:
+                        events_all:
+                            binding_keys: ['#']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
             failed: 'doctrine://default?queue_name=failed'
             # sync: 'sync://'
 
@@ -25,4 +46,5 @@ framework:
             Symfony\Component\Notifier\Message\ChatMessage: async
             Symfony\Component\Notifier\Message\SmsMessage: async
 
-            App\Export\Message\ProcessExportMessage: async
+            # Outbound domain events published by the outbox relay → RabbitMQ.
+            App\Messaging\Domain\IntegrationEvent: events

@@ -10,7 +10,8 @@ class CartExtension extends AbstractExtension
 {
     public function __construct(
         private CartService $cartService
-    ) {}
+    ) {
+    }
 
     public function getFunctions(): array
     {
@@ -28,6 +29,7 @@ class CartExtension extends AbstractExtension
     public function getCartTotal(): int
     {
         $cart = $this->cartService->getCart();
+
         return $cart['total'];
     }
 }

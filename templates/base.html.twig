@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>{% block title %}Electro - Electronics Shop{% endblock %}</title>
+    <title>{% block title %}PrintZone - Printer Supplies Shop{% endblock %}</title>
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <meta content="" name="keywords">
     <meta content="" name="description">
@@ -33,19 +33,505 @@
             margin: 0;
             padding: 0;
         }
-        
         .container-fluid {
             padding-left: 0 !important;
             padding-right: 0 !important;
             max-width: 100% !important;
         }
-        
         .row {
             margin-left: 0 !important;
             margin-right: 0 !important;
             max-width: 100% !important;
         }
-        
+
+        /* Override orange secondary with blue */
+        :root {
+            --bs-secondary: #0ea5e9;
+            --bs-secondary-rgb: 14,165,233;
+        }
+
+        /* ===== MODERN HEADER ===== */
+        .site-header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+
+        /* Top bar */
+        .header-topbar {
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-logo {
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .header-logo .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #0d6efd, #0a58ca);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 16px;
+        }
+        .header-logo .logo-text {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #0d6efd;
+            letter-spacing: -0.5px;
+        }
+        .header-logo .logo-text span {
+            color: #0a58ca;
+        }
+
+        /* Search */
+        .header-search {
+            flex: 1;
+            max-width: 520px;
+            margin: 0 auto;
+        }
+        .header-search .search-wrap {
+            display: flex;
+            align-items: center;
+            background: #f4f6fa;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 50px;
+            padding: 0 6px 0 18px;
+            transition: border-color 0.2s;
+        }
+        .header-search .search-wrap:focus-within {
+            border-color: #0d6efd;
+            background: #fff;
+        }
+        .header-search input {
+            border: none;
+            background: transparent;
+            outline: none;
+            padding: 8px 0;
+            font-size: 0.9rem;
+            width: 100%;
+            color: #333;
+        }
+        .header-search button {
+            border: none;
+            background: #0d6efd;
+            color: #fff;
+            border-radius: 50px;
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .header-search button:hover { background: #0a58ca; }
+
+        /* Header actions */
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .header-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            color: #444;
+            padding: 8px 14px;
+            border-radius: 50px;
+            border: 1.5px solid #e2e8f0;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .header-btn:hover {
+            border-color: #0d6efd;
+            color: #0d6efd;
+            background: #f0f5ff;
+        }
+        .header-btn .btn-icon {
+            font-size: 1rem;
+        }
+        .header-btn .btn-label {
+            display: none;
+        }
+        @media (min-width: 992px) {
+            .header-btn .btn-label { display: inline; }
+        }
+
+        /* Logged-in user info */
+        .header-user {
+            display: none;
+            flex-direction: column;
+            line-height: 1.2;
+            text-align: right;
+            margin-right: 4px;
+        }
+        @media (min-width: 992px) {
+            .header-user { display: flex; }
+        }
+        .header-user .user-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #212529;
+        }
+        .header-user .user-email {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+
+        /* Cart badge */
+        .cart-badge {
+            background: #ef4444;
+            color: #fff;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 1px 6px;
+            min-width: 20px;
+            text-align: center;
+            line-height: 1.4;
+        }
+        .cart-total {
+            color: #0d6efd;
+            font-weight: 600;
+        }
+
+        /* Category navbar */
+        .header-navbar {
+            border-top: 1px solid #f0f0f0;
+            background: #fff;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-height: 48px;
+            overflow: visible;
+        }
+
+        /* Category dropdown button */
+        .navbar-cat-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 14px;
+            background: transparent;
+            color: #444;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.18s;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+        .navbar-cat-btn:hover,
+        .navbar-cat-btn.show {
+            color: #0d6efd;
+            background: #f0f5ff;
+        }
+        .navbar-cat-btn .dropdown-caret {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            transition: transform 0.2s;
+        }
+        .navbar-cat-btn.show .dropdown-caret {
+            transform: rotate(180deg);
+            opacity: 1;
+        }
+
+        /* Brand → category dropdown */
+        .navbar-brand-category-dropdown {
+            min-width: 220px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            padding: 10px 0;
+            z-index: 1050;
+        }
+        .brand-cat-group { padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
+        .brand-cat-group:last-child { border-bottom: none; }
+        .brand-cat-root {
+            display: block;
+            padding: 5px 16px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #1a202c;
+            text-decoration: none;
+        }
+        .brand-cat-root:hover { color: #0d6efd; background: #f8faff; }
+        .brand-cat-child {
+            display: block;
+            padding: 3px 16px 3px 28px;
+            font-size: 0.82rem;
+            color: #4a5568;
+            text-decoration: none;
+        }
+        .brand-cat-child:hover { color: #0d6efd; background: #f0f5ff; }
+
+        /* Separator */
+        .navbar-sep {
+            width: 1px;
+            height: 20px;
+            background: #e2e8f0;
+            margin: 0 2px;
+            flex-shrink: 0;
+        }
+
+        .navbar-cats-scroll {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            flex: 1;
+            flex-wrap: nowrap;
+        }
+
+        .brand-logo {
+            font-weight: 900;
+            font-size: 1.05rem;
+            letter-spacing: -0.5px;
+            line-height: 1;
+        }
+
+        /* Hover-activate dropdowns */
+        .navbar-cats-scroll .dropdown:hover > .dropdown-menu {
+            display: block;
+            margin-top: 0;
+        }
+        .navbar-cats-scroll .dropdown:hover > .navbar-cat-btn {
+            color: #0d6efd;
+            background: #f0f5ff;
+        }
+        .navbar-cats-scroll .dropdown:hover > .navbar-cat-btn .dropdown-caret {
+            transform: rotate(180deg);
+            opacity: 1;
+        }
+
+        /* ===== MODERN FOOTER ===== */
+        .site-footer {
+            background: #fff;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .footer-contact-strip {
+            padding: 40px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .footer-contact-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px;
+            background: #fff;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            transition: border-color 0.2s, box-shadow 0.2s;
+            height: 100%;
+        }
+
+        .footer-contact-card:hover {
+            border-color: #0d6efd;
+            box-shadow: 0 4px 20px rgba(13,110,253,0.10);
+        }
+
+        .fcc-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #0d6efd, #0a58ca);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .footer-contact-card h6 {
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #1a202c;
+            margin-bottom: 4px;
+        }
+
+        .footer-contact-card p {
+            font-size: 0.83rem;
+            color: #64748b;
+            margin: 0;
+        }
+
+        .footer-main {
+            padding: 48px 0 32px;
+            background: #f4f6fa;
+        }
+
+        .footer-brand-link {
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .footer-brand p {
+            font-size: 0.88rem;
+            color: #64748b;
+            line-height: 1.7;
+            margin-top: 4px;
+        }
+
+        .footer-links-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #1a202c;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #0d6efd;
+            display: inline-block;
+        }
+
+        .footer-links {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .footer-links li { margin-bottom: 8px; }
+
+        .footer-links a {
+            font-size: 0.85rem;
+            color: #64748b;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.2s;
+        }
+
+        .footer-links a::before {
+            content: '';
+            width: 5px;
+            height: 5px;
+            background: #0d6efd;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .footer-links a:hover { color: #0d6efd; }
+
+        .footer-newsletter-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #1a202c;
+            display: inline-block;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #0d6efd;
+        }
+
+        .footer-newsletter p {
+            font-size: 0.83rem;
+            color: #64748b;
+            margin: 12px 0 16px;
+        }
+
+        .footer-newsletter-form {
+            display: flex;
+            gap: 6px;
+        }
+
+        .footer-newsletter-form input {
+            flex: 1;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 50px;
+            padding: 9px 16px;
+            font-size: 0.85rem;
+            outline: none;
+            background: #fff;
+            transition: border-color 0.2s;
+        }
+
+        .footer-newsletter-form input:focus { border-color: #0d6efd; }
+
+        .footer-newsletter-form button {
+            border: none;
+            background: #0d6efd;
+            color: #fff;
+            border-radius: 50px;
+            padding: 9px 18px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .footer-newsletter-form button:hover { background: #0a58ca; }
+
+        .footer-social {
+            display: flex;
+            gap: 8px;
+            margin-top: 20px;
+        }
+
+        .footer-social a {
+            width: 36px;
+            height: 36px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .footer-social a:hover {
+            border-color: #0d6efd;
+            color: #0d6efd;
+            background: #f0f5ff;
+        }
+
+        .footer-copyright {
+            padding: 18px 0;
+            border-top: 1px solid #e2e8f0;
+            background: #fff;
+        }
+
+        .footer-copyright span,
+        .footer-copyright a {
+            font-size: 0.83rem;
+            color: #64748b;
+        }
+
+        .footer-copyright a {
+            color: #0d6efd;
+            text-decoration: none;
+        }
+
+        .footer-copyright a:hover { text-decoration: underline; }
     </style>
     {% block stylesheets %}{% endblock %}
 </head>
@@ -60,194 +546,234 @@
     </div>
     <!-- Spinner End -->
 
-    <!-- Topbar Start -->
+    <!-- Header Start -->
+    <header class="site-header">
 
-        <div class="container-fluid py-0">
-            <div class="row gx-2 align-items-center justify-content-center">
-                <!-- Логотип -->
-                <div class="col-6 col-md-4 col-lg-2 text-start">
-                    <a href="{{ path('app_home') }}" class="navbar-brand p-0">
-                        <h1 class="text-primary m-0" style="font-size: clamp(1.2rem, 3vw, 2rem);">
-                            <i class="fas fa-shopping-bag text-secondary me-1"></i>
-                            <span class="d-none d-sm-inline">Electro</span>
-                        </h1>
-                    </a>
+        <!-- Top bar: Logo / Search / Actions -->
+        <div class="header-topbar">
+
+            <!-- Logo -->
+            <a href="{{ path('app_home') }}" class="header-logo">
+                <span class="logo-icon"><i class="fas fa-print"></i></span>
+                <span class="logo-text">Print<span>Zone</span></span>
+            </a>
+
+            <!-- Search -->
+            <div class="header-search">
+                <div class="search-wrap">
+                    <input type="text" placeholder="Search products...">
+                    <button type="button" aria-label="Search">
+                        <i class="fas fa-search" style="font-size:0.8rem;"></i>
+                    </button>
                 </div>
-                
-                <!-- Поиск -->
-                <div class="col-12 col-md-4 col-lg-6 order-3 order-md-2 mt-2 mt-md-2">
-                    <div class="d-flex">
-                        <input class="form-control border-2 w-100 py-1" type="text" placeholder="Search..." style="font-size: 0.9rem;">                       
-                        <button type="button" class="btn btn-primary py-1 px-3" style="border: 0;">
-                            <i class="fas fa-search"></i>
-                        </button>
+            </div>
+
+            <!-- Actions -->
+            <div class="header-actions">
+                {% if app.user %}
+                    <span class="header-user">
+                        {% if app.user.fullName %}
+                            <span class="user-name">{{ app.user.fullName }}</span>
+                        {% endif %}
+                        <span class="user-email">{{ app.user.email }}</span>
+                    </span>
+                    <a href="{{ path('app_logout') }}" class="header-btn">
+                        <i class="fas fa-sign-out-alt btn-icon"></i>
+                        <span class="btn-label">Logout</span>
+                    </a>
+                {% else %}
+                    <a href="{{ path('app_login') }}" class="header-btn">
+                        <i class="fas fa-user btn-icon"></i>
+                        <span class="btn-label">Sign In</span>
+                    </a>
+                {% endif %}
+
+                <a href="{{ path('app_cart') }}" class="header-btn">
+                    <i class="fas fa-shopping-cart btn-icon"></i>
+                    {% if get_cart_count() > 0 %}
+                        <span class="cart-badge">{{ get_cart_count() }}</span>
+                    {% endif %}
+                    <span class="cart-total d-none d-lg-inline">${{ (get_cart_total() / 100)|number_format(2) }}</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Category navbar -->
+        <nav class="header-navbar">
+            <div class="navbar-cats-scroll">
+
+                {% for brand in all_brands() %}
+                <div class="dropdown">
+                    <button class="navbar-cat-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span style="color: {{ brand.color ?? '#333' }}">{{ brand.name }}</span>
+                        <i class="fas fa-chevron-down dropdown-caret"></i>
+                    </button>
+                    <div class="dropdown-menu navbar-brand-category-dropdown">
+                        {% for rootCat in get_categories() %}
+                        <div class="brand-cat-group">
+                            <a class="brand-cat-root" href="{{ path('shop_brand', {slug: brand.slug}) }}">
+                                {{ rootCat.name }}
+                            </a>
+                            {% for child in rootCat.children %}
+                            <a class="brand-cat-child" href="{{ path('shop_brand_category', {brandSlug: brand.slug, categorySlug: child.slug}) }}">
+                                {{ child.name }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
-
-                <!-- Sign In / Logout -->
-                <div class="col-3 col-md-2 col-lg-2 text-center order-2 order-md-3">
-                    {% if app.user %}
-                        <a href="{{ path('app_logout') }}" class="text-muted d-flex align-items-center justify-content-center">
-                            <span class="rounded-circle btn-md-square border d-flex align-items-center justify-content-center">
-                                <i class="fas fa-sign-out-alt"></i>
-                            </span>
-                            <span class="text-dark ms-2 d-none d-xl-inline">Logout</span>
-                        </a>
-                    {% else %}
-                        <a href="{{ path('app_login') }}" class="text-muted d-flex align-items-center justify-content-center">
-                            <span class="rounded-circle btn-md-square border d-flex align-items-center justify-content-center">
-                                <i class="fas fa-user"></i>
-                            </span>
-                            <span class="text-dark ms-2 d-none d-xl-inline">Sign In</span>
-                        </a>
-                    {% endif %}
-                </div>
-
-                <!-- Корзина -->
-                <div class="col-3 col-md-2 col-lg-2 text-end order-2 order-md-4" style ="padding-right: 20px;">
-                    <a href="{{ path('app_cart') }}" class="text-muted d-flex align-items-center justify-content-end position-relative">
-                        <span class="rounded-circle btn-md-square border d-flex align-items-center justify-content-center">
-                            <i class="fas fa-shopping-cart"></i>
-                            {% if get_cart_count() > 0 %}
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.7rem;">
-                                    {{ get_cart_count() }}
-                                </span>
-                            {% endif %}
-                        </span>
-                        <span class="text-dark ms-2 d-none d-xl-inline">${{ (get_cart_total() / 100)|number_format(2) }}</span>
-                    </a>
-                </div>
-            </div>
-        
-    <!-- Topbar End -->
-    
-<!-- Navbar Start -->
-    <div class="container-fluid nav-bar p-0 bg-primary">
-        <div class="row gx-0 align-items-center px-3 flex-nowrap" style="min-height: 50px;">
-        
-        <!-- Блок 1: Кнопка All -->
-        <div class="col-auto d-flex align-items-center py-2"> 
-            <div class="position-relative">
-                <button class="btn border-0 text-white p-0" type="button" data-bs-toggle="collapse" data-bs-target="#allCat" style="background: transparent;">
-                    <h5 class="m-0 fw-normal"><i class="fa fa-bars me-2"></i>All</h5>
-                </button>
-                <div class="collapse position-absolute bg-white rounded shadow mt-2" id="allCat" style="top: 100%; left: 0; z-index: 1050; min-width: 250px;">
-                    <ul class="list-unstyled categories-bars m-0">
-                        {% for category in get_categories() %}
-                            <li>
-                                <div class="categories-bars-item">
-                                    <a href="{{ path('app_category_show', {slug: category.slug}) }}">{{ category.name }}</a>
-                                    <span>({{ category.products|length }})</span>
-                                </div>
-                            </li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Блок 2: Категории -->
-        <div class="col d-flex align-items-center py-2"> 
-            <div class="d-flex flex-row flex-nowrap align-items-center w-100" 
-                style="overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;">
-                {% for category in get_categories()|slice(0, 10) %}
-                    <a href="{{ path('app_category_show', {slug: category.slug}) }}" 
-                    class="text-white text-decoration-none text-nowrap px-3" 
-                    style="font-size: 0.9rem; white-space: nowrap;"> 
-                        {{ category.name }}
-                    </a>
+                <div class="navbar-sep"></div>
                 {% endfor %}
+
             </div>
+
+        </nav>
+    </header>
+    <!-- Header End -->
+
+    {% for message in app.flashes('success') %}
+        <div class="alert alert-success alert-dismissible fade show m-0 rounded-0" role="alert">
+            <i class="fas fa-check-circle me-2"></i>{{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
-    </div>
-    </div>
-</div>
-<!-- Navbar End -->
+    {% endfor %}
+    {% for message in app.flashes('error') %}
+        <div class="alert alert-danger alert-dismissible fade show m-0 rounded-0" role="alert">
+            <i class="fas fa-exclamation-circle me-2"></i>{{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
 
     {% block body %}{% endblock %}
 
     <!-- Footer Start -->
-    <div class="container-fluid footer py-5 wow fadeIn" data-wow-delay="0.2s">
-        <div class="container py-5">
-            <div class="row g-4 rounded mb-5" style="background: rgba(255, 255, 255, .03);">
-                <div class="col-md-6 col-lg-6 col-xl-3">
-                    <div class="rounded p-4">
-                        <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mb-4" style="width: 70px; height: 70px;">
-                            <i class="fas fa-map-marker-alt fa-2x text-primary"></i>
-                        </div>
-                        <div>
-                            <h4 class="text-white">Address</h4>
-                            <p class="mb-2">123 Street New York.USA</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-6 col-xl-3">
-                    <div class="rounded p-4">
-                        <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mb-4" style="width: 70px; height: 70px;">
-                            <i class="fas fa-envelope fa-2x text-primary"></i>
-                        </div>
-                        <div>
-                            <h4 class="text-white">Mail Us</h4>
-                            <p class="mb-2">info@example.com</p>
+    <footer class="site-footer">
+
+        <!-- Contact Strip -->
+        <div class="footer-contact-strip">
+            <div class="container">
+                <div class="row g-3">
+                    <div class="col-md-6 col-lg-3">
+                        <div class="footer-contact-card">
+                            <div class="fcc-icon"><i class="fas fa-map-marker-alt"></i></div>
+                            <div>
+                                <h6>Address</h6>
+                                <p>123 Street, New York, USA</p>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="col-md-6 col-lg-6 col-xl-3">
-                    <div class="rounded p-4">
-                        <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mb-4" style="width: 70px; height: 70px;">
-                            <i class="fa fa-phone-alt fa-2x text-primary"></i>
-                        </div>
-                        <div>
-                            <h4 class="text-white">Telephone</h4>
-                            <p class="mb-2">(+012) 3456 7890</p>
+                    <div class="col-md-6 col-lg-3">
+                        <div class="footer-contact-card">
+                            <div class="fcc-icon"><i class="fas fa-envelope"></i></div>
+                            <div>
+                                <h6>Mail Us</h6>
+                                <p>info@printzone.com</p>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="col-md-6 col-lg-6 col-xl-3">
-                    <div class="rounded p-4">
-                        <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mb-4" style="width: 70px; height: 70px;">
-                            <i class="fab fa-firefox-browser fa-2x text-primary"></i>
-                        </div>
-                        <div>
-                            <h4 class="text-white">Yoursite@ex.com</h4>
-                            <p class="mb-2">(+012) 3456 7890</p>
+                    <div class="col-md-6 col-lg-3">
+                        <div class="footer-contact-card">
+                            <div class="fcc-icon"><i class="fas fa-phone-alt"></i></div>
+                            <div>
+                                <h6>Telephone</h6>
+                                <p>(+012) 3456 7890</p>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-            <div class="row g-5">
-                <div class="col-md-6 col-lg-6 col-xl-3">
-                    <div class="footer-item d-flex flex-column">
-                        <div class="footer-item">
-                            <h4 class="text-primary mb-4">Newsletter</h4>
-                            <p class="mb-3">Dolor amet sit justo amet elitr clita ipsum elitr est.Lorem ipsum dolor sit amet, consectetur adipiscing elit consectetur adipiscing elit.</p>
-                            <div class="position-relative mx-auto rounded-pill">
-                                <input class="form-control rounded-pill w-100 py-3 ps-4 pe-5" type="text" placeholder="Enter your email">
-                                <button type="button" class="btn btn-primary rounded-pill position-absolute top-0 end-0 py-2 mt-2 me-2">SignUp</button>
+                    <div class="col-md-6 col-lg-3">
+                        <div class="footer-contact-card">
+                            <div class="fcc-icon"><i class="fas fa-clock"></i></div>
+                            <div>
+                                <h6>Working Hours</h6>
+                                <p>Mon–Fri: 9:00 – 18:00</p>
                             </div>
                         </div>
                     </div>
                 </div>
-                <!-- ... other footer columns ... -->
             </div>
         </div>
-    </div>
-    <!-- Footer End -->
 
-    <!-- Copyright Start -->
-    <div class="container-fluid copyright py-4">
-        <div class="container">
-            <div class="row g-4 align-items-center">
-                <div class="col-md-6 text-center text-md-start mb-md-0">
-                    <span class="text-white"><a href="#" class="border-bottom text-white"><i class="fas fa-copyright text-light me-2"></i>Your Site Name</a>, All right reserved.</span>
-                </div>
-                <div class="col-md-6 text-center text-md-end text-white">
-                    Designed By <a class="border-bottom text-white" href="https://htmlcodex.com">HTML Codex</a>. Distributed By <a class="border-bottom text-white" href="https://themewagon.com">ThemeWagon</a>
+        <!-- Main Footer -->
+        <div class="footer-main">
+            <div class="container">
+                <div class="row g-4">
+
+                    <!-- Brand -->
+                    <div class="col-lg-4 col-md-6">
+                        <div class="footer-brand">
+                            <a href="{{ path('app_home') }}" class="footer-brand-link">
+                                <span class="logo-icon"><i class="fas fa-print"></i></span>
+                                <span class="logo-text">Print<span>Zone</span></span>
+                            </a>
+                            <p>Your trusted source for premium printer supplies — toner, ink, paper, and accessories for home and office.</p>
+                            <div class="footer-social">
+                                <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+                                <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                                <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+                                <a href="#" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Links -->
+                    <div class="col-sm-6 col-lg-2">
+                        <span class="footer-links-title">Quick Links</span>
+                        <ul class="footer-links mt-3">
+                            <li><a href="{{ path('app_home') }}">Home</a></li>
+                            <li><a href="{{ path('app_shop') }}">Shop</a></li>
+                            <li><a href="{{ path('app_bestseller') }}">Bestsellers</a></li>
+                            <li><a href="{{ path('app_contact') }}">Contact</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Account -->
+                    <div class="col-sm-6 col-lg-2">
+                        <span class="footer-links-title">Account</span>
+                        <ul class="footer-links mt-3">
+                            {% if app.user %}
+                                <li><a href="{{ path('app_logout') }}">Logout</a></li>
+                            {% else %}
+                                <li><a href="{{ path('app_login') }}">Sign In</a></li>
+                                <li><a href="{{ path('app_register') }}">Register</a></li>
+                            {% endif %}
+                            <li><a href="{{ path('app_cart') }}">My Cart</a></li>
+                            <li><a href="{{ path('app_checkout') }}">Checkout</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Newsletter -->
+                    <div class="col-lg-4 col-md-6">
+                        <div class="footer-newsletter">
+                            <span class="footer-newsletter-title">Newsletter</span>
+                            <p>Subscribe to get the latest deals and updates on printer supplies.</p>
+                            <div class="footer-newsletter-form">
+                                <input type="email" placeholder="Your email address">
+                                <button type="button">Subscribe</button>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
-    </div>
-    <!-- Copyright End -->
+
+        <!-- Copyright -->
+        <div class="footer-copyright">
+            <div class="container">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-6 text-center text-md-start">
+                        <span><i class="fas fa-copyright me-1"></i>2024 <a href="{{ path('app_home') }}">PrintZone</a>. All rights reserved.</span>
+                    </div>
+                    <div class="col-md-6 text-center text-md-end">
+                        <span>Designed with <i class="fas fa-heart" style="color:#ef4444;"></i> for print professionals</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </footer>
+    <!-- Footer End -->
 
     <!-- Back to Top -->
     <a href="#" class="btn btn-primary btn-lg-square back-to-top"><i class="fa fa-arrow-up"></i></a>

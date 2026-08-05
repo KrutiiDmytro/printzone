@@ -2,11 +2,8 @@
 
 namespace App\Controller\Admin;
 
-use App\Catalog\Domain\Entity\Category;
-use App\Catalog\Domain\Entity\Product;
-use App\Order\Domain\Entity\Order;
-use App\User\Domain\Entity\User;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Assets;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\MenuItem;
 use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractDashboardController;
@@ -21,13 +18,14 @@ class DashboardController extends AbstractDashboardController
         private ChartBuilderInterface $chartBuilder
     ) {
     }
+
     public function index(): Response
     {
         $chart = $this->chartBuilder->createChart(Chart::TYPE_LINE);
 
         $months = [
             'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
+            'July', 'August', 'September', 'October', 'November', 'December',
         ];
 
         $chart->setData([
@@ -74,25 +72,35 @@ class DashboardController extends AbstractDashboardController
         ]);
     }
 
+    public function configureAssets(): Assets
+    {
+        return parent::configureAssets()
+            ->addHtmlContentToHead('<style>.datagrid td img { max-height: 48px; width: auto; }</style>');
+    }
+
     public function configureDashboard(): Dashboard
     {
         return Dashboard::new()
-            ->setTitle('Админ-панель')
+            ->setTitle('Admin Panel')
             ->setFaviconPath('favicon.ico')
             ->setTranslationDomain('admin');
     }
 
     public function configureMenuItems(): iterable
     {
-        yield MenuItem::linkToDashboard('Главная', 'fa fa-home');
-        yield MenuItem::section('Каталог');
-        yield MenuItem::linkToCrud('Товары', 'fa fa-box', Product::class);
-        yield MenuItem::linkToCrud('Категории', 'fa fa-folder', Category::class);
-        yield MenuItem::section('Заказы');
-        yield MenuItem::linkToCrud('Заказы', 'fa fa-shopping-cart', Order::class);
-        yield MenuItem::section('Пользователи');
-        yield MenuItem::linkToCrud('Пользователи', 'fa fa-users', User::class);
-        yield MenuItem::section('Інструменти');
-        yield MenuItem::linkToRoute('Експорт', 'fa fa-download', 'admin_export');
+        yield MenuItem::linkToDashboard('Dashboard', 'fa fa-home');
+        yield MenuItem::section('Catalogue');
+        // Product/Category/Brand are proxied to catalog-service over HTTP (no local entity).
+        yield MenuItem::linkToRoute('Products', 'fa fa-box', 'admin_catalog_products');
+        yield MenuItem::linkToRoute('Categories', 'fa fa-folder', 'admin_catalog_categories');
+        yield MenuItem::linkToRoute('Brands', 'fa fa-tag', 'admin_catalog_brands');
+        yield MenuItem::linkTo(PrinterModelCrudController::class, 'Printer Models', 'fa fa-print');
+        yield MenuItem::section('Orders');
+        // Orders are proxied to order-service over HTTP (no local entity).
+        yield MenuItem::linkToRoute('Orders', 'fa fa-shopping-cart', 'admin_orders');
+        yield MenuItem::section('Users');
+        yield MenuItem::linkTo(UserCrudController::class, 'Users', 'fa fa-users');
+        yield MenuItem::section('Tools');
+        yield MenuItem::linkToRoute('Export', 'fa fa-download', 'admin_export');
     }
 }

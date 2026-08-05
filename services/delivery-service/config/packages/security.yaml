@@ -1,0 +1,30 @@
+security:
+    # Service-to-service tokens are signed by the monolith/order-service with the
+    # shared keypair. No user database here — the caller is reconstructed from the
+    # verified JWT claims (including roles).
+    providers:
+        jwt:
+            lexik_jwt: ~
+
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt))/
+            security: false
+
+        # Nova Poshta authenticates via the signed webhook payload, not a JWT.
+        webhook:
+            pattern: ^/api/webhooks/novaposhta
+            security: false
+
+        api:
+            pattern: ^/
+            stateless: true
+            provider: jwt
+            jwt: ~
+
+    access_control:
+        - { path: ^/health, roles: PUBLIC_ACCESS }
+        # Write endpoints (admin/webhook-driven) require a delivery-admin token.
+        - { path: ^/api/shipments, methods: [POST, PUT, PATCH, DELETE], roles: ROLE_DELIVERY_ADMIN }
+        # Any other /api read needs a valid service token.
+        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }

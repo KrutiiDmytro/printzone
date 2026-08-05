@@ -4,14 +4,15 @@ namespace App\Controller;
 
 use App\User\Domain\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
+use GuzzleHttp\Client as GuzzleClient;
 use League\OAuth2\Client\Provider\Github;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
+use Symfony\Component\Routing\Attribute\Route;
 
 class GitHubAuthController extends AbstractController
 {
@@ -20,14 +21,17 @@ class GitHubAuthController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $passwordHasher,
+        private Security $security,
         private string $githubClientId,
         private string $githubClientSecret,
         private string $githubRedirectUri,
     ) {
         $this->provider = new Github([
-            'clientId'     => $this->githubClientId,
+            'clientId' => $this->githubClientId,
             'clientSecret' => $this->githubClientSecret,
-            'redirectUri'  => $this->githubRedirectUri,
+            'redirectUri' => $this->githubRedirectUri,
+        ], [
+            'httpClient' => new GuzzleClient(['timeout' => 10, 'connect_timeout' => 5]),
         ]);
     }
 
@@ -48,6 +52,7 @@ class GitHubAuthController extends AbstractController
 
         if (!$code) {
             $this->addFlash('error', 'GitHub authentication failed');
+
             return $this->redirectToRoute('app_login');
         }
 
@@ -60,6 +65,7 @@ class GitHubAuthController extends AbstractController
 
             if (!$email) {
                 $this->addFlash('error', 'GitHub account has no public email');
+
                 return $this->redirectToRoute('app_login');
             }
 
@@ -77,14 +83,12 @@ class GitHubAuthController extends AbstractController
 
             $this->em->flush();
 
-            // Авторизуем пользователя через сессию
-            $securityToken = new UsernamePasswordToken($user, 'main', $user->getRoles());
-            $request->getSession()->set('_security_main', serialize($securityToken));
-            $request->getSession()->save();
+            $this->security->login($user);
 
             return $this->redirectToRoute('app_home');
         } catch (\Exception $e) {
-            $this->addFlash('error', 'GitHub authentication error: ' . $e->getMessage());
+            $this->addFlash('error', 'GitHub authentication error: '.$e->getMessage());
+
             return $this->redirectToRoute('app_login');
         }
     }

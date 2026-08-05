@@ -2,23 +2,23 @@
 
 namespace App\Tests\Functional\Controller;
 
+use App\Cart\Client\CartClient;
+use App\Catalog\Client\CatalogClient;
+use App\Catalog\View\ProductView;
+use App\Order\Client\OrderClient;
 use App\Tests\Functional\WebTestCase;
-use App\Cart\Domain\Entity\Cart;
-use App\Cart\Domain\Entity\CartItem;
-use App\Catalog\Domain\Entity\Product;
 use App\User\Domain\Entity\User;
-use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Uid\Uuid;
 
 class CheckoutControllerTest extends WebTestCase
 {
     public function testCheckoutRequiresAuthentication(): void
     {
         $client = static::createClient();
-        
-        // Створюємо схему після створення клієнта
+
         $this->createSchema();
         $this->loadFixtures();
-        
+
         $client->request('GET', '/checkout');
 
         $this->assertResponseRedirects('/login');
@@ -26,62 +26,153 @@ class CheckoutControllerTest extends WebTestCase
 
     public function testCheckoutIsAccessibleForAuthenticatedUser(): void
     {
-        $client = $this->createUserClient();
-        $container = static::getContainer();
-        $entityManager = $container->get('doctrine.orm.entity_manager');
+        [$client] = $this->authWithCart([$this->line('Checkout Test Product', 1000)]);
 
-        // Створюємо продукт
-        $product = new Product();
-        $product->setName('Checkout Test Product');
-        $product->setDescription('Test Description');
-        $product->setPrice(1000);
-        $product->setStock(10);
-        
-        $categoryRepository = $entityManager->getRepository(\App\Catalog\Domain\Entity\Category::class);
-        $category = $categoryRepository->findOneBy([]);
-        if ($category) {
-            $product->setCategory($category);
-        }
-        $entityManager->persist($product);
-
-        // Отримуємо користувача
-        $userRepository = $entityManager->getRepository(User::class);
-        $user = $userRepository->findOneBy(['email' => 'user@example.com']);
-
-        // Створюємо кошик
-        $cart = new Cart();
-        $cart->setUser($user);
-        $entityManager->persist($cart);
-
-        // Додаємо товар до кошика
-        $cartItem = new CartItem();
-        $cartItem->setCart($cart);
-        $cartItem->setProduct($product);
-        $cartItem->setQuantity(1);
-        $cart->addItem($cartItem); // Explicitly add to collection
-        $entityManager->persist($cartItem);
-        
-        $entityManager->flush();
-        
         $client->request('GET', '/checkout');
 
         $this->assertResponseIsSuccessful();
-        // Використовуємо більш точний селектор, оскільки h1 може бути в логотипі "Electro"
         $this->assertAnySelectorTextContains('h1', 'Billing details');
     }
 
     public function testCheckoutRedirectsWhenCartIsEmpty(): void
     {
-        $client = $this->createUserClient();
-        
-        // Перевіряємо, що при порожній корзині користувач перенаправляється на сторінку кошика
+        [$client] = $this->authWithCart([]);
+
         $client->request('GET', '/checkout');
-        
-        // Перевіряємо редирект на /cart
+
         $this->assertResponseRedirects('/cart');
-        
-        // Можна також перевірити flash-повідомлення після редиректу
+
         $client->followRedirect();
         $this->assertResponseIsSuccessful();
+    }
+
+    public function testPlaceOrderRedirectsToStripe(): void
+    {
+        $stripeUrl = 'https://checkout.stripe.com/c/pay/cs_test_123';
+        $mock = $this->createMock(OrderClient::class);
+        // The delivery snapshot from the form must reach order-service.
+        $mock->expects($this->once())->method('createCheckout')
+            ->with($this->callback(static fn (array $p): bool => 'Kyiv' === ($p['shippingAddress']['city'] ?? null)))
+            ->willReturn(['orderId' => (string) Uuid::v4(), 'url' => $stripeUrl]);
+
+        [$client] = $this->authWithCart([$this->line('Stripe Test Product', 2000)], $mock);
+
+        $client->request('POST', '/checkout/place-order', $this->shippingParams());
+
+        // Order creation + Stripe session now live in order-service; the monolith
+        // just delegates and redirects the user to the returned payment URL.
+        $this->assertResponseRedirects($stripeUrl);
+    }
+
+    public function testPlaceOrderRequiresShippingDetails(): void
+    {
+        [$client] = $this->authWithCart([$this->line('No Address Product', 2000)]);
+
+        // Missing delivery fields → bounce back to the checkout form, no order.
+        $client->request('POST', '/checkout/place-order');
+
+        $this->assertResponseRedirects('/checkout');
+    }
+
+    public function testPlaceOrderHandlesOrderServiceFailure(): void
+    {
+        $mock = $this->createMock(OrderClient::class);
+        $mock->method('createCheckout')->willThrowException(new \RuntimeException('Order Service unavailable'));
+
+        [$client] = $this->authWithCart([$this->line('Stripe Fail Product', 1500)], $mock);
+
+        $client->request('POST', '/checkout/place-order', $this->shippingParams());
+
+        // Failure is surfaced as a flash and the user is sent back to checkout.
+        $this->assertResponseRedirects('/checkout');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function shippingParams(): array
+    {
+        return [
+            'firstName' => 'Ada', 'lastName' => 'Lovelace', 'address' => '1 Analytical St',
+            'city' => 'Kyiv', 'country' => 'UA', 'postcode' => '01001', 'phone' => '+380001112233',
+        ];
+    }
+
+    /**
+     * @return array{productId: string, productName: string, price: int, quantity: int}
+     */
+    private function line(string $name, int $price, int $quantity = 1): array
+    {
+        return ['productId' => (string) Uuid::v4(), 'productName' => $name, 'price' => $price, 'quantity' => $quantity];
+    }
+
+    /**
+     * Authenticates a user whose cart (owned by cart-service) is stubbed to the
+     * given snapshot lines. Mocks Catalog + Cart clients BEFORE login so the test
+     * container replaces them before they are first used.
+     *
+     * @param list<array{productId: string, productName: string, price: int, quantity: int}> $items
+     *
+     * @return array{0: \Symfony\Bundle\FrameworkBundle\KernelBrowser, 1: object}
+     */
+    private function authWithCart(array $items, ?OrderClient $orderMock = null): array
+    {
+        $client = static::createClient();
+        $client->disableReboot();
+
+        $container = static::getContainer();
+        $this->mockCatalog($container);
+        $this->mockCart($container, $items);
+        if (null !== $orderMock) {
+            $container->set(OrderClient::class, $orderMock);
+        }
+
+        $this->createSchema();
+        $this->loadFixtures();
+
+        $em = $container->get('doctrine.orm.entity_manager');
+        $user = $em->getRepository(User::class)->findOneBy(['email' => 'user@example.com']);
+        $client->loginUser($user, 'main');
+
+        return [$client, $container];
+    }
+
+    /**
+     * Generic Catalog stub: returns a product view for any requested id so the
+     * cart resolves its snapshot lines, and empty nav lists.
+     */
+    private function mockCatalog(object $container): void
+    {
+        $view = static fn (string $id): ProductView => ProductView::fromArray([
+            'id' => $id, 'name' => 'Catalog Product', 'price' => 1000, 'stock' => 100,
+        ]);
+
+        $mock = $this->createMock(CatalogClient::class);
+        $mock->method('product')->willReturnCallback($view);
+        $mock->method('productsByIds')->willReturnCallback(
+            static function (array $ids) use ($view): array {
+                $map = [];
+                foreach ($ids as $id) {
+                    $map[(string) $id] = $view((string) $id);
+                }
+
+                return $map;
+            }
+        );
+        $mock->method('brands')->willReturn([]);
+        $mock->method('rootCategories')->willReturn([]);
+
+        $container->set(CatalogClient::class, $mock);
+    }
+
+    /**
+     * @param list<array{productId: string, productName: string, price: int, quantity: int}> $items
+     */
+    private function mockCart(object $container, array $items): void
+    {
+        $mock = $this->createMock(CartClient::class);
+        $mock->method('get')->willReturn($items);
+
+        $container->set(CartClient::class, $mock);
     }
 }

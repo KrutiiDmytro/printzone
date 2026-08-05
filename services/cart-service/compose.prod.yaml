@@ -1,0 +1,27 @@
+# Production overlay for cart-service. Deployed in-place under the monolith tree
+# (/var/www/app/services/cart-service), so ../../config/jwt resolves to the
+# monolith's shared keypair. Reached by the monolith over the shared
+# task-25_default network as `cart-service` (no public port in prod).
+services:
+  db-cart:
+    environment:
+      POSTGRES_PASSWORD: ${CART_DB_PASSWORD}
+    restart: unless-stopped
+
+  cart-service:
+    image: printzone/cart-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${CART_DB_PASSWORD}@db-cart:5432/cart_service?serverVersion=16&charset=utf8"
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      - default
+      - monolith
+
+networks:
+  monolith:
+    external: true
+    name: task-25_default

@@ -110,7 +110,7 @@
 | `orderId` | UUID | ID пов'язаного замовлення |
 | `items` | array | `[{productId, quantity}]` зарезервовані позиції |
 
-**Підписники**: Order Service (крок саги 3 — перехід до PAYMENT_PENDING)
+**Підписники**: Order Service (крок саги 3 — Order лишається PENDING, публікує `PaymentRequested`)
 
 ---
 
@@ -376,17 +376,20 @@ OrderService      CatalogService     PaymentService    OrderService
     │                   │  АБО             │                │
     │                   │──StockReservationFailed─────────►│
     │                   │                  │                │
-    │  (якщо зарезервовано)                │                │
+    │  (якщо зарезервовано; Order лишається PENDING)        │
     │                   │    PaymentRequested               │
     │                   │                  │◄───────────────│
-    │                   │                  │ (списання)     │
+    │                   │   (Checkout Session → checkoutUrl → │
+    │                   │    редирект клієнта → Stripe webhook)│
     │                   │                  │                │
     │◄─PaymentSucceeded────────────────────│                │
     │   АБО PaymentFailed                  │                │
     │                   │                  │                │
-    │──OrderPaid / OrderCancelled──────────────────────────►│
+    │──OrderPaid (→PAID) / OrderCancelled (→FAILED|CANCELLED)►│
     │                   │                  │          (наступні кроки)
 ```
+
+> Оплата йде за redirect-моделлю Stripe Checkout: списання відбувається на hosted-сторінці Stripe, а `PaymentSucceeded`/`PaymentFailed` публікуються після обробки **webhook'а** (не headless-подією). Order переходить у `PAID` при успіху або `FAILED` при відмові оплати; `CANCELLED` — при невдалому резервуванні чи дії адміна.
 
 ## Потік подій: Після оплати
 

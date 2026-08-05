@@ -1,0 +1,67 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Orders{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">Orders</h1>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All</option>
+                    {% for s in statuses %}
+                        <option value="{{ s }}" {{ filters.status == s ? 'selected' : '' }}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label">From</label>
+                <input type="date" name="dateFrom" value="{{ filters.dateFrom }}" class="form-control">
+            </div>
+            <div class="col-auto">
+                <label class="form-label">To</label>
+                <input type="date" name="dateTo" value="{{ filters.dateTo }}" class="form-control">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Status</th>
+                    <th class="text-end">Total</th>
+                    <th>Created</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in orders %}
+                    <tr>
+                        <td>{{ o.userEmail }}</td>
+                        <td><span class="badge bg-secondary">{{ o.status }}</span></td>
+                        <td class="text-end">€{{ (o.totalAmount / 100)|number_format(2) }}</td>
+                        <td>{{ o.createdAt is empty ? '—' : o.createdAt|date('d.m.Y H:i') }}</td>
+                        <td class="text-end text-nowrap">
+                            <a href="{{ path('admin_order_detail', {id: o.id}) }}" class="btn btn-sm btn-outline-secondary">Details</a>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">No orders.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

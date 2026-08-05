@@ -1,0 +1,85 @@
+services:
+  nginx:
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - certbot_webroot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+
+  mailer:
+    # !reset is required: an empty `ports: []` override is ignored by Compose, so
+    # the base published ports would otherwise leak into production.
+    ports: !reset []
+
+  # Do not expose the broker / management UI publicly in production.
+  rabbitmq:
+    ports: !reset []
+
+  php:
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
+      DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # catalog-service is reached over the shared network by name in prod
+      # (host.docker.internal:8002 only works on the dev host).
+      CATALOG_SERVICE_URL: "http://catalog-service"
+      # order-service owns orders + checkout Saga; checkout delegates here.
+      ORDER_SERVICE_URL: "http://order-service"
+      # cart-service owns the persistent cart of authenticated users.
+      CART_SERVICE_URL: "http://cart-service"
+      # storage-service owns the object backend (S3); AWS creds live there now.
+      STORAGE_SERVICE_URL: "http://storage-service"
+      # export-service owns async report generation; admin proxies to it.
+      EXPORT_SERVICE_URL: "http://export-service"
+      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      MAILER_DSN: ${MAILER_DSN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+
+  worker:
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
+      DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # Export's ProductExtractor reads the catalog over HTTP from the async worker.
+      CATALOG_SERVICE_URL: "http://catalog-service"
+      # Export's OrderExtractor reads orders over HTTP from the async worker.
+      ORDER_SERVICE_URL: "http://order-service"
+      # Present for parity so any cart resolution in a queued handler can reach the service.
+      CART_SERVICE_URL: "http://cart-service"
+      # Export's ProcessExportHandler writes result files through the storage-service.
+      STORAGE_SERVICE_URL: "http://storage-service"
+      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+      # The worker delivers queued emails (SendEmailMessage on the async transport),
+      # so it needs the real mailer DSN — otherwise it falls back to null:// and drops them.
+      MAILER_DSN: ${MAILER_DSN}
+      # From-address for the receipt email; must be a verified identity in SES (sandbox
+      # rejects unverified senders), otherwise the send fails and the email is dropped.
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+
+  relay:
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@database:5432/app?serverVersion=16&charset=utf8"
+      DATABASE_REPLICA_URL: "postgresql://app:${POSTGRES_PASSWORD}@database-replica:5432/app?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # Booting the kernel for app:outbox:relay instantiates the lexik key loader
+      # (pass_phrase: %env(JWT_PASSPHRASE)%, no default) via the OrderClient JWT
+      # wiring, so the relay needs the passphrase too — like php/worker above.
+      # .env.local is removed on deploy, so it must come through the environment.
+      JWT_PASSPHRASE: ${JWT_PASSPHRASE}

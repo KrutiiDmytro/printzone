@@ -1,0 +1,6 @@
+framework:
+    messenger:
+        transports:
+            # No broker / DB queue in tests: keep dispatches in memory (no RabbitMQ, no messenger_messages).
+            async: 'in-memory://'
+            events: 'in-memory://'

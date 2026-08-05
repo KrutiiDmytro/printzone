@@ -1,0 +1,13 @@
+parameters:
+    aws.s3.bucket: '%env(AWS_S3_BUCKET)%'
+
+services:
+    Aws\S3\S3Client:
+        class: Aws\S3\S3Client
+        arguments:
+            -
+                version: '%env(AWS_S3_VERSION)%'
+                region: '%env(AWS_DEFAULT_REGION)%'
+                credentials:
+                    key: '%env(AWS_ACCESS_KEY_ID)%'
+                    secret: '%env(AWS_SECRET_ACCESS_KEY)%'

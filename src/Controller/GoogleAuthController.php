@@ -4,15 +4,15 @@ namespace App\Controller;
 
 use App\User\Domain\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
+use GuzzleHttp\Client as GuzzleClient;
 use League\OAuth2\Client\Provider\Google;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
-use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
-
+use Symfony\Component\Routing\Attribute\Route;
 
 class GoogleAuthController extends AbstractController
 {
@@ -21,14 +21,17 @@ class GoogleAuthController extends AbstractController
     public function __construct(
         private EntityManagerInterface $em,
         private UserPasswordHasherInterface $passwordHasher,
+        private Security $security,
         private string $googleClientId,
         private string $googleClientSecret,
         private string $googleRedirectUri,
     ) {
         $this->provider = new Google([
-            'clientId'     => $this->googleClientId,
+            'clientId' => $this->googleClientId,
             'clientSecret' => $this->googleClientSecret,
-            'redirectUri'  => $this->googleRedirectUri,
+            'redirectUri' => $this->googleRedirectUri,
+        ], [
+            'httpClient' => new GuzzleClient(['timeout' => 10, 'connect_timeout' => 5]),
         ]);
     }
 
@@ -50,7 +53,8 @@ class GoogleAuthController extends AbstractController
         $errorDescription = $request->query->get('error_description');
 
         if (!$code) {
-            $this->addFlash('error', 'Google auth failed: ' . ($error ?? 'no_code') . ' - ' . ($errorDescription ?? ''));
+            $this->addFlash('error', 'Google auth failed: '.($error ?? 'no_code').' - '.($errorDescription ?? ''));
+
             return $this->redirectToRoute('app_login');
         }
 
@@ -78,14 +82,12 @@ class GoogleAuthController extends AbstractController
 
             $this->em->flush();
 
-            // Авторизуем пользователя через сессию
-            $securityToken = new UsernamePasswordToken($user, 'main', $user->getRoles());
-            $request->getSession()->set('_security_main', serialize($securityToken));
-            $request->getSession()->save();
-            
+            $this->security->login($user);
+
             return $this->redirectToRoute('app_home');
         } catch (\Exception $e) {
-            $this->addFlash('error', 'Google authentication error: ' . $e->getMessage());
+            $this->addFlash('error', 'Google authentication error: '.$e->getMessage());
+
             return $this->redirectToRoute('app_login');
         }
     }

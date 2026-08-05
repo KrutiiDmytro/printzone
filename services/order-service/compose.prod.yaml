@@ -1,0 +1,52 @@
+# Production overlay for order-service. Deployed in-place under the monolith
+# tree (/var/www/app/services/order-service), so ../../config/jwt resolves to
+# the monolith's shared keypair. Reached by the monolith over the shared
+# task-25_default network as `order-service` (no public port in prod).
+services:
+  db-order:
+    environment:
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD}
+    restart: unless-stopped
+
+  order-service:
+    image: printzone/order-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${ORDER_DB_PASSWORD}@db-order:5432/order_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # Delegates Stripe to payment-service (reached by name on task-25_default).
+      PAYMENT_SERVICE_URL: "http://payment-service"
+      # order-service now SIGNS a service JWT (ROLE_PAYMENT_ADMIN) to call
+      # payment-service → needs the shared keypair passphrase (private key is
+      # encrypted). Without it PaymentClient can't mint a token → checkout 502.
+      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      - default
+      - monolith
+
+  order-relay:
+    image: printzone/order-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${ORDER_DB_PASSWORD}@db-order:5432/order_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+    restart: unless-stopped
+
+  # Consumes payment.* (PaymentSucceeded/PaymentFailed) and transitions the order
+  # (→PAID/FAILED, emits OrderPaid/OrderCancelled). Consumes/writes only → no
+  # Stripe, no JWT signing.
+  order-worker:
+    image: printzone/order-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${ORDER_DB_PASSWORD}@db-order:5432/order_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+    restart: unless-stopped

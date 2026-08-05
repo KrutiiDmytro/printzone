@@ -1,0 +1,73 @@
+framework:
+    messenger:
+        transports:
+            # Outbound integration events (order.*) → the monolith's RabbitMQ
+            # `events` topic exchange. Published by the outbox relay; the routing
+            # key is set per-message (e.g. order.OrderPaid). JSON on the wire so
+            # non-PHP-native consumers can read it; the `type` header carries the
+            # shared FQCN App\Messaging\Domain\IntegrationEvent.
+            events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
+            # Inbound: payment-service events (payment.*) from the same `events`
+            # topic exchange. Receive-only (never in `routing`) — own queue so the
+            # order-worker consumes PaymentSucceeded/PaymentFailed without touching
+            # the order.* we publish. Same shared FQCN in the `type` header decodes
+            # the JSON back into our App\Messaging\Domain\IntegrationEvent.
+            payment_events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        order_payment_events:
+                            binding_keys: ['payment.*']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
+            # Inbound: delivery-service events (shipment.*) from the same `events`
+            # topic exchange. Receive-only — own queue so the order-worker advances
+            # the order lifecycle (ShipmentCreated→SHIPPED, ShipmentDelivered→
+            # DELIVERED) without touching the order.* we publish.
+            shipment_events:
+                dsn: '%env(MESSENGER_EVENTS_DSN)%'
+                serializer: messenger.transport.symfony_serializer
+                options:
+                    exchange:
+                        name: events
+                        type: topic
+                    queues:
+                        order_shipment_events:
+                            binding_keys: ['shipment.*']
+                    auto_setup: true
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+
+        default_bus: messenger.bus.default
+        buses:
+            messenger.bus.default: []
+
+        routing:
+            App\Messaging\Domain\IntegrationEvent: events
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                events: 'in-memory://'
+                payment_events: 'in-memory://'
+                shipment_events: 'in-memory://'

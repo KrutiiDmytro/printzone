@@ -1,0 +1,71 @@
+services:
+  db-catalog:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: catalog_service
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: changeme
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "catalog_service", "-U", "app"]
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - db_catalog_data:/var/lib/postgresql/data:rw
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/catalog-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8002:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - csvc_vendor:/app/vendor
+      - csvc_var:/app/var
+      # Shared RS256 keypair with the monolith → validates service-to-service tokens.
+      - ../../config/jwt:/jwt:ro
+    depends_on:
+      db-catalog:
+        condition: service_healthy
+
+  # Consumes Order.* integration events from the monolith's RabbitMQ to drive
+  # the stock-reservation Saga. Same image/volumes as catalog-service; reaches
+  # the broker over the host-published port (own compose project).
+  catalog-worker:
+    image: printzone/catalog-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console messenger:consume events --time-limit=3600 -v
+    restart: unless-stopped
+    volumes:
+      - .:/app
+      - csvc_vendor:/app/vendor
+      - csvc_var:/app/var
+      - ../../config/jwt:/jwt:ro
+    # `default` reaches db-catalog; `monolith` (the monolith compose network)
+    # reaches the shared RabbitMQ broker directly as `rabbitmq`.
+    networks:
+      - default
+      - monolith
+    depends_on:
+      db-catalog:
+        condition: service_healthy
+
+volumes:
+  db_catalog_data:
+  csvc_vendor:
+  csvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default

@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Catalog\Domain\Entity\Product;
 use App\Storage\FileStorageInterface;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
@@ -20,83 +18,33 @@ final class ProductImageService
     public function __construct(
         private readonly FileStorageInterface $storage,
         private readonly UrlGeneratorInterface $urlGenerator,
-        #[Autowire('%kernel.project_dir%')]
-        private readonly string $projectDir,
-        #[Autowire('%admin.product.image_upload_dir%')]
-        private readonly string $adminImageUploadDir,
-        #[Autowire('%env(STORAGE_TYPE)%')]
-        private readonly string $storageType,
     ) {
-    }
-
-    public function syncAfterWrite(Product $product, ?string $previousImage): void
-    {
-        $current = $product->getImage();
-
-        if ($previousImage !== null
-            && $previousImage !== $current
-            && str_starts_with($previousImage, self::PREFIX)) {
-            $this->safeDelete($previousImage);
-        }
-
-        if ($current === null || $current === '') {
-            return;
-        }
-
-        if (str_starts_with($current, self::PREFIX)) {
-            return;
-        }
-
-        $safeName = basename(str_replace('\\', '/', $current));
-        $localPath = $this->adminImageUploadDir.'/'.$safeName;
-
-        if (!is_file($localPath)) {
-            $legacyPath = $this->projectDir.'/public/img/'.$safeName;
-            if (is_file($legacyPath)) {
-                $localPath = $legacyPath;
-            } else {
-                return;
-            }
-        }
-
-        $contents = file_get_contents($localPath);
-        if (false === $contents) {
-            return;
-        }
-
-        $mime = mime_content_type($localPath) ?: 'application/octet-stream';
-        $key = sprintf('%s%d-%s', self::PREFIX, $product->getId(), $safeName);
-
-        $this->storage->write($key, $contents, $mime);
-        unlink($localPath);
-        $product->setImage($key);
     }
 
     public function deleteStoredImageIfAny(?string $imageKey): void
     {
-        if ($imageKey !== null && str_starts_with($imageKey, self::PREFIX)) {
+        if (null !== $imageKey && str_starts_with($imageKey, self::PREFIX)) {
             $this->safeDelete($imageKey);
         }
     }
 
     public function getUrlForDisplay(?string $image): string
     {
-        if ($image === null || $image === '') {
+        if (null === $image || '' === $image) {
             return '/img/product-1.png';
         }
 
         if (str_starts_with($image, self::PREFIX)) {
-            // Приватний S3: прямий getObjectUrl часто дає 403; показ через проксі.
-            if ('s3' === strtolower(trim($this->storageType))) {
-                return $this->urlGenerator->generate('app_media', ['key' => $image]);
+            // Presigned GET lets the browser fetch a private-bucket object directly
+            // from S3 (null in local mode). If storage is unavailable we degrade to
+            // the /media proxy rather than breaking the page render.
+            try {
+                $public = $this->storage->publicUrl($image);
+            } catch (\Throwable) {
+                $public = null;
             }
 
-            $public = $this->storage->publicUrl($image);
-            if ($public !== null) {
-                return $public;
-            }
-
-            return $this->urlGenerator->generate('app_media', ['key' => $image]);
+            return $public ?? $this->urlGenerator->generate('app_media', ['key' => $image]);
         }
 
         return '/img/'.$image;

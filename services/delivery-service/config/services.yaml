@@ -1,0 +1,21 @@
+parameters:
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Kernel.php'
+            - '../src/Entity/'
+            - '../src/Delivery/ShipmentDraft.php'
+            - '../src/Messaging/Domain/'
+
+    # The active provider is chosen at runtime from DELIVERY_PROVIDER (fake by
+    # default, nova_poshta for the real API). Everything else autowires the
+    # interface and stays provider-agnostic.
+    App\Delivery\DeliveryProviderInterface:
+        factory: ['@App\Delivery\DeliveryProviderFactory', 'create']
+        arguments: ['%env(DELIVERY_PROVIDER)%']

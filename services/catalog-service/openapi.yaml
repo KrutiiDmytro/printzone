@@ -1,0 +1,525 @@
+openapi: 3.1.0
+
+info:
+  title: Catalog Service API
+  version: "1.0.0"
+  description: |
+    Product catalog for the PrintZone platform: products, categories and brands.
+
+    Reads require any valid service token; writes (admin proxy from the monolith)
+    require an elevated `ROLE_CATALOG_ADMIN` service token. All money values are
+    integer cents.
+
+servers:
+  - url: http://localhost:8002
+    description: Local (docker compose)
+  - url: http://catalog-service
+    description: In-cluster (shared network task-25_default)
+
+tags:
+  - name: Products
+  - name: Categories
+  - name: Brands
+  - name: Health
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/products:
+    get:
+      tags: [Products]
+      summary: List products
+      description: |
+        Paginated and filtered list. If `ids` is provided (comma-separated UUIDs), returns
+        exactly those products (cart snapshot refresh) and ignores pagination/filters.
+      parameters:
+        - { name: ids, in: query, schema: { type: string }, description: "Comma-separated product UUIDs." }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+        - { name: category, in: query, schema: { type: string, format: uuid } }
+        - { name: categorySlug, in: query, schema: { type: string } }
+        - { name: brandSlug, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string }, description: "Full-text search term." }
+        - { name: sort, in: query, schema: { type: string } }
+        - { name: isFeatured, in: query, schema: { type: string } }
+        - { name: availableOnly, in: query, schema: { type: boolean } }
+        - { name: priceMin, in: query, schema: { type: integer } }
+        - { name: priceMax, in: query, schema: { type: integer } }
+        - { name: stockMin, in: query, schema: { type: integer } }
+        - { name: stockMax, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Matching products.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                  page: { type: integer }
+                  limit: { type: integer }
+                  total: { type: integer }
+                  priceRange:
+                    type: object
+                    description: Min/max price across the filtered set (cents).
+                    properties:
+                      min: { type: [integer, "null"] }
+                      max: { type: [integer, "null"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Products]
+      summary: Create a product
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /api/products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UuidPath"
+    get:
+      tags: [Products]
+      summary: Get a product by id
+      responses:
+        "200":
+          description: The product.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Products]
+      summary: Replace/update a product
+      description: Requires `ROLE_CATALOG_ADMIN`. Only provided fields change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    patch:
+      tags: [Products]
+      summary: Partially update a product
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Products]
+      summary: Delete a product
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/categories:
+    get:
+      tags: [Categories]
+      summary: List categories
+      parameters:
+        - { name: root, in: query, schema: { type: boolean }, description: "If true, only root categories." }
+      responses:
+        "200":
+          description: Categories.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Category" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Categories]
+      summary: Create a category
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /api/categories/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+        description: "Slug (for GET) or category UUID (for PUT/PATCH/DELETE)."
+    get:
+      tags: [Categories]
+      summary: Get a category by slug
+      responses:
+        "200":
+          description: The category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Categories]
+      summary: Update a category
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    patch:
+      tags: [Categories]
+      summary: Partially update a category
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Categories]
+      summary: Delete a category
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/brands:
+    get:
+      tags: [Brands]
+      summary: List brands (ordered by name)
+      responses:
+        "200":
+          description: Brands.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Brand" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Brands]
+      summary: Create a brand
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /api/brands/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+        description: "Slug (for GET) or brand UUID (for PUT/PATCH/DELETE)."
+    get:
+      tags: [Brands]
+      summary: Get a brand by slug
+      responses:
+        "200":
+          description: The brand.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Brands]
+      summary: Update a brand
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    patch:
+      tags: [Brands]
+      summary: Partially update a brand
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [Brands]
+      summary: Delete a brand
+      description: Requires `ROLE_CATALOG_ADMIN`.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Process is up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthLive" }
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe (checks the database)
+      security: []
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReady" }
+        "503":
+          description: A dependency is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReady" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: S2S RS256 JWT signed with the shared Lexik keypair.
+
+  parameters:
+    UuidPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+    Forbidden:
+      description: The token lacks `ROLE_CATALOG_ADMIN`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unprocessable:
+      description: Validation error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, "null"] }
+        price: { type: integer, description: "Price in cents." }
+        stock: { type: integer }
+        isFeatured: { type: boolean }
+        image: { type: [string, "null"] }
+        category:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                slug: { type: string }
+        brand:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+                slug: { type: string }
+                color: { type: [string, "null"] }
+
+    ProductWrite:
+      type: object
+      required: [name, price, stock, category]
+      properties:
+        name: { type: string }
+        price: { type: integer, minimum: 0, description: "Price in cents." }
+        stock: { type: integer, minimum: 0 }
+        category: { type: string, format: uuid, description: "Category UUID." }
+        brand: { type: [string, "null"], format: uuid }
+        description: { type: [string, "null"] }
+        image: { type: [string, "null"] }
+        isFeatured: { type: boolean }
+      example:
+        name: Ink Cartridge XL
+        price: 2599
+        stock: 40
+        category: 0b8c5a2e-8f1a-4c0e-9b2a-1d2e3f4a5b6c
+        isFeatured: true
+
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        parentId: { type: [string, "null"], format: uuid }
+
+    CategoryWrite:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        parent: { type: [string, "null"], format: uuid, description: "Parent category UUID." }
+
+    Brand:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        color: { type: [string, "null"], description: "Hex color like #cc0000." }
+
+    BrandWrite:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        color:
+          type: [string, "null"]
+          pattern: "^#[0-9a-fA-F]{6}$"
+          example: "#cc0000"
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    HealthLive:
+      type: object
+      properties:
+        status: { type: string, const: ok }
+
+    HealthReady:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, error] }
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status: { type: string }
+              latency_ms: { type: integer }
+              detail: { type: string }

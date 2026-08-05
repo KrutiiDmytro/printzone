@@ -1,0 +1,28 @@
+framework:
+    messenger:
+        failure_transport: failed
+
+        transports:
+            # Internal async job queue — Doctrine transport on the service's own
+            # DB (no broker). ExportService dispatches ProcessExportMessage here;
+            # the export-worker consumes it.
+            async:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                retry_strategy:
+                    max_retries: 3
+                    multiplier: 2
+            failed: 'doctrine://default?queue_name=failed'
+
+        default_bus: messenger.bus.default
+        buses:
+            messenger.bus.default: []
+
+        routing:
+            App\Message\ProcessExportMessage: async
+
+when@test:
+    framework:
+        messenger:
+            transports:
+                async: 'in-memory://'
+                failed: 'in-memory://'

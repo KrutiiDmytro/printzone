@@ -73,6 +73,18 @@
             "./config/routes/easyadmin.yaml"
         ]
     },
+    "friendsofphp/php-cs-fixer": {
+        "version": "3.95",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "3.39",
+            "ref": "97aaf9026490db73b86c23d49e5774bc89d2b232"
+        },
+        "files": [
+            ".php-cs-fixer.dist.php"
+        ]
+    },
     "lexik/jwt-authentication-bundle": {
         "version": "3.2",
         "recipe": {
@@ -97,6 +109,9 @@
             "./config/packages/nelmio_cors.yaml"
         ]
     },
+    "phpstan/phpstan": {
+        "version": "2.2.2"
+    },
     "phpunit/phpunit": {
         "version": "11.5",
         "recipe": {
@@ -111,6 +126,24 @@
             "./tests/bootstrap.php",
             "./bin/phpunit"
         ]
+    },
+    "stripe/stripe-php": {
+        "version": "20.1",
+        "recipe": {
+            "repo": "github.com/symfony/recipes-contrib",
+            "branch": "main",
+            "version": "19.0",
+            "ref": "d6829c693e3927a8972c7671d74a1a5c505712b0"
+        }
+    },
+    "symfony/amazon-mailer": {
+        "version": "7.4",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "4.4",
+            "ref": "9648db3ecae5c8a6b1a5f74715d3907124348815"
+        }
     },
     "symfony/asset-mapper": {
         "version": "7.4",

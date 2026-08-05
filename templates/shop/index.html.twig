@@ -1,60 +1,652 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Shop - Electro{% endblock %}
+{% block title %}{% if currentCategory is defined %}{{ currentCategory.name }}{% else %}Shop{% endif %} — Electro{% endblock %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <style>
+        /* ===== PAGE HERO ===== */
+        .shop-hero {
+            background: linear-gradient(135deg, #0d6efd 0%, #0a3d8f 60%, #06245a 100%);
+            padding: 48px 0 40px;
+            position: relative;
+            overflow: hidden;
+        }
+        .shop-hero::before {
+            content: '';
+            position: absolute;
+            top: -80px; right: -60px;
+            width: 320px; height: 320px;
+            background: rgba(255,255,255,.05);
+            border-radius: 50%;
+        }
+        .shop-hero-title {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .shop-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: .85rem;
+            color: rgba(255,255,255,.65);
+            flex-wrap: wrap;
+        }
+        .shop-breadcrumb a {
+            color: rgba(255,255,255,.8);
+            text-decoration: none;
+            transition: color .15s;
+        }
+        .shop-breadcrumb a:hover { color: #fff; }
+        .shop-breadcrumb .sep { opacity: .4; }
+        .shop-breadcrumb .active { color: #fff; font-weight: 600; }
+
+        /* ===== LAYOUT ===== */
+        .shop-layout { padding: 48px 0 72px; background: #f8faff; }
+
+        /* ===== SIDEBAR ===== */
+        .shop-sidebar {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            position: sticky;
+            top: 90px;
+        }
+        .sidebar-label {
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: #9ca3af;
+            margin-bottom: 14px;
+        }
+        .cat-filter-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 12px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: #374151;
+            font-size: .88rem;
+            font-weight: 500;
+            transition: all .18s;
+            margin-bottom: 2px;
+        }
+        .cat-filter-link:hover,
+        .cat-filter-link.active {
+            background: #eff6ff;
+            color: #0d6efd;
+            font-weight: 600;
+        }
+        .cat-filter-link .cat-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #d1d5db;
+            flex-shrink: 0;
+            transition: background .18s;
+        }
+        .cat-filter-link:hover .cat-dot,
+        .cat-filter-link.active .cat-dot { background: #0d6efd; }
+        .cat-filter-left { display: flex; align-items: center; gap: 10px; }
+        .cat-count-badge {
+            font-size: .72rem;
+            color: #9ca3af;
+            background: #f3f4f6;
+            border-radius: 50px;
+            padding: 2px 8px;
+            transition: all .18s;
+        }
+        .cat-filter-link.active .cat-count-badge,
+        .cat-filter-link:hover .cat-count-badge {
+            background: #dbeafe;
+            color: #0d6efd;
+        }
+        .sidebar-divider {
+            height: 1px;
+            background: #f3f4f6;
+            margin: 16px 0;
+        }
+
+        /* ===== FILTER BAR ===== */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #fff;
+            border-radius: 12px;
+            padding: 14px 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .filter-bar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .filter-count {
+            font-size: .85rem;
+            color: #6b7280;
+        }
+        .filter-count strong { color: #111827; }
+        .active-filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #0d6efd;
+            font-size: .78rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 50px;
+        }
+        .active-filter-tag a {
+            color: #93c5fd;
+            text-decoration: none;
+            font-size: .75rem;
+            line-height: 1;
+        }
+        .active-filter-tag a:hover { color: #0d6efd; }
+        .sort-select {
+            border: 1.5px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 7px 12px;
+            font-size: .85rem;
+            color: #374151;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+            transition: border-color .2s;
+        }
+        .sort-select:focus { border-color: #0d6efd; }
+
+        /* ===== PRODUCT CARD ===== */
+        .product-card {
+            background: #fff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,.06);
+            transition: transform .25s, box-shadow .25s;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .product-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 16px 40px rgba(13,110,253,.12);
+        }
+        .product-card-img {
+            position: relative;
+            aspect-ratio: 4/3;
+            overflow: hidden;
+            background: #f3f4f6;
+        }
+        .product-card-img img {
+            width: 100%; height: 100%;
+            object-fit: contain;
+            padding: 12px;
+            transition: transform .4s;
+        }
+        .product-card:hover .product-card-img img { transform: scale(1.06); }
+        .product-card-badge {
+            position: absolute;
+            top: 12px; left: 12px;
+            background: linear-gradient(135deg, #0d6efd, #6366f1);
+            color: #fff;
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 50px;
+        }
+        .product-card-actions {
+            position: absolute;
+            top: 12px; right: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            opacity: 0;
+            transform: translateX(8px);
+            transition: all .25s;
+        }
+        .product-card:hover .product-card-actions {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .product-card-action-btn {
+            width: 34px; height: 34px;
+            background: #fff;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            text-decoration: none;
+            color: #374151;
+            font-size: .85rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,.1);
+            transition: all .2s;
+        }
+        .product-card-action-btn:hover { background: #0d6efd; color: #fff; }
+        .product-card-body {
+            padding: 16px 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .product-card-category {
+            font-size: .75rem;
+            font-weight: 600;
+            color: #0d6efd;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            text-decoration: none;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .product-card-name {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #111827;
+            text-decoration: none;
+            line-height: 1.4;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .product-card-name:hover { color: #0d6efd; }
+        .product-card-stars {
+            display: flex;
+            gap: 2px;
+            color: #f59e0b;
+            font-size: .75rem;
+            margin-bottom: 10px;
+        }
+        .product-card-price {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #0d6efd;
+            margin-top: auto;
+        }
+        .product-card-footer {
+            padding: 12px 20px 16px;
+            border-top: 1px solid #f3f4f6;
+        }
+        .btn-add-cart {
+            width: 100%;
+            background: #0d6efd;
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            padding: 10px;
+            font-size: .88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-add-cart:hover { background: #0a58ca; transform: translateY(-1px); }
+
+        /* ===== EMPTY STATE ===== */
+        .empty-state {
+            text-align: center;
+            padding: 64px 20px;
+        }
+        .empty-icon {
+            width: 80px; height: 80px;
+            background: #eff6ff;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem;
+            color: #0d6efd;
+            margin: 0 auto 20px;
+        }
+        .empty-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 8px;
+        }
+        .empty-sub { color: #9ca3af; font-size: .95rem; margin-bottom: 24px; }
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #0d6efd;
+            color: #fff;
+            font-weight: 600;
+            padding: 11px 26px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-size: .9rem;
+            transition: all .2s;
+        }
+        .btn-back:hover { background: #0a58ca; color: #fff; transform: translateY(-2px); }
+
+        /* ===== DUAL RANGE SLIDER ===== */
+        .price-display {
+            display: flex;
+            justify-content: space-between;
+            font-size: .82rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+        }
+        .price-slider-wrap {
+            position: relative;
+            height: 36px;
+            margin-bottom: 14px;
+        }
+        .price-slider-track {
+            position: absolute;
+            top: 50%;
+            left: 0; right: 0;
+            height: 4px;
+            background: #e5e7eb;
+            border-radius: 2px;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        .price-slider-fill {
+            position: absolute;
+            height: 100%;
+            background: #0d6efd;
+            border-radius: 2px;
+        }
+        .price-slider-wrap input[type=range] {
+            position: absolute;
+            width: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            height: 4px;
+            margin: 0;
+            outline: none;
+        }
+        .price-slider-wrap input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            pointer-events: all;
+            width: 18px; height: 18px;
+            background: #fff;
+            border: 2px solid #0d6efd;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0,0,0,.15);
+        }
+        .price-slider-wrap input[type=range]::-moz-range-thumb {
+            pointer-events: all;
+            width: 18px; height: 18px;
+            background: #fff;
+            border: 2px solid #0d6efd;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0,0,0,.15);
+            border: 2px solid #0d6efd;
+        }
+    </style>
+{% endblock %}
 
 {% block body %}
-    <!-- Single Page Header start -->
-    <div class="container-fluid page-header py-5">
-        <h1 class="text-center text-white display-6 wow fadeInUp" data-wow-delay="0.1s">Shop</h1>
-        <ol class="breadcrumb justify-content-center mb-0 wow fadeInUp" data-wow-delay="0.3s">
-            <li class="breadcrumb-item"><a href="{{ path('app_home') }}">Home</a></li>
-            <li class="breadcrumb-item"><a href="#">Pages</a></li>
-            <li class="breadcrumb-item active text-white">Shop</li>
-        </ol>
-    </div>
-    <!-- Single Page Header End -->
 
-    <!-- Shop Start -->
-    <div class="container-fluid products pt-5">
-        <div class="container py-5">
-            {% if currentCategory is defined %}
-                <h2 class="text-center mb-4">{{ currentCategory.name }}</h2>
-            {% endif %}
-            
-            <div class="row g-4">
-                {% for product in products %}
-                    <div class="col-md-6 col-lg-4 col-xl-3">
-                        <div class="card h-100 border-0 shadow-sm">
-                            <img src="{{ product_image_url(product.image) }}" 
-                                class="card-img-top" alt="{{ product.name }}">
-                            <div class="card-body">
-                                <p class="text-muted small mb-1">{{ product.category.name }}</p>
-                                <h5 class="card-title">
-                                    <a href="{{ path('app_product_show', {id: product.id}) }}" 
-                                    class="text-dark text-decoration-none">
-                                        {{ product.name }}
-                                    </a>
-                                </h5>
-                                <p class="text-primary fw-bold mb-3">
-                                    ${{ (product.price / 100)|number_format(2) }}
-                                </p>
-                                <form method="post" action="{{ path('app_cart_add', {id: product.id}) }}">
-                                    <input type="hidden" name="quantity" value="1">
-                                    <button type="submit" class="btn btn-primary border-secondary rounded-pill py-2 px-4">
-                                        <i class="fas fa-shopping-cart me-2"></i> Add To Cart
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
+    {# ===== PAGE HERO ===== #}
+    <section class="shop-hero">
+        <div class="container position-relative" style="z-index:1;">
+            <h1 class="shop-hero-title">
+                {% if currentCategory is defined %}
+                    {{ currentCategory.name }}
                 {% else %}
-                    <div class="col-12 text-center py-5">
-                        <p class="text-muted">No products found in this category.</p>
-                        <a href="{{ path('app_home') }}" class="btn btn-primary">Back to Home</a>
+                    All Products
+                {% endif %}
+            </h1>
+            <nav class="shop-breadcrumb">
+                <a href="{{ path('app_home') }}">Home</a>
+                <span class="sep">›</span>
+                <a href="{{ path('app_shop') }}">Shop</a>
+                {% if currentCategory is defined %}
+                    <span class="sep">›</span>
+                    <span class="active">{{ currentCategory.name }}</span>
+                {% else %}
+                    <span class="sep">›</span>
+                    <span class="active">All Products</span>
+                {% endif %}
+            </nav>
+        </div>
+    </section>
+
+    {# ===== SHOP LAYOUT ===== #}
+    <div class="shop-layout">
+        <div class="container">
+            <div class="row g-4">
+
+                {# ===== SIDEBAR ===== #}
+                <div class="col-lg-3">
+                    <aside class="shop-sidebar">
+                        <div class="sidebar-label">Categories</div>
+
+                        <a href="{{ path('app_shop') }}"
+                           class="cat-filter-link {% if currentCategory is not defined %}active{% endif %}">
+                            <span class="cat-filter-left">
+                                <span class="cat-dot"></span>
+                                All Products
+                            </span>
+                        </a>
+
+                        {% if categories is defined %}
+                            {% for category in categories %}
+                                <a href="{{ path('app_category_show', {slug: category.slug}) }}"
+                                   class="cat-filter-link {% if currentCategory is defined and currentCategory.id == category.id %}active{% endif %}">
+                                    <span class="cat-filter-left">
+                                        <span class="cat-dot"></span>
+                                        {{ category.name }}
+                                    </span>
+                                    <span class="cat-count-badge">{{ category.products|length }}</span>
+                                </a>
+                            {% endfor %}
+                        {% endif %}
+
+                        <div class="sidebar-divider"></div>
+
+                        <div class="sidebar-label">Price Range (€)</div>
+                        <form method="get" action="" id="price-filter-form">
+                            {% if currentSort is defined and currentSort %}
+                                <input type="hidden" name="sort" value="{{ currentSort }}">
+                            {% endif %}
+
+                            <div class="price-display">
+                                <span id="price-display-min">€{{ priceParams.min is not null ? priceParams.min|round : (priceRange.min / 100)|round }}</span>
+                                <span id="price-display-max">€{{ priceParams.max is not null ? priceParams.max|round : (priceRange.max / 100)|round }}</span>
+                            </div>
+
+                            <div class="price-slider-wrap">
+                                <div class="price-slider-track">
+                                    <div class="price-slider-fill" id="price-slider-fill"></div>
+                                </div>
+                                <input type="range" id="range-min"
+                                       min="{{ (priceRange.min / 100)|round }}"
+                                       max="{{ (priceRange.max / 100)|round }}"
+                                       value="{{ priceParams.min is not null ? priceParams.min|round : (priceRange.min / 100)|round }}"
+                                       step="1">
+                                <input type="range" id="range-max"
+                                       min="{{ (priceRange.min / 100)|round }}"
+                                       max="{{ (priceRange.max / 100)|round }}"
+                                       value="{{ priceParams.max is not null ? priceParams.max|round : (priceRange.max / 100)|round }}"
+                                       step="1">
+                            </div>
+
+                            <input type="hidden" name="price_min" id="input-price-min"
+                                   value="{{ priceParams.min is not null ? priceParams.min|round : '' }}">
+                            <input type="hidden" name="price_max" id="input-price-max"
+                                   value="{{ priceParams.max is not null ? priceParams.max|round : '' }}">
+
+                            <button type="submit"
+                                    style="width:100%;background:#0d6efd;color:#fff;border:none;border-radius:8px;padding:8px;font-size:.82rem;font-weight:600;cursor:pointer;">
+                                Apply
+                            </button>
+                            {% if priceParams.min is not null or priceParams.max is not null %}
+                                <a href="?" style="display:block;text-align:center;font-size:.75rem;color:#9ca3af;margin-top:6px;text-decoration:none;">
+                                    Clear price filter
+                                </a>
+                            {% endif %}
+                        </form>
+                    </aside>
+                </div>
+
+                {# ===== MAIN ===== #}
+                <div class="col-lg-9">
+
+                    {# Filter bar #}
+                    <div class="filter-bar">
+                        <div class="filter-bar-left">
+                            <span class="filter-count">
+                                <strong>{{ products|length }}</strong> product{{ products|length != 1 ? 's' : '' }} found
+                            </span>
+                            {% if currentCategory is defined %}
+                                <span class="active-filter-tag">
+                                    {{ currentCategory.name }}
+                                    <a href="{{ path('app_shop') }}" title="Clear filter">✕</a>
+                                </span>
+                            {% endif %}
+                            {% if priceParams.min is not null or priceParams.max is not null %}
+                                <span class="active-filter-tag">
+                                    €{{ priceParams.min ?? '0' }} – €{{ priceParams.max ?? '∞' }}
+                                    <a href="?" title="Clear price filter">✕</a>
+                                </span>
+                            {% endif %}
+                        </div>
+                        <form method="get" action="" id="sort-form" style="margin:0;">
+                            {% if priceParams.min is not null %}
+                                <input type="hidden" name="price_min" value="{{ priceParams.min }}">
+                            {% endif %}
+                            {% if priceParams.max is not null %}
+                                <input type="hidden" name="price_max" value="{{ priceParams.max }}">
+                            {% endif %}
+                            <select class="sort-select" name="sort" onchange="document.getElementById('sort-form').submit()">
+                                <option value=""      {% if currentSort == '' %}selected{% endif %}>Default sorting</option>
+                                <option value="price_asc"  {% if currentSort == 'price_asc' %}selected{% endif %}>Price: low to high</option>
+                                <option value="price_desc" {% if currentSort == 'price_desc' %}selected{% endif %}>Price: high to low</option>
+                                <option value="newest"     {% if currentSort == 'newest' %}selected{% endif %}>Newest first</option>
+                            </select>
+                        </form>
                     </div>
-                {% endfor %}
+
+                    {# Product grid #}
+                    <div class="row g-4">
+                        {% for product in products %}
+                            <div class="col-sm-6 col-xl-4">
+                                <div class="product-card">
+                                    <div class="product-card-img">
+                                        <img src="{{ product_image_url(product.image) }}" alt="{{ product.name }}">
+                                        {% if product.isFeatured %}
+                                            <span class="product-card-badge">Featured</span>
+                                        {% endif %}
+                                        <div class="product-card-actions">
+                                            <a href="{{ path('app_product_show', {id: product.id}) }}"
+                                               class="product-card-action-btn" title="View">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="product-card-body">
+                                        <a href="{{ path('app_category_show', {slug: product.category.slug}) }}"
+                                           class="product-card-category">
+                                            {{ product.category.name }}
+                                        </a>
+                                        <a href="{{ path('app_product_show', {id: product.id}) }}"
+                                           class="product-card-name">
+                                            {{ product.name }}
+                                        </a>
+                                        <div class="product-card-stars">
+                                            <i class="fas fa-star"></i><i class="fas fa-star"></i>
+                                            <i class="fas fa-star"></i><i class="fas fa-star"></i>
+                                            <i class="fas fa-star-half-alt"></i>
+                                        </div>
+                                        <div class="product-card-price">€{{ (product.price / 100)|number_format(2) }}</div>
+                                    </div>
+                                    <div class="product-card-footer">
+                                        <form method="post" action="{{ path('app_cart_add', {id: product.id}) }}">
+                                            <input type="hidden" name="quantity" value="1">
+                                            <button type="submit" class="btn-add-cart">
+                                                <i class="fas fa-shopping-cart"></i> Add to Cart
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="col-12">
+                                <div class="empty-state">
+                                    <div class="empty-icon"><i class="fas fa-box-open"></i></div>
+                                    <div class="empty-title">No products found</div>
+                                    <p class="empty-sub">
+                                        {% if currentCategory is defined %}
+                                            There are no products in "{{ currentCategory.name }}" yet.
+                                        {% else %}
+                                            The shop is empty right now.
+                                        {% endif %}
+                                    </p>
+                                    <a href="{{ path('app_shop') }}" class="btn-back">
+                                        <i class="fas fa-arrow-left"></i> Back to Shop
+                                    </a>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                </div>
             </div>
         </div>
     </div>
-    <!-- Shop End -->
+
+{% endblock %}
+
+{% block javascripts %}
+{{ parent() }}
+<script>
+(function () {
+    var rangeMin = document.getElementById('range-min');
+    var rangeMax = document.getElementById('range-max');
+    var fill     = document.getElementById('price-slider-fill');
+    var dispMin  = document.getElementById('price-display-min');
+    var dispMax  = document.getElementById('price-display-max');
+    var inputMin = document.getElementById('input-price-min');
+    var inputMax = document.getElementById('input-price-max');
+
+    if (!rangeMin || !rangeMax) return;
+
+    var absMin = parseFloat(rangeMin.min);
+    var absMax = parseFloat(rangeMin.max);
+    var span   = absMax - absMin || 1;
+
+    function update() {
+        var lo = parseFloat(rangeMin.value);
+        var hi = parseFloat(rangeMax.value);
+
+        if (lo > hi) { rangeMin.value = hi; lo = hi; }
+        if (hi < lo) { rangeMax.value = lo; hi = lo; }
+
+        fill.style.left  = ((lo - absMin) / span * 100) + '%';
+        fill.style.right = ((absMax - hi) / span * 100) + '%';
+
+        dispMin.textContent = '€' + Math.round(lo);
+        dispMax.textContent = '€' + Math.round(hi);
+
+        inputMin.value = (lo > absMin) ? Math.round(lo) : '';
+        inputMax.value = (hi < absMax) ? Math.round(hi) : '';
+    }
+
+    rangeMin.addEventListener('input', update);
+    rangeMax.addEventListener('input', update);
+    update();
+}());
+</script>
 {% endblock %}

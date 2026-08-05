@@ -24,8 +24,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
-    ports:
-      - "5434:5432"
     volumes:
       - database_data:/var/lib/postgresql/data:rw
       - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
@@ -53,11 +51,10 @@ services:
       timeout: 5s
       retries: 10
       start_period: 90s
-    ports:
-      - "5435:5432"
     volumes:
       - database_replica_data:/var/lib/postgresql/data:rw
       - ./docker/postgres/replica/entrypoint.sh:/usr/local/bin/replica-entrypoint.sh:ro
+      - ./docker/postgres/replica/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     depends_on:
       database:
         condition: service_healthy
@@ -67,7 +64,6 @@ services:
       context: .
       dockerfile: Dockerfile.php
     image: task-25/php:latest
-    container_name: task-25
     env_file:
       - path: .env.local
         required: false
@@ -85,20 +81,49 @@ services:
     volumes:
       - .:/var/www/html
     working_dir: /var/www/html
-    command: php bin/console messenger:consume async --time-limit=3600
+    command: php bin/console messenger:consume async events --time-limit=3600
     restart: unless-stopped
     depends_on:
-      - database
+      database:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  relay:
+    image: task-25/php:latest
+    env_file:
+      - path: .env.local
+        required: false
+    volumes:
+      - .:/var/www/html
+    working_dir: /var/www/html
+    command: php bin/console app:outbox:relay --time-limit=3600
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
 
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - .:/var/www/html
       - ./docker/nginx/default.dev.conf:/etc/nginx/conf.d/default.conf
+      - certbot_webroot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
     depends_on:
       - php
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done;"
 
     ###> symfony/mailer ###
   mailer:
@@ -110,8 +135,38 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
     ###< symfony/mailer ###
-    
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
 volumes:
   ###> doctrine/doctrine-bundle ###
   database_data: ###< doctrine/doctrine-bundle ###
   database_replica_data:
+  certbot_webroot:
+  letsencrypt:
+  rabbitmq_data:
+
+# Pin the default network name so the monolith shares one network with the
+# extracted services (catalog/user/order), which join it as
+# `external: true, name: task-25_default`. Without this the network is named
+# after the compose project (= deploy dir: "task-25" locally but "app" in prod),
+# so the prod monolith landed on "app_default" and could not resolve
+# catalog-service / order-service by hostname.
+networks:
+  default:
+    name: task-25_default

@@ -4,7 +4,7 @@ namespace App\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
 
 class ApiCheckController extends AbstractController
 {
@@ -13,10 +13,10 @@ class ApiCheckController extends AbstractController
     {
         // Если запрос дошел сюда, значит JWT токен валидный (firewall пропустил)
         $user = $this->getUser();
-        
+
         return new JsonResponse([
             'message' => 'Token is valid',
-            'user' => $user ? $user->getUserIdentifier() : null
+            'user' => $user ? $user->getUserIdentifier() : null,
         ]);
     }
 }

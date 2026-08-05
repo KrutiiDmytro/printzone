@@ -1,7 +1,7 @@
 stages:
   - validate
-  - test
   - build
+  - test
   - deploy
 
 default:
@@ -9,17 +9,27 @@ default:
     - Веб-разработка
 
 variables:
-  DEPLOY_DIR: /var/www/task-25
+  DEPLOY_DIR: /var/www/app
   DEPLOY_USER: deploy
   PHP_IMAGE: php:8.2-cli-alpine
-  COMPOSER_IMAGE: composer:2
-  # Без -x: не чіпаємо gitignored директорії (vendor/, var/, .phpunit.cache/ тощо)
-  # що створені Docker-контейнерами від root і не можуть бути видалені runner-користувачем
+  COMPOSE: "docker compose -f compose.yaml -f compose.prod.yaml"
   GIT_CLEAN_FLAGS: -ffd
+  LOCAL_IMAGE: task-25/php:latest
+
+# Пайплайн створюється на Merge Request і на гілці develop (без дублювання)
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# Спільні правила: перевірки бігають на MR (до мерджа) і на develop
+.rules_mr_develop: &rules_mr_develop
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  - if: '$CI_COMMIT_BRANCH == "develop"'
 
 # ─────────────────────────────────────────────────────────────
 # VALIDATE
-# Швидкі статичні перевірки без залежностей
+# Швидкі статичні перевірки — один docker run з PHP_IMAGE
 # ─────────────────────────────────────────────────────────────
 
 lint:php:
@@ -31,83 +41,49 @@ lint:php:
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
         $PHP_IMAGE \
-        sh -c "find src tests -name '*.php' | xargs php -l | grep -v 'No syntax errors' || true && echo 'All files OK'"
-  only:
-    - develop
-
-composer:validate:
-  stage: validate
-  script:
+        sh -c "find src tests -name '*.php' -print0 | xargs -0 -P4 php -l"
     - echo "=== Validating composer.json ==="
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
         -w /app \
-        $COMPOSER_IMAGE \
-        validate --strict --no-check-publish
-  only:
-    - develop
+        composer:2 \
+        sh -c "git config --global --add safe.directory /app && composer validate --no-check-publish"
+  rules: *rules_mr_develop
 
-# ─────────────────────────────────────────────────────────────
-# TEST
-# Ізольовані контейнери з SQLite (без PostgreSQL)
-# ─────────────────────────────────────────────────────────────
-
-.test_base:
-  stage: test
-  before_script:
-    # Кешуємо vendor/ у іменованому Docker volume між запусками
-    - docker volume create composer-cache-task24 || true
-    - |
-      docker run --rm \
-        -v "$CI_PROJECT_DIR:/app" \
-        -v "composer-cache-task24:/composer-cache" \
-        -w /app \
-        -e COMPOSER_HOME=/composer-cache \
-        $COMPOSER_IMAGE \
-        install --no-interaction --prefer-dist --optimize-autoloader
-  only:
-    - develop
-
-test:unit:
-  extends: .test_base
+audit:composer:
+  stage: validate
   script:
-    - echo "=== Unit Tests ==="
+    - echo "=== Composer security audit ==="
+    # --locked audits composer.lock, NOT the installed vendor/. The shell runner
+    # reuses its build dir, where earlier root-running docker jobs leave a stale
+    # root-owned vendor/; without --locked the audit read that old tree (2.8.0)
+    # instead of the committed lock and failed on an already-patched advisory.
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
-        -v "composer-cache-task24:/composer-cache" \
         -w /app \
-        -e APP_ENV=test \
-        -e COMPOSER_HOME=/composer-cache \
-        $PHP_IMAGE \
-        sh -c "
-          apk add --no-cache libsodium-dev icu-dev libzip-dev sqlite &&
-          docker-php-ext-install intl zip sodium &&
-          php bin/phpunit --testsuite Unit --colors=never
-        "
+        composer:2 \
+        sh -c "git config --global --add safe.directory /app && composer audit --locked --format=plain"
+  rules: *rules_mr_develop
 
-test:functional:
-  extends: .test_base
+cs:fixer:
+  stage: validate
   script:
-    - echo "=== Functional Tests (SQLite) ==="
+    - echo "=== PHP CS Fixer (check, no changes) ==="
     - |
       docker run --rm \
         -v "$CI_PROJECT_DIR:/app" \
-        -v "composer-cache-task24:/composer-cache" \
         -w /app \
-        -e APP_ENV=test \
-        -e COMPOSER_HOME=/composer-cache \
-        $PHP_IMAGE \
-        sh -c "
-          apk add --no-cache libsodium-dev icu-dev libzip-dev sqlite &&
-          docker-php-ext-install intl zip sodium &&
-          php bin/phpunit --testsuite Functional --colors=never
-        "
+        -e PHP_CS_FIXER_IGNORE_ENV=1 \
+        ghcr.io/php-cs-fixer/php-cs-fixer:3-php8.3 \
+        check --diff --show-progress=dots
+  needs: []
+  rules: *rules_mr_develop
 
 # ─────────────────────────────────────────────────────────────
 # BUILD
-# Збираємо Docker образ та пушимо в GitLab Registry
+# Збираємо локальний образ паралельно з validate (needs: [])
 # ─────────────────────────────────────────────────────────────
 
 build:image:
@@ -118,50 +94,146 @@ build:image:
       -f Dockerfile.php
       -t task-25/php:$CI_COMMIT_SHA
       -t task-25/php:latest
-      --cache-from task-25/php:latest
       .
     - echo "Image built task-25/php:$CI_COMMIT_SHA"
+  needs: []
+  rules: *rules_mr_develop
+
+# ─────────────────────────────────────────────────────────────
+# TEST
+# Використовує локальний образ — жодного pull з Docker Hub
+# ─────────────────────────────────────────────────────────────
+
+.test_base:
+  stage: test
+  before_script:
+    - docker volume create composer-cache-task25 || true
+    # APP_ENV=test so `bin/console importmap:install` boots the kernel with .env.test
+    # (which defines JWT_PASSPHRASE=). Without it the command defaults to dev, where the
+    # passphrase lives only in the gitignored .env.local (absent in CI) → the container
+    # fails to compile with "env var JWT_PASSPHRASE not found" via the easyadmin routes.
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task25:/composer-cache" \
+        -w /app \
+        -e APP_ENV=test \
+        -e COMPOSER_HOME=/composer-cache \
+        $LOCAL_IMAGE \
+        sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test && rm -f var/test.db var/test.db-wal var/test.db-shm"
   needs:
-    - test:unit
-    - test:functional
-  only:
-    - develop
+    - build:image
+  rules: *rules_mr_develop
+
+static:analysis:
+  extends: .test_base
+  script:
+    - echo "=== PHPStan (level 6, with baseline) ==="
+    # APP_DEBUG=1 is required: phpstan-symfony reads the container XML dump
+    # (App_KernelTestDebugContainer.xml), which Symfony only writes in debug mode.
+    # With APP_DEBUG=0 no *Container.xml is produced and the analysis fails.
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task25:/composer-cache" \
+        -w /app \
+        -e APP_ENV=test \
+        -e APP_DEBUG=1 \
+        -e COMPOSER_HOME=/composer-cache \
+        $LOCAL_IMAGE \
+        sh -c "php bin/console cache:warmup --env=test && vendor/bin/phpstan analyse --no-progress"
+
+test:unit:
+  extends: .test_base
+  script:
+    - echo "=== Unit Tests ==="
+    - mkdir -p "$CI_PROJECT_DIR/reports"
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task25:/composer-cache" \
+        -w /app \
+        -e APP_ENV=test \
+        -e APP_DEBUG=0 \
+        -e COMPOSER_HOME=/composer-cache \
+        $LOCAL_IMAGE \
+        php bin/phpunit --testsuite Unit --colors=never --log-junit /app/reports/junit-unit.xml
+  artifacts:
+    when: always
+    reports:
+      junit: reports/junit-unit.xml
+    expire_in: 7 days
+
+test:functional:
+  extends: .test_base
+  script:
+    - echo "=== Functional Tests (SQLite) ==="
+    - mkdir -p "$CI_PROJECT_DIR/reports"
+    - |
+      docker run --rm \
+        -v "$CI_PROJECT_DIR:/app" \
+        -v "composer-cache-task25:/composer-cache" \
+        -w /app \
+        -e APP_ENV=test \
+        -e APP_DEBUG=0 \
+        -e COMPOSER_HOME=/composer-cache \
+        $LOCAL_IMAGE \
+        php -d memory_limit=-1 bin/phpunit --testsuite Functional --colors=never --log-junit /app/reports/junit-functional.xml
+  artifacts:
+    when: always
+    reports:
+      junit: reports/junit-functional.xml
+    expire_in: 7 days
 
 # ─────────────────────────────────────────────────────────────
 # DEPLOY
-# Розгортання на сервер після успішних тестів та збірки
 # ─────────────────────────────────────────────────────────────
 
 deploy:
   stage: deploy
-  timeout: 10 minutes
+  timeout: 40 minutes
   environment:
     name: production
-    url: http://localhost:8080
+    url: https://e-commerce.it.com
   script:
     - echo "=== Deploying to $DEPLOY_DIR ==="
 
-    # Синхронізуємо файли локально (runner на тому самому сервері)
-    - rsync -a --delete
+    # Контейнери моноліту пишуть у public/ як root → наступний rsync під
+    # неприлегованим runner'ом падає на mkstemp (Permission denied). Перед
+    # синхронізацією повертаємо власника назад на runner через root-контейнер.
+    - |
+      if [ -d "$DEPLOY_DIR/public" ]; then
+        echo "--- Reset public/ ownership to runner (containers wrote as root) ---"
+        docker run --rm -v "$DEPLOY_DIR/public:/pub" busybox \
+          chown -R "$(id -u):$(id -g)" /pub
+      fi
+
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
       --exclude='.git'
       --exclude='.env.local'
       --exclude='vendor'
       --exclude='node_modules'
-      --exclude='var/cache'
-      --exclude='var/log'
+      --exclude='var/'
+      --exclude='tests/'
+      --exclude='public/assets/'
+      --exclude='public/bundles/'
+      --exclude='config/jwt'
       "$CI_PROJECT_DIR/" "$DEPLOY_DIR/"
 
     - cd "$DEPLOY_DIR"
 
+    - echo "--- Removing .env.local (all secrets passed via Docker environment) ---"
+    - rm -f "$DEPLOY_DIR/.env.local"
+
     - echo "--- Starting primary database ---"
-    - docker compose up -d database
+    - $COMPOSE up -d database
     - |
       i=0
-      until docker compose exec -T database pg_isready -U app -q; do
+      until $COMPOSE exec -T database pg_isready -U app -q; do
         i=$((i+1))
         if [ $i -ge 30 ]; then
           echo "ERROR: Primary DB not ready after 60s"
-          docker compose logs database --tail=30
+          $COMPOSE logs database --tail=30
           exit 1
         fi
         echo "Waiting for DB ($i/30)..."
@@ -169,25 +241,36 @@ deploy:
       done
       echo "Primary DB is ready"
 
-    - docker compose exec -T database psql -U app -c
-      "CREATE USER replicator WITH REPLICATION LOGIN PASSWORD 'replicator_pass';" || true
-    - docker compose exec -T database psql -U app -c
-      "ALTER USER app WITH PASSWORD 'changeme';"
+    - echo "--- Syncing database user password with POSTGRES_PASSWORD ---"
+    - $COMPOSE exec -T database psql -U app -c "ALTER USER app WITH PASSWORD '${POSTGRES_PASSWORD}';"
 
-    - echo "--- Starting all services ---"
-    - docker compose up -d
+    - echo "--- Starting all services (using pre-built image from CI) ---"
+    - $COMPOSE up -d --no-build
+    # Recreate nginx instead of `nginx -s reload`: default.conf is bind-mounted as
+    # a single file, and rsync replaces it with a new inode, so a running container
+    # keeps the old inode and a reload would re-read the STALE config. Recreating
+    # re-binds the current file so config changes actually take effect.
+    - $COMPOSE up -d --force-recreate --no-build nginx
 
     - echo "--- Installing dependencies ---"
-    - docker compose exec -T php composer install
-      --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    - $COMPOSE exec -T php composer install
+      --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+
+    # JWT keypair is gitignored (not in the rsync source) and the rsync above now
+    # excludes config/jwt, so existing prod keys survive. On a fresh host (or after
+    # the keys were lost) generate them with the env passphrase; --skip-if-exists
+    # leaves an established keypair untouched. Without this the monolith cannot sign
+    # service-to-service tokens (CatalogClient/OrderClient) → "encode the JWT token".
+    - echo "--- Ensuring JWT keypair exists ---"
+    - $COMPOSE exec -T php php bin/console lexik:jwt:generate-keypair --skip-if-exists
 
     - |
       i=0
-      until docker compose exec -T database-replica pg_isready -U app -q; do
+      until $COMPOSE exec -T database-replica pg_isready -U app -q; do
         i=$((i+1))
         if [ $i -ge 40 ]; then
           echo "WARNING: Replica not ready after 2min — continuing"
-          docker compose logs database-replica --tail=20
+          $COMPOSE logs database-replica --tail=20
           break
         fi
         echo "Waiting for replica ($i/40)..."
@@ -195,17 +278,762 @@ deploy:
       done
 
     - echo "--- Running migrations ---"
-    - docker compose exec -T php php bin/console doctrine:migrations:migrate --no-interaction
+    - $COMPOSE exec -T php php bin/console doctrine:migrations:migrate --no-interaction
 
-    - echo "--- Clearing cache ---"
-    - docker compose exec -T php php bin/console cache:clear --no-warmup
+    - echo "--- Installing bundle public assets ---"
+    - $COMPOSE exec -T php php bin/console assets:install
+
+    - echo "--- Compiling AssetMapper assets ---"
+    - $COMPOSE exec -T php php bin/console asset-map:compile
+
+    - echo "--- Clearing and warming up cache ---"
+    - |
+      timeout 120 $COMPOSE exec -T php php bin/console cache:clear \
+        || echo "WARNING: cache:clear timed out, continuing"
+      timeout 180 $COMPOSE exec -T php php bin/console cache:warmup --env=prod \
+        || echo "WARNING: cache:warmup timed out, continuing"
+      $COMPOSE exec -T php chown -R www-data:www-data var/cache var/log public/assets public/bundles || true
+      $COMPOSE exec -T php chmod -R 755 var/cache var/log public/assets public/bundles || true
 
     - echo "--- Health check ---"
-    - sleep 3
-    - docker compose exec -T php php bin/console about
+    - |
+      i=0
+      until $COMPOSE exec -T php php bin/console about > /dev/null 2>&1; do
+        i=$((i+1))
+        if [ $i -ge 15 ]; then
+          echo "ERROR: App health check failed after 30s"
+          $COMPOSE logs php --tail=20
+          exit 1
+        fi
+        echo "Health check attempt $i/15..."
+        sleep 2
+      done
+      echo "Application is healthy"
     - echo "=== Deploy complete ==="
 
+  # order-service and cart-service must be deployed & healthy BEFORE this job's
+  # migrations run — the monolith DROPs its order tables (Version20260625071542)
+  # and cart tables (Version20260703220000), so the new sources of truth have to
+  # be live first. If either service deploy fails (e.g. a missing DB password),
+  # this job never runs and the DROP is averted.
   needs:
-    - build:image
-  only:
-    - develop
+    - test:unit
+    - test:functional
+    - deploy:order-service
+    - deploy:cart-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# ─────────────────────────────────────────────────────────────
+# MICROSERVICES (user-service / catalog-service)
+# Own dev/test/prod: build a local FrankenPHP image, run the service's own
+# phpunit (SQLite), and deploy in-place under the monolith tree (the monolith
+# deploy already rsynced services/ → $DEPLOY_DIR/services/<svc>). Reached over
+# the shared task-25_default network by name; no public ports in prod.
+# ─────────────────────────────────────────────────────────────
+
+build:catalog-service:
+  stage: build
+  script:
+    - docker build -f services/catalog-service/Dockerfile
+      -t printzone/catalog-service:$CI_COMMIT_SHA
+      -t printzone/catalog-service:latest
+      services/catalog-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:user-service:
+  stage: build
+  script:
+    - docker build -f services/user-service/Dockerfile
+      -t printzone/user-service:$CI_COMMIT_SHA
+      -t printzone/user-service:latest
+      services/user-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:order-service:
+  stage: build
+  script:
+    - docker build -f services/order-service/Dockerfile
+      -t printzone/order-service:$CI_COMMIT_SHA
+      -t printzone/order-service:latest
+      services/order-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:cart-service:
+  stage: build
+  script:
+    - docker build -f services/cart-service/Dockerfile
+      -t printzone/cart-service:$CI_COMMIT_SHA
+      -t printzone/cart-service:latest
+      services/cart-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:payment-service:
+  stage: build
+  script:
+    - docker build -f services/payment-service/Dockerfile
+      -t printzone/payment-service:$CI_COMMIT_SHA
+      -t printzone/payment-service:latest
+      services/payment-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:delivery-service:
+  stage: build
+  script:
+    - docker build -f services/delivery-service/Dockerfile
+      -t printzone/delivery-service:$CI_COMMIT_SHA
+      -t printzone/delivery-service:latest
+      services/delivery-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:notification-service:
+  stage: build
+  script:
+    - docker build -f services/notification-service/Dockerfile
+      -t printzone/notification-service:$CI_COMMIT_SHA
+      -t printzone/notification-service:latest
+      services/notification-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:storage-service:
+  stage: build
+  script:
+    - docker build -f services/storage-service/Dockerfile
+      -t printzone/storage-service:$CI_COMMIT_SHA
+      -t printzone/storage-service:latest
+      services/storage-service
+  needs: []
+  rules: *rules_mr_develop
+
+build:export-service:
+  stage: build
+  script:
+    - docker build -f services/export-service/Dockerfile
+      -t printzone/export-service:$CI_COMMIT_SHA
+      -t printzone/export-service:latest
+      services/export-service
+  needs: []
+  rules: *rules_mr_develop
+
+test:catalog-service:
+  stage: test
+  needs:
+    - build:catalog-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/catalog-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/catalog-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:user-service:
+  stage: test
+  needs:
+    - build:user-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/user-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/user-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:order-service:
+  stage: test
+  needs:
+    - build:order-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/order-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/order-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:cart-service:
+  stage: test
+  needs:
+    - build:cart-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/cart-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/cart-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:payment-service:
+  stage: test
+  needs:
+    - build:payment-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/payment-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/payment-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:delivery-service:
+  stage: test
+  needs:
+    - build:delivery-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/delivery-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/delivery-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:notification-service:
+  stage: test
+  needs:
+    - build:notification-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/notification-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/notification-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:storage-service:
+  stage: test
+  needs:
+    - build:storage-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/storage-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/storage-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+test:export-service:
+  stage: test
+  needs:
+    - build:export-service
+  script:
+    - docker volume create composer-cache-task25 || true
+    - docker run --rm
+      -v "$CI_PROJECT_DIR/services/export-service:/app"
+      -v "composer-cache-task25:/composer-cache"
+      -w /app
+      -e COMPOSER_HOME=/composer-cache
+      printzone/export-service:latest
+      sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
+  rules: *rules_mr_develop
+
+deploy:catalog-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    CSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    - cd "$DEPLOY_DIR/services/catalog-service"
+    - echo "--- Starting db-catalog ---"
+    - $CSVC up -d db-catalog
+    - |
+      i=0
+      until $CSVC exec -T db-catalog pg_isready -U app -d catalog_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-catalog not ready"; $CSVC logs db-catalog --tail=20; exit 1; }
+        echo "Waiting for db-catalog ($i/30)..."; sleep 2
+      done
+    - $CSVC exec -T db-catalog psql -U app -d catalog_service -c "ALTER USER app WITH PASSWORD '${CATALOG_DB_PASSWORD}';"
+    - echo "--- Starting service (pre-built image) ---"
+    - $CSVC up -d --no-build
+    - $CSVC exec -T catalog-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in csvc_var) so newly installed bundles
+    # (e.g. fixtures) register their console commands before we use them. prod
+    # does not auto-rebuild a stale cache.
+    - $CSVC exec -T catalog-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $CSVC exec -T catalog-service php bin/console doctrine:migrations:migrate --no-interaction
+    - echo "--- Seed only if empty (catalog is source of truth) ---"
+    - |
+      COUNT=$($CSVC exec -T db-catalog psql -U app -d catalog_service -tAc "SELECT count(*) FROM products" 2>/dev/null | tr -d '[:space:]')
+      if [ -z "$COUNT" ] || [ "$COUNT" = "0" ]; then
+        echo "Empty catalog — loading fixtures"; $CSVC exec -T catalog-service php bin/console doctrine:fixtures:load --no-interaction
+      else
+        echo "Catalog has $COUNT products — skip seeding"
+      fi
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $CSVC exec -T catalog-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: catalog-service health failed"; $CSVC logs catalog-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "catalog-service healthy"
+  needs:
+    - test:catalog-service
+    - deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:user-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    USVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    - cd "$DEPLOY_DIR/services/user-service"
+    - echo "--- Starting db-user ---"
+    - $USVC up -d db-user
+    - |
+      i=0
+      until $USVC exec -T db-user pg_isready -U app -d user_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-user not ready"; $USVC logs db-user --tail=20; exit 1; }
+        echo "Waiting for db-user ($i/30)..."; sleep 2
+      done
+    - $USVC exec -T db-user psql -U app -d user_service -c "ALTER USER app WITH PASSWORD '${USER_DB_PASSWORD}';"
+    - echo "--- Starting service (pre-built image) ---"
+    - $USVC up -d --no-build
+    - $USVC exec -T user-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in usvc_var) so newly installed bundles
+    # (e.g. fixtures) register their console commands before we use them. prod
+    # does not auto-rebuild a stale cache.
+    - $USVC exec -T user-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $USVC exec -T user-service php bin/console doctrine:migrations:migrate --no-interaction
+    - echo "--- Seed only if empty ---"
+    - |
+      COUNT=$($USVC exec -T db-user psql -U app -d user_service -tAc "SELECT count(*) FROM users" 2>/dev/null | tr -d '[:space:]')
+      if [ -z "$COUNT" ] || [ "$COUNT" = "0" ]; then
+        echo "Empty users — loading fixtures"; $USVC exec -T user-service php bin/console doctrine:fixtures:load --no-interaction
+      else
+        echo "Users table has $COUNT rows — skip seeding"
+      fi
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $USVC exec -T user-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: user-service health failed"; $USVC logs user-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "user-service healthy"
+  needs:
+    - test:user-service
+    - deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:order-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    OSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast (before the monolith DROP, which needs this job) if the DB
+    # password is missing — otherwise order-service comes up unreachable.
+    - |
+      if [ -z "$ORDER_DB_PASSWORD" ]; then
+        echo "ERROR: ORDER_DB_PASSWORD is not set. Aborting before the monolith DROP."; exit 1
+      fi
+    # order-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/order-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/order-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/order-service/" "$DEPLOY_DIR/services/order-service/"
+    - cd "$DEPLOY_DIR/services/order-service"
+    - echo "--- Starting db-order ---"
+    - $OSVC up -d db-order
+    - |
+      i=0
+      until $OSVC exec -T db-order pg_isready -U app -d order_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-order not ready"; $OSVC logs db-order --tail=20; exit 1; }
+        echo "Waiting for db-order ($i/30)..."; sleep 2
+      done
+    - $OSVC exec -T db-order psql -U app -d order_service -c "ALTER USER app WITH PASSWORD '${ORDER_DB_PASSWORD}';"
+    - echo "--- Starting service + relay (pre-built image) ---"
+    - $OSVC up -d --no-build
+    - $OSVC exec -T order-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in osvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $OSVC exec -T order-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $OSVC exec -T order-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Orders are created at runtime — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $OSVC exec -T order-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: order-service health failed"; $OSVC logs order-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "order-service healthy"
+  # Deploy order-service FIRST (independently of the monolith), so it is live
+  # and healthy before the monolith cutover drops its order tables. It also calls
+  # payment-service at checkout (must be live first) and consumes shipment.* from
+  # delivery-service to advance the order lifecycle (deploy delivery-service first).
+  needs:
+    - test:order-service
+    - deploy:payment-service
+    - deploy:delivery-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:cart-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    CSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast (before the monolith DROP, which needs this job) if the DB
+    # password is missing — otherwise cart-service comes up unreachable.
+    - |
+      if [ -z "$CART_DB_PASSWORD" ]; then
+        echo "ERROR: CART_DB_PASSWORD is not set. Aborting before the monolith DROP."; exit 1
+      fi
+    # cart-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/cart-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/cart-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/cart-service/" "$DEPLOY_DIR/services/cart-service/"
+    - cd "$DEPLOY_DIR/services/cart-service"
+    - echo "--- Starting db-cart ---"
+    - $CSVC up -d db-cart
+    - |
+      i=0
+      until $CSVC exec -T db-cart pg_isready -U app -d cart_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-cart not ready"; $CSVC logs db-cart --tail=20; exit 1; }
+        echo "Waiting for db-cart ($i/30)..."; sleep 2
+      done
+    - $CSVC exec -T db-cart psql -U app -d cart_service -c "ALTER USER app WITH PASSWORD '${CART_DB_PASSWORD}';"
+    - echo "--- Starting service (pre-built image) ---"
+    - $CSVC up -d --no-build
+    - $CSVC exec -T cart-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in csvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $CSVC exec -T cart-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $CSVC exec -T cart-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Carts are created at runtime — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $CSVC exec -T cart-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: cart-service health failed"; $CSVC logs cart-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "cart-service healthy"
+  # Deploy cart-service FIRST (independently of the monolith), so it is live
+  # and healthy before the monolith cutover drops its cart tables.
+  needs:
+    - test:cart-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:payment-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    PSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast if the DB password is missing — otherwise payment-service comes up
+    # unreachable and order-service checkout would 502 (write-strict PaymentClient).
+    - |
+      if [ -z "$PAYMENT_DB_PASSWORD" ]; then
+        echo "ERROR: PAYMENT_DB_PASSWORD is not set. Aborting."; exit 1
+      fi
+    # payment-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/payment-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/payment-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/payment-service/" "$DEPLOY_DIR/services/payment-service/"
+    - cd "$DEPLOY_DIR/services/payment-service"
+    - echo "--- Starting db-payment ---"
+    - $PSVC up -d db-payment
+    - |
+      i=0
+      until $PSVC exec -T db-payment pg_isready -U app -d payment_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-payment not ready"; $PSVC logs db-payment --tail=20; exit 1; }
+        echo "Waiting for db-payment ($i/30)..."; sleep 2
+      done
+    - $PSVC exec -T db-payment psql -U app -d payment_service -c "ALTER USER app WITH PASSWORD '${PAYMENT_DB_PASSWORD}';"
+    - echo "--- Starting service + relay (pre-built image) ---"
+    - $PSVC up -d --no-build
+    - $PSVC exec -T payment-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in psvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $PSVC exec -T payment-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $PSVC exec -T payment-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Payments are created at runtime — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $PSVC exec -T payment-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: payment-service health failed"; $PSVC logs payment-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "payment-service healthy"
+  # Deploy payment-service FIRST (independently of the monolith), so order-service
+  # has a live Stripe boundary to call at checkout.
+  needs:
+    - test:payment-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:delivery-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    DSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast if the DB password is missing — otherwise delivery-service comes
+    # up unreachable and shipments would never be created from OrderPaid.
+    - |
+      if [ -z "$DELIVERY_DB_PASSWORD" ]; then
+        echo "ERROR: DELIVERY_DB_PASSWORD is not set. Aborting."; exit 1
+      fi
+    # delivery-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/delivery-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/delivery-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/delivery-service/" "$DEPLOY_DIR/services/delivery-service/"
+    - cd "$DEPLOY_DIR/services/delivery-service"
+    - echo "--- Starting db-delivery ---"
+    - $DSVC up -d db-delivery
+    - |
+      i=0
+      until $DSVC exec -T db-delivery pg_isready -U app -d delivery_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-delivery not ready"; $DSVC logs db-delivery --tail=20; exit 1; }
+        echo "Waiting for db-delivery ($i/30)..."; sleep 2
+      done
+    - $DSVC exec -T db-delivery psql -U app -d delivery_service -c "ALTER USER app WITH PASSWORD '${DELIVERY_DB_PASSWORD}';"
+    - echo "--- Starting service + worker + relay (pre-built image) ---"
+    - $DSVC up -d --no-build
+    - $DSVC exec -T delivery-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in dsvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $DSVC exec -T delivery-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $DSVC exec -T delivery-service php bin/console doctrine:migrations:migrate --no-interaction
+    # Shipments are created at runtime from OrderPaid — no seeding in prod.
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $DSVC exec -T delivery-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: delivery-service health failed"; $DSVC logs delivery-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "delivery-service healthy"
+  # Deploy delivery-service before order-service: order-service now consumes
+  # shipment.* to advance the order lifecycle (SHIPPED/DELIVERED).
+  needs:
+    - test:delivery-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:export-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    ESVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Fail fast if the DB password is missing — otherwise export-service comes up
+    # unreachable and the admin export page could not queue or list jobs.
+    - |
+      if [ -z "$EXPORT_DB_PASSWORD" ]; then
+        echo "ERROR: EXPORT_DB_PASSWORD is not set. Aborting."; exit 1
+      fi
+    # export-service deploys BEFORE the monolith, so the monolith's rsync has not
+    # populated $DEPLOY_DIR/services/export-service yet (on the first deploy the
+    # directory does not exist at all). Sync our own subtree first — idempotent;
+    # the monolith rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/export-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/export-service/" "$DEPLOY_DIR/services/export-service/"
+    - cd "$DEPLOY_DIR/services/export-service"
+    - echo "--- Starting db-export ---"
+    - $ESVC up -d db-export
+    - |
+      i=0
+      until $ESVC exec -T db-export pg_isready -U app -d export_service -q; do
+        i=$((i+1)); [ $i -ge 30 ] && { echo "ERROR: db-export not ready"; $ESVC logs db-export --tail=20; exit 1; }
+        echo "Waiting for db-export ($i/30)..."; sleep 2
+      done
+    - $ESVC exec -T db-export psql -U app -d export_service -c "ALTER USER app WITH PASSWORD '${EXPORT_DB_PASSWORD}';"
+    - echo "--- Starting service + worker (pre-built image) ---"
+    - $ESVC up -d --no-build
+    - $ESVC exec -T export-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in esvc_var) so the container is warm
+    # before migrations/health; prod does not auto-rebuild a stale cache.
+    - $ESVC exec -T export-service php bin/console cache:clear --env=prod
+    - echo "--- Migrations ---"
+    - $ESVC exec -T export-service php bin/console doctrine:migrations:migrate --no-interaction
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $ESVC exec -T export-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: export-service health failed"; $ESVC logs export-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "export-service healthy"
+  needs:
+    - test:export-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:notification-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    NSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Stateless: no DB, no public port. Self-rsync the subtree first (services
+    # deploy before the monolith's rsync populates $DEPLOY_DIR/services/...; on the
+    # first deploy the directory does not exist yet). Idempotent — the monolith
+    # rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/notification-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/notification-service/" "$DEPLOY_DIR/services/notification-service/"
+    - cd "$DEPLOY_DIR/services/notification-service"
+    - echo "--- Starting service + worker (pre-built image) ---"
+    - $NSVC up -d --no-build
+    - $NSVC exec -T notification-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in nsvc_var) so the container is warm
+    # before the health check; prod does not auto-rebuild a stale cache.
+    - $NSVC exec -T notification-service php bin/console cache:clear --env=prod
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $NSVC exec -T notification-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: notification-service health failed"; $NSVC logs notification-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "notification-service healthy"
+  needs:
+    - test:notification-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+deploy:storage-service:
+  stage: deploy
+  timeout: 20 minutes
+  environment:
+    name: production
+    url: https://e-commerce.it.com
+  variables:
+    SSVC: "docker compose -f compose.yaml -f compose.prod.yaml"
+  script:
+    # Stateless: no DB, no public port. Self-rsync the subtree first (services
+    # deploy before the monolith's rsync populates $DEPLOY_DIR/services/...; on the
+    # first deploy the directory does not exist yet). Idempotent — the monolith
+    # rsync re-syncs the same files later and skips vendor/ + var/.
+    - mkdir -p "$DEPLOY_DIR/services/storage-service"
+    - rsync -rlpt --delete --no-owner --no-group --omit-dir-times
+      --exclude='.git'
+      --exclude='.env.local'
+      --exclude='vendor'
+      --exclude='var/'
+      "$CI_PROJECT_DIR/services/storage-service/" "$DEPLOY_DIR/services/storage-service/"
+    - cd "$DEPLOY_DIR/services/storage-service"
+    - echo "--- Starting service (pre-built image) ---"
+    - $SSVC up -d --no-build
+    - $SSVC exec -T storage-service composer install --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+    # Rebuild the prod cache (persisted in ssvc_var) so the container is warm
+    # before the health check; prod does not auto-rebuild a stale cache.
+    - $SSVC exec -T storage-service php bin/console cache:clear --env=prod
+    - echo "--- Health check ---"
+    - |
+      i=0
+      until $SSVC exec -T storage-service php bin/console about > /dev/null 2>&1; do
+        i=$((i+1)); [ $i -ge 15 ] && { echo "ERROR: storage-service health failed"; $SSVC logs storage-service --tail=20; exit 1; }
+        echo "Health attempt $i/15..."; sleep 2
+      done
+      echo "storage-service healthy"
+  needs:
+    - test:storage-service
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'

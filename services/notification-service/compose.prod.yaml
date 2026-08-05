@@ -1,0 +1,39 @@
+# Production overlay for notification-service. Deployed in-place under the monolith
+# tree (/var/www/app/services/notification-service). Stateless: no DB, no public
+# port — a pure consumer reached only over the shared task-25_default network.
+# The worker consumes order.OrderPaid and emails the customer receipt via SES.
+services:
+  notification-service:
+    image: printzone/notification-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # Reuses the monolith's existing CI vars — SES DSN + verified sender.
+      MAILER_DSN: ${MAILER_DSN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      - default
+      - monolith
+
+  # Consumes order.OrderPaid → renders + sends the receipt email. Needs the broker
+  # (rabbitmq) and the mail transport (SES); shares the vendor volume with the
+  # service, populated by composer install during deploy.
+  notification-worker:
+    image: printzone/notification-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      MAILER_DSN: ${MAILER_DSN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    restart: unless-stopped
+
+networks:
+  monolith:
+    external: true
+    name: task-25_default

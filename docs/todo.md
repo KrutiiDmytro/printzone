@@ -1,120 +1,50 @@
-# Task 25 — CI/CD & S3 Storage
+# OpenAPI-специфікації для 4 ключових сервісів
 
-## CI/CD Status
-- [x] Fixed PDOException: added pdo_sqlite driver for test env
-- [x] Fixed memory_limit: raised to 256M in phpunit config
-- [x] Fixed build:image: use CI_JOB_TOKEN for GitLab registry auth
-- [x] Added SSH deployment with SSH_PRIVATE_KEY
-- [x] Added AWS S3 variables to GitLab CI
+> Активний робочий план. Попередні плани фаз (Export — Phase 7; Storage — MR !32; Notification та ін.) — в git-історії.
 
----
+## Мета
 
-# Task 23 — Data Export Module
+Закрити прогалину SOA-документації: додати **машиночитані OpenAPI-контракти** для 4 ключових
+сервісів. Декомпозиція вже виконана й задеплоєна, уся дизайн-документація існує
+(`microservices-architecture.md`, `-analysis.md`, `event-catalog.md`), але окремі мікросервіси
+працюють на звичайних Symfony-контролерах **без OpenAPI**. Моноліт генерує OpenAPI в runtime
+через API Platform — сервіси ні.
 
-## Plan
+## Рішення
 
-- [x] Sub-task 1: Enums (ExportStatus, ExportType, ExportFormat), ExportJob entity, ExportJobRepository, Doctrine migration
-- [x] Sub-task 2: ExportFormatterInterface, CsvFormatter, JsonFormatter, XmlFormatter, ExportExtractorInterface, ProductExtractor, OrderExtractor, UserExtractor, ProcessExportMessage, ProcessExportHandler, ExportService
-- [x] Sub-task 3: ExportController (GET/POST/download), templates (index.html.twig, email.html.twig)
-- [x] Sub-task 4: messenger.yaml routing, DashboardController menu item
-- [x] Unit tests: CsvFormatterTest, JsonFormatterTest, XmlFormatterTest (9 tests, all pass)
-- [x] Sub-task 5: CSRF захист форми (template + controller validation)
-- [x] Sub-task 6: Unit tests (ExportJobTest, ExportServiceTest, ProcessExportHandlerTest) + розширення CsvFormatterTest
-- [x] Sub-task 7: Functional tests (ExportControllerTest — 8 тестів access control + POST + download)
+- **Обсяг:** User (:8001), Catalog (:8002), Order (:8003), Cart (:8004) — ядро e-commerce
+  («2-4 key services» з формулювання мети).
+- **Підхід:** вручну написані статичні `openapi.yaml` (OpenAPI 3.1.0) у кожному сервісі.
+  БЕЗ нових залежностей, БЕЗ змін у контролерах/конфігах.
+- **Перегляд:** Swagger UI з CDN у `docs/openapi/index.html`.
+- **Гілка:** `docs/openapi-specs` від `origin/develop`.
 
-## Architecture
+## Чекліст
 
-```
-Admin UI (/admin/export)
-    │  POST form (type + format + filters)
-    ▼
-ExportController → ExportService → ExportJob (DB, status: pending)
-                                         │
-                                         ▼ Messenger async
-                               ProcessExportHandler
-                                    │       │
-                              Extractor  Formatter
-                                    │       │
-                                    └──► S3 (FileStorageInterface::write)
-                                         │
-                                  ExportJob (status: completed, file_path)
-                                         │
-                                  Email notification → Admin
-```
+- [x] Крок 0: гілка `docs/openapi-specs` від `origin/develop` (стороння зміна `config/reference.php` не чіпається)
+- [x] `services/user-service/openapi.yaml` (auth, users, health)
+- [x] `services/catalog-service/openapi.yaml` (products, categories, brands, health)
+- [x] `services/order-service/openapi.yaml` (orders, checkout, health)
+- [x] `services/cart-service/openapi.yaml` (cart, health)
+- [x] `docs/openapi/index.html` — Swagger UI (перемикач 4 спек)
+- [x] `docs/openapi/README.md` — інструкція перегляду + валідації
+- [x] Верифікація: `redocly lint` усіх 4 → 0 errors
+- [x] Звірка `#[Route]` ↔ операції по кожному контролеру
+- [x] (Опційно) посилання на спеки в кореневому `README.md` (клікабельні лінки в розділі «API-специфікації»)
+- [ ] Комміт лише нових файлів (не `-A` — виключити `config/reference.php`)
 
-## Review
+## Review (результати)
 
-### Що зроблено
-1. **Domain**: PHP 8.1 backed enums (ExportStatus/Type/Format), `ExportJob` entity з полями type/format/status/filePath/filters/createdAt/completedAt/errorMessage/requestedBy
-2. **Formatters**: CSV (fputcsv), JSON (json_encode), XML (SimpleXMLElement + DOMDocument)
-3. **Extractors**: Product (фільтри: category/isFeatured/priceMin/priceMax/stockMin/stockMax), Order (status/dateFrom/dateTo), User (email/role)
-4. **Background processing**: `ProcessExportMessage` → async transport → `ProcessExportHandler` (#[AsMessageHandler])
-5. **S3 storage**: файли зберігаються за шляхом `exports/{type}/{format}/{id}-{timestamp}.{ext}`
-6. **Email**: `TemplatedEmail` через `admin/export/email.html.twig`
-7. **Admin UI**: кастомна EasyAdmin-сторінка з Bootstrap-формою (динамічні фільтри JS), таблицею завдань, кнопкою download
-8. **Wiring**: messenger.yaml routing, `ADMIN_EMAIL` env var, `services.yaml` service config, doctrine.yaml Export mapping, DashboardController menu
-
-### Edge cases
-- Порожній набір даних → порожній файл (коректно для CSV/JSON/XML)
-- Невалідний тип/формат → flash error, redirect
-- Помилка в handler → ExportJob.status = failed, email з текстом помилки
-- Retry у Messenger: max_retries=3, multiplier=2 (вже налаштовано)
-
-### Запуск worker
-```bash
-docker compose exec php php bin/console messenger:consume async --limit=10
-```
-
----
-
-# Task 22 — Master-Slave (Primary-Replica) Replication
-
-## Plan
-
-- [x] docker/postgres/primary/pg_hba.conf — дозволити replication-з'єднання
-- [x] docker/postgres/primary/init/01_replication_user.sql — створити користувача replicator
-- [x] docker/postgres/replica/entrypoint.sh — pg_basebackup + запуск standby
-- [x] compose.yaml — WAL params на primary + новий сервіс database-replica
-- [x] .env — додати DATABASE_REPLICA_URL
-- [x] config/packages/doctrine.yaml — додати replicas: конфіг
-
-## Architecture
-
-```
-[Symfony App]
-     │
-     ├─ writes ──► [PostgreSQL Primary :5432]
-     │                       │
-     └─ reads ───► [PostgreSQL Replica :5432] ◄── WAL streaming
-```
-
-Doctrine DBAL `PrimaryReadReplicaConnection`:
-- SELECT → replica
-- INSERT / UPDATE / DELETE / транзакції → primary
-
-## Notes
-- Replica ініціалізується через `pg_basebackup -R` (автоматично створює standby.signal)
-- `hot_standby=on` дозволяє SELECT-запити на репліці
-- При недоступній репліці Doctrine кидає виняток — для production потрібен proxy (PgBouncer)
-
-## Review
-
-### Що зроблено
-1. **Primary**: увімкнено WAL streaming (`wal_level=replica`, `max_wal_senders=3`, `max_replication_slots=3`), змонтовано кастомний `pg_hba.conf` та init-SQL для user `replicator`.
-2. **Replica**: кастомний entrypoint-скрипт — чекає на primary → `pg_basebackup -R` (автоматично `standby.signal` + `primary_conninfo`) → старт у `hot_standby=on`.
-3. **Doctrine**: `driver: pdo_pgsql` + `replicas: replica1: url:` — DBAL використовує `PrimaryReadReplicaConnection`: SELECT → replica, write/transactions → primary.
-4. **Перевірено**: `doctrine:schema:validate` повертає [OK] для обох (mapping + database); `pg_stat_replication` показує `streaming / async`.
-
-### Підводний камінь (вирішено)
-Doctrine-bundle встановлює `driver: pdo_mysql` як дефолт. Без явного `driver: pdo_pgsql` у `doctrine.yaml` replica-з'єднання падало з `could not find driver` — бо `pdo_mysql` не встановлений у PHP-контейнері. Також для репліки потрібна повна `url:` (а не лише `host:`) — бо doctrine-bundle не наслідує user/password з primary URL у replica params.
-
-### Edge cases
-- Якщо `database-replica` недоступна — Doctrine кине `DBAL\Exception` при першому SELECT.
-- `start_period: 90s` у healthcheck репліки враховує час `pg_basebackup`.
-- `depends_on: database: condition: service_healthy` — replica стартує тільки після healthy primary.
-- При зміні `pg_hba.conf` потрібно: `docker compose down -v && docker compose up`.
-
-### Обмеження (для production)
-- Немає автоматичного failover — при падінні primary потрібен ручний switchover.
-- Для автофailover: Patroni або PgBouncer перед Doctrine.
-- Реплікація async — можлива мінімальна втрата даних при failover.
+- **Створено 6 нових файлів**, жоден існуючий не редаговано; runtime сервісів не змінено.
+- **`redocly lint`: усі 4 спеки валідні** (лише косметичні warnings — відсутня license,
+  описи тегів, 4xx на health-probe). 0 errors.
+- **Виправлені під час валідації дефекти:**
+  1. Двокрапка+пробіл у незакавичених `description` (`Authorization: Bearer`, `items: []`)
+     ламала YAML-парсинг → взято в лапки.
+  2. `no-identical-paths`: `/{slug}` і `/{id}` — однаковий шаблон для OpenAPI (Symfony
+     розрізняє методом). Об'єднано GET-by-slug і мутації в один path item `/{id}`
+     з path-параметром-рядком (categories, brands).
+- **Покриття endpoints (звірено з контролерами):** user 4+2health, catalog 13+2health,
+  order 4+2health, cart 5+2health. Пропущених/зайвих шляхів немає.
+- **Не увійшло (свідомо):** Payment/Delivery/Notification/Storage/Export — поза обсягом
+  «ключових 4»; жодних змін у коді сервісів.

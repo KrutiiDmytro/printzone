@@ -3,21 +3,18 @@
 namespace App\Controller\Admin;
 
 use App\User\Domain\Entity\User;
-use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
-use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminCrud;
-use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
-use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Action;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Actions;
-use EasyCorp\Bundle\EasyAdminBundle\Field\ArrayField;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Crud;
+use EasyCorp\Bundle\EasyAdminBundle\Config\Filters;
+use EasyCorp\Bundle\EasyAdminBundle\Controller\AbstractCrudController;
+use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\EmailField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\IdField;
 use EasyCorp\Bundle\EasyAdminBundle\Field\TextField;
 use EasyCorp\Bundle\EasyAdminBundle\Filter\TextFilter;
-use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Form\Extension\Core\Type\PasswordType;
-use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
-use EasyCorp\Bundle\EasyAdminBundle\Field\ChoiceField;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 class UserCrudController extends AbstractCrudController
 {
@@ -80,7 +77,7 @@ class UserCrudController extends AbstractCrudController
             TextField::new('password', 'Пароль')
                 ->setFormType(PasswordType::class)
                 ->onlyOnForms()
-                ->setRequired($pageName === Crud::PAGE_NEW)
+                ->setRequired(Crud::PAGE_NEW === $pageName)
                 ->setColumns(12)
                 ->setHelp('Оставьте пустым, если не хотите изменять пароль'),
             ChoiceField::new('roles', 'Роли')

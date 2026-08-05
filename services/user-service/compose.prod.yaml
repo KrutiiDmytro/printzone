@@ -1,0 +1,29 @@
+# Production overlay for user-service. Deployed in-place under the monolith tree
+# (/var/www/app/services/user-service), so ../../config/jwt resolves to the
+# monolith's shared keypair. user-service SIGNS tokens, so it needs JWT_PASSPHRASE.
+# Joined to the shared task-25_default network and reachable as `user-service`
+# (no public port); the monolith does not call it yet (Phase 3 cross-trust demo).
+services:
+  db-user:
+    environment:
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD}
+    restart: unless-stopped
+
+  user-service:
+    image: printzone/user-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${USER_DB_PASSWORD}@db-user:5432/user_service?serverVersion=16&charset=utf8"
+      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      - default
+      - monolith
+
+networks:
+  monolith:
+    external: true
+    name: task-25_default

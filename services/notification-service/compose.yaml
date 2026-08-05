@@ -1,0 +1,53 @@
+services:
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: printzone/notification-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    ports:
+      - "8007:80"
+    volumes:
+      - .:/app
+      # vendor/ and var/ on fast container-local volumes, NOT the Windows bind
+      # mount — otherwise autoload stat() storms exceed max_execution_time.
+      - nsvc_vendor:/app/vendor
+      - nsvc_var:/app/var
+    # Joins the monolith network so the /health/ready SMTP probe can reach the
+    # shared Mailpit (dev). The event-consuming notification-worker (which also
+    # needs the shared RabbitMQ) is added here in Step 2.
+    networks:
+      - default
+      - monolith
+
+  # Consumes order.OrderPaid from the monolith's RabbitMQ (own queue, bound to
+  # order.OrderPaid) → sends the customer receipt email. Joins the monolith
+  # network to reach the shared broker as `rabbitmq` and Mailpit as `mailer`.
+  notification-worker:
+    image: printzone/notification-service:latest
+    env_file:
+      - path: .env.local
+        required: false
+    command: php bin/console messenger:consume notification_events --time-limit=3600
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    volumes:
+      - .:/app
+      - nsvc_vendor:/app/vendor
+      - nsvc_var:/app/var
+    networks:
+      - default
+      - monolith
+
+volumes:
+  nsvc_vendor:
+  nsvc_var:
+
+networks:
+  default:
+  monolith:
+    external: true
+    name: task-25_default

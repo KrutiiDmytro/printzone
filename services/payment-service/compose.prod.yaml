@@ -1,0 +1,45 @@
+# Production overlay for payment-service. Deployed in-place under the monolith
+# tree (/var/www/app/services/payment-service), so ../../config/jwt resolves to
+# the monolith's shared keypair. Reached by order-service over the shared
+# task-25_default network as `payment-service` (no public port in prod). Stripe
+# posts webhooks here — the Stripe Dashboard endpoint URL must point at this
+# service (see docs/todo.md phase 6 step 5).
+services:
+  db-payment:
+    environment:
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
+    restart: unless-stopped
+
+  payment-service:
+    image: printzone/payment-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${PAYMENT_DB_PASSWORD}@db-payment:5432/payment_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+      # payment-service owns Stripe now (moved out of order-service).
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+    ports: !reset []
+    restart: unless-stopped
+    networks:
+      - default
+      - monolith
+
+  # Publishes payment.* events (PaymentSucceeded/PaymentFailed) to the monolith's
+  # RabbitMQ; order-service consumes them. Verifies/signs nothing → no Stripe/JWT.
+  payment-relay:
+    image: printzone/payment-service:latest
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: "postgresql://app:${PAYMENT_DB_PASSWORD}@db-payment:5432/payment_service?serverVersion=16&charset=utf8"
+      MESSENGER_EVENTS_DSN: "amqp://guest:guest@rabbitmq:5672/%2f/events"
+    restart: unless-stopped
+
+networks:
+  monolith:
+    external: true
+    name: task-25_default

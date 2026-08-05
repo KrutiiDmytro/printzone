@@ -1,0 +1,238 @@
+openapi: 3.1.0
+
+info:
+  title: User Service API
+  version: "1.0.0"
+  description: |
+    Identity and authentication service for the PrintZone platform.
+
+    Owns the `User` aggregate, issues JWTs (`json_login` + LexikJWT), and exposes a
+    read API for the monolith admin. All non-public routes are protected by a
+    service-to-service (S2S) RS256 JWT signed with the shared Lexik keypair.
+
+servers:
+  - url: http://localhost:8001
+    description: Local (docker compose)
+  - url: http://user-service
+    description: In-cluster (shared network task-25_default)
+
+tags:
+  - name: Auth
+    description: Registration and login (JWT issuance)
+  - name: Users
+    description: User read API (admin / self)
+  - name: Health
+    description: Liveness and readiness probes
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      description: Public. Creates a `ROLE_USER` account.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                  description: At least 8 characters.
+                fullName:
+                  type: [string, "null"]
+            example:
+              email: jane@example.com
+              password: s3cret-pass
+              fullName: Jane Doe
+      responses:
+        "201":
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "409":
+          description: Email already registered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Validation error (invalid email or password too short).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate and obtain a JWT
+      description: |
+        Public. Handled by the `json_login` firewall (this route is a stub in the
+        controller). On valid credentials returns a signed JWT.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+            example:
+              email: jane@example.com
+              password: s3cret-pass
+      responses:
+        "200":
+          description: Authenticated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: "Bearer JWT to send as `Authorization: Bearer <token>`."
+        "401":
+          description: Invalid credentials.
+
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List all users
+      description: Requires `ROLE_ADMIN`.
+      responses:
+        "200":
+          description: All users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get a single user
+      description: The caller may read their own profile; reading others requires `ROLE_ADMIN`.
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: The user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Process is up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthLive" }
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe (checks the database)
+      security: []
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReady" }
+        "503":
+          description: A dependency is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReady" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: S2S RS256 JWT signed with the shared Lexik keypair.
+
+  parameters:
+    UuidPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+    Forbidden:
+      description: The token lacks the required role.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: [string, "null"] }
+        roles:
+          type: array
+          items: { type: string }
+          example: ["ROLE_USER"]
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+
+    HealthLive:
+      type: object
+      properties:
+        status: { type: string, const: ok }
+
+    HealthReady:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status: { type: string }
+              latency_ms: { type: integer }
+              detail: { type: string }

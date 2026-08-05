@@ -2,9 +2,7 @@
 
 namespace App\DataFixtures;
 
-use App\Catalog\Domain\Entity\Category;
-use App\Catalog\Domain\Entity\Product;
-use App\Catalog\Domain\Entity\ProductAttribute;
+use App\Catalog\Domain\Entity\PrinterModel;
 use App\User\Domain\Entity\User;
 use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Persistence\ObjectManager;
@@ -14,139 +12,72 @@ class AppFixtures extends Fixture
 {
     public function __construct(
         private UserPasswordHasherInterface $passwordHasher
-    ) {}
+    ) {
+    }
 
     public function load(ObjectManager $manager): void
     {
-        // Create Categories
-        $categories = [
-            'Smartphones' => 'smartphones',
-            'Laptops' => 'laptops',
-            'Tablets' => 'tablets',
-            'Accessories' => 'accessories',
-            'Smart Watches' => 'smart-watches',
-            'Headphones' => 'headphones',
-            'Cameras' => 'cameras',
-            'Gaming Consoles' => 'gaming',
-            'Audio' => 'audio',
-            'Home Appliances' => 'home-appliances',
-            'Storage' => 'storage',
-            'PC Components' => 'pc-components',
-            'Monitors' => 'monitors',
-            'Printers' => 'printers',
-            'Networking' => 'networking',
-            'Software' => 'software',
-            'Smart TV' => 'smart-tv',
-            'Computer' => 'computer',
-            
+        // Categories, brands and products are owned by catalog-service now. The
+        // monolith only seeds printer models (printer-finder) with brand snapshots
+        // (slug is the storefront key) and the test users.
+        $brandNames = [
+            'hp' => 'HP',
+            'canon' => 'Canon',
+            'epson' => 'Epson',
+            'brother' => 'Brother',
+            'dell' => 'Dell',
         ];
 
-        $categoryObjects = [];
-        foreach ($categories as $name => $slug) {
-            $category = new Category();
-            $category->setName($name);
-            $category->setSlug($slug);
-            $manager->persist($category);
-            $categoryObjects[$slug] = $category;
-        }
-
-        // Create Products
-        $products = [
-            [
-                'name' => 'iPhone 15 Pro',
-                'description' => 'Latest iPhone with A17 Pro chip and titanium design',
-                'price' => 99900, // $999.00 in cents
-                'stock' => 50,
-                'category' => 'smartphones',
-                'image' => 'product-1.png'
+        $printerModels = [
+            'hp' => [
+                ['name' => 'LaserJet Pro M404dn',        'slug' => 'hp-laserjet-pro-m404dn'],
+                ['name' => 'LaserJet Pro M428fdw',       'slug' => 'hp-laserjet-pro-m428fdw'],
+                ['name' => 'Color LaserJet Pro M479fdw', 'slug' => 'hp-color-laserjet-pro-m479fdw'],
+                ['name' => 'OfficeJet Pro 9020',         'slug' => 'hp-officejet-pro-9020'],
+                ['name' => 'Envy 6020',                  'slug' => 'hp-envy-6020'],
+                ['name' => 'DeskJet 2720',               'slug' => 'hp-deskjet-2720'],
             ],
-            [
-                'name' => 'Samsung Galaxy S24',
-                'description' => 'Flagship Android phone with amazing camera',
-                'price' => 89900,
-                'stock' => 45,
-                'category' => 'smartphones',
-                'image' => 'product-2.png'
+            'canon' => [
+                ['name' => 'i-SENSYS LBP243dw',  'slug' => 'canon-i-sensys-lbp243dw'],
+                ['name' => 'i-SENSYS LBP246dw',  'slug' => 'canon-i-sensys-lbp246dw'],
+                ['name' => 'i-SENSYS MF461dw',   'slug' => 'canon-i-sensys-mf461dw'],
+                ['name' => 'PIXMA G550',          'slug' => 'canon-pixma-g550'],
+                ['name' => 'PIXMA TS8350',        'slug' => 'canon-pixma-ts8350'],
+                ['name' => 'PIXMA TR4650',        'slug' => 'canon-pixma-tr4650'],
             ],
-            [
-                'name' => 'MacBook Pro 16"',
-                'description' => 'Powerful laptop with M3 Pro chip',
-                'price' => 249900,
-                'stock' => 20,
-                'category' => 'laptops',
-                'image' => 'product-3.png'
+            'epson' => [
+                ['name' => 'EcoTank ET-2850',        'slug' => 'epson-ecotank-et-2850'],
+                ['name' => 'EcoTank ET-4850',        'slug' => 'epson-ecotank-et-4850'],
+                ['name' => 'WorkForce Pro WF-4830',  'slug' => 'epson-workforce-pro-wf-4830'],
+                ['name' => 'WorkForce WF-2930',      'slug' => 'epson-workforce-wf-2930'],
+                ['name' => 'Expression XP-4200',     'slug' => 'epson-expression-xp-4200'],
+                ['name' => 'Expression Home XP-2200', 'slug' => 'epson-expression-home-xp-2200'],
             ],
-            [
-                'name' => 'Dell XPS 15',
-                'description' => 'Premium Windows laptop for professionals',
-                'price' => 189900,
-                'stock' => 25,
-                'category' => 'laptops',
-                'image' => 'product-4.png'
+            'brother' => [
+                ['name' => 'HL-L2350DW',   'slug' => 'brother-hl-l2350dw'],
+                ['name' => 'HL-L3270CDW',  'slug' => 'brother-hl-l3270cdw'],
+                ['name' => 'MFC-L2730DW',  'slug' => 'brother-mfc-l2730dw'],
+                ['name' => 'MFC-J5945DW',  'slug' => 'brother-mfc-j5945dw'],
+                ['name' => 'DCP-L2550DN',  'slug' => 'brother-dcp-l2550dn'],
+                ['name' => 'DCP-J1100DW',  'slug' => 'brother-dcp-j1100dw'],
             ],
-            [
-                'name' => 'iPad Air',
-                'description' => 'Versatile tablet with M1 chip',
-                'price' => 59900,
-                'stock' => 35,
-                'category' => 'tablets',
-                'image' => 'product-5.png'
-            ],
-            [
-                'name' => 'Samsung Galaxy Tab S9',
-                'description' => 'Android tablet with S Pen included',
-                'price' => 79900,
-                'stock' => 30,
-                'category' => 'tablets',
-                'image' => 'product-6.png'
-            ],
-            [
-                'name' => 'Apple Watch Series 9',
-                'description' => 'Advanced health and fitness tracking',
-                'price' => 39900,
-                'stock' => 60,
-                'category' => 'smart-watches',
-                'image' => 'product-7.png'
-            ],
-            [
-                'name' => 'AirPods Pro 2',
-                'description' => 'Premium wireless earbuds with ANC',
-                'price' => 24900,
-                'stock' => 100,
-                'category' => 'headphones',
-                'image' => 'product-8.png'
-            ],
-            [
-                'name' => 'Sony WH-1000XM5',
-                'description' => 'Industry-leading noise cancellation headphones',
-                'price' => 39900,
-                'stock' => 40,
-                'category' => 'headphones',
-                'image' => 'product-9.png'
-            ],
-            [
-                'name' => 'Magic Keyboard',
-                'description' => 'Wireless keyboard for iPad and Mac',
-                'price' => 9900,
-                'stock' => 75,
-                'category' => 'accessories',
-                'image' => 'product-10.png'
+            'dell' => [
+                ['name' => 'H815dw',   'slug' => 'dell-h815dw'],
+                ['name' => 'E525w',    'slug' => 'dell-e525w'],
+                ['name' => 'B2360d',   'slug' => 'dell-b2360d'],
+                ['name' => 'S2825cdn', 'slug' => 'dell-s2825cdn'],
             ],
         ];
 
-        $productObjects = []; // Сохраняем продукты для атрибутов
-
-        foreach ($products as $index => $productData) {
-            $product = new Product();
-            $product->setName($productData['name']);
-            $product->setDescription($productData['description']);
-            $product->setPrice($productData['price']);
-            $product->setStock($productData['stock']);
-            $product->setCategory($categoryObjects[$productData['category']]);
-            $product->setImage($productData['image']);
-            $manager->persist($product);
-            
-            $productObjects[$index] = $product; // Сохраняем
+        foreach ($printerModels as $brandSlug => $models) {
+            foreach ($models as $modelData) {
+                $model = new PrinterModel();
+                $model->setName($modelData['name']);
+                $model->setSlug($modelData['slug']);
+                $model->setBrandSlug($brandSlug);
+                $model->setBrandName($brandNames[$brandSlug]);
+                $manager->persist($model);
+            }
         }
 
         // Create test administrator
@@ -167,40 +98,6 @@ class AppFixtures extends Fixture
         $regularUser->setPassword($hashedPassword);
         $manager->persist($regularUser);
 
-        // Добавляем атрибуты к продуктам
-        // iPhone 15 Pro (индекс 0)
-        $attr1 = new ProductAttribute();
-        $attr1->setProduct($productObjects[0]);
-        $attr1->setName('Color');
-        $attr1->setValue('Titanium Black');
-        $manager->persist($attr1);
-
-        $attr2 = new ProductAttribute();
-        $attr2->setProduct($productObjects[0]);
-        $attr2->setName('Storage');
-        $attr2->setValue('256GB');
-        $manager->persist($attr2);
-
-        // MacBook Pro (индекс 2)
-        $attr3 = new ProductAttribute();
-        $attr3->setProduct($productObjects[2]);
-        $attr3->setName('RAM');
-        $attr3->setValue('16GB');
-        $manager->persist($attr3);
-
-        $attr4 = new ProductAttribute();
-        $attr4->setProduct($productObjects[2]);
-        $attr4->setName('SSD');
-        $attr4->setValue('512GB');
-        $manager->persist($attr4);
-
-        // Apple Watch (индекс 6)
-        $attr5 = new ProductAttribute();
-        $attr5->setProduct($productObjects[6]);
-        $attr5->setName('Size');
-        $attr5->setValue('45mm');
-        $manager->persist($attr5);
-            
         $manager->flush();
     }
 }

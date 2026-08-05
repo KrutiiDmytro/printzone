@@ -2,29 +2,32 @@
 
 namespace App\Controller;
 
-use App\Repository\ProductRepository;
+use App\Catalog\Client\CatalogClient;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Uid\Uuid;
 
 class ProductController extends AbstractController
 {
     #[Route('/bestseller', name: 'app_bestseller')]
-    public function bestseller(ProductRepository $productRepository): Response
+    public function bestseller(CatalogClient $catalog): Response
     {
-        $products = $productRepository->findFeatured(12);
-
         return $this->render('product/bestseller.html.twig', [
-            'products' => $products,
+            'products' => $catalog->featured(12),
         ]);
     }
 
-    #[Route('/product/{id}', name: 'app_product_show', requirements: ['id' => '\d+'])]
-    public function show(int $id, ProductRepository $productRepository): Response
+    #[Route('/product/{id}', name: 'app_product_show')]
+    public function show(string $id, CatalogClient $catalog): Response
     {
-        $product = $productRepository->find($id);
+        if (!Uuid::isValid($id)) {
+            throw $this->createNotFoundException('Product not found');
+        }
 
-        if (!$product) {
+        $product = $catalog->product($id);
+
+        if (null === $product) {
             throw $this->createNotFoundException('Product not found');
         }
 

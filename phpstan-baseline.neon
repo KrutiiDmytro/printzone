@@ -1,0 +1,217 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Class App\\Controller\\Admin\\PrinterModelCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/PrinterModelCrudController.php
+
+		-
+			message: '#^Class App\\Controller\\Admin\\UserCrudController extends generic class EasyCorp\\Bundle\\EasyAdminBundle\\Controller\\AbstractCrudController but does not specify its types\: TEntity$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Controller/Admin/UserCrudController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UserCrudController\:\:persistEntity\(\) has parameter \$entityManager with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Controller/Admin/UserCrudController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UserCrudController\:\:updateEntity\(\) has parameter \$entityManager with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Controller/Admin/UserCrudController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getEmail\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getName\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getNickname\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Parameter \#1 \$token of method League\\OAuth2\\Client\\Provider\\AbstractProvider\:\:getResourceOwner\(\) expects League\\OAuth2\\Client\\Token\\AccessToken, League\\OAuth2\\Client\\Token\\AccessTokenInterface given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Controller/GitHubAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getEmail\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GoogleAuthController.php
+
+		-
+			message: '#^Call to an undefined method League\\OAuth2\\Client\\Provider\\ResourceOwnerInterface\:\:getName\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/GoogleAuthController.php
+
+		-
+			message: '#^Parameter \#1 \$token of method League\\OAuth2\\Client\\Provider\\AbstractProvider\:\:getResourceOwner\(\) expects League\\OAuth2\\Client\\Token\\AccessToken, League\\OAuth2\\Client\\Token\\AccessTokenInterface given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Controller/GoogleAuthController.php
+
+		-
+			message: '#^Call to an undefined method Symfony\\Component\\Security\\Core\\User\\UserInterface\:\:getId\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:addProductToDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:addToDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCart\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCartFromDatabase\(\) has parameter \$user with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCartFromDatabase\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getCartFromSession\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Service\\CartService\:\:getSession\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/CartService.php
+
+		-
+			message: '#^Method App\\Twig\\BrandExtension\:\:getBrandModels\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Twig/BrandExtension.php
+
+		-
+			message: '#^Method App\\User\\Domain\\Entity\\User\:\:setRoles\(\) has parameter \$roles with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/User/Domain/Entity/User.php
+
+		-
+			message: '#^Property App\\User\\Domain\\Entity\\User\:\:\$roles type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/User/Domain/Entity/User.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createAdminClient\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createAuthenticatedClient\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createAuthenticatedClient\(\) has parameter \$roles with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createClient\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createClient\(\) has parameter \$server with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Method App\\Tests\\Functional\\WebTestCase\:\:createUserClient\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/Functional/WebTestCase.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\EventListener\\LoginListenerTest\:\:\$eventDispatcher has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/EventListener/LoginListenerTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\EventListener\\LoginListenerTest\:\:\$urlGenerator has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/EventListener/LoginListenerTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$cartClient has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$catalog has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$requestStack has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Service\\CartServiceTest\:\:\$security has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Service/CartServiceTest.php
+
+		-
+			message: '#^Property App\\Tests\\Unit\\Twig\\CartExtensionTest\:\:\$cartService has no type specified\.$#'
+			identifier: missingType.property
+			count: 1
+			path: tests/Unit/Twig/CartExtensionTest.php
+
+		-
+			message: '#^Call to function method_exists\(\) with ''Symfony\\\\Component\\\\Dotenv\\\\Dotenv'' and ''bootEnv'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: tests/bootstrap.php
