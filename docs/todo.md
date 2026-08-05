@@ -1,50 +1,47 @@
-# OpenAPI-специфікації для 4 ключових сервісів
+# Прод-інцидент 2026-08-05: усунення конфлікту Task-28 ↔ прод
 
-> Активний робочий план. Попередні плани фаз (Export — Phase 7; Storage — MR !32; Notification та ін.) — в git-історії.
+> Активний робочий план. Попередні плани (OpenAPI-специфікації, Export — Phase 7,
+> Storage — MR !32, Notification та ін.) — у git-історії.
 
 ## Мета
 
-Закрити прогалину SOA-документації: додати **машиночитані OpenAPI-контракти** для 4 ключових
-сервісів. Декомпозиція вже виконана й задеплоєна, уся дизайн-документація існує
-(`microservices-architecture.md`, `-analysis.md`, `event-catalog.md`), але окремі мікросервіси
-працюють на звичайних Symfony-контролерах **без OpenAPI**. Моноліт генерує OpenAPI в runtime
-через API Platform — сервіси ні.
-
-## Рішення
-
-- **Обсяг:** User (:8001), Catalog (:8002), Order (:8003), Cart (:8004) — ядро e-commerce
-  («2-4 key services» з формулювання мети).
-- **Підхід:** вручну написані статичні `openapi.yaml` (OpenAPI 3.1.0) у кожному сервісі.
-  БЕЗ нових залежностей, БЕЗ змін у контролерах/конфігах.
-- **Перегляд:** Swagger UI з CDN у `docs/openapi/index.html`.
-- **Гілка:** `docs/openapi-specs` від `origin/develop`.
+Прибрати конфлікт між CI Task-28 і продом printzone на спільному дроплеті, повернути
+асинхронну гілку в робочий стан і задокументувати розбір так, щоб він не вводив в оману.
 
 ## Чекліст
 
-- [x] Крок 0: гілка `docs/openapi-specs` від `origin/develop` (стороння зміна `config/reference.php` не чіпається)
-- [x] `services/user-service/openapi.yaml` (auth, users, health)
-- [x] `services/catalog-service/openapi.yaml` (products, categories, brands, health)
-- [x] `services/order-service/openapi.yaml` (orders, checkout, health)
-- [x] `services/cart-service/openapi.yaml` (cart, health)
-- [x] `docs/openapi/index.html` — Swagger UI (перемикач 4 спек)
-- [x] `docs/openapi/README.md` — інструкція перегляду + валідації
-- [x] Верифікація: `redocly lint` усіх 4 → 0 errors
-- [x] Звірка `#[Route]` ↔ операції по кожному контролеру
-- [x] (Опційно) посилання на спеки в кореневому `README.md` (клікабельні лінки в розділі «API-специфікації»)
-- [ ] Комміт лише нових файлів (не `-A` — виключити `config/reference.php`)
+- [x] RabbitMQ піднято, swap 2 ГБ, `restart: unless-stopped` для 6 контейнерів ядра сайту
+- [x] Пайплайн Task-28 заморожено (`workflow.rules → when: never`), проєкт заархівовано
+- [x] `printzone`: `develop` → `main` (MR !38), remote переведено на нову адресу
+- [x] Розбір записано в `docs/ops-2026-08-05-incident-and-handoff.md`
+- [x] Перевірити merged-конфіг усіх 9 сервісів (`docker compose config`) — мережі воркерів
+- [x] Перевірити на дроплеті `docker ps --filter "status=restarting"` — чи ожив delivery-worker
+- [x] Полагодити delivery-worker: `stop` → `network connect task-25_default` → `start`
+- [x] Переписати розділ 3 доку за фактами (хибний висновок про overlay-файли)
+- [x] Записати урок у `docs/lesson.md`
+- [ ] Закомітити док окремою гілкою `docs/ops-incident-2026-08-05` + MR у `develop`
 
 ## Review (результати)
 
-- **Створено 6 нових файлів**, жоден існуючий не редаговано; runtime сервісів не змінено.
-- **`redocly lint`: усі 4 спеки валідні** (лише косметичні warnings — відсутня license,
-  описи тегів, 4xx на health-probe). 0 errors.
-- **Виправлені під час валідації дефекти:**
-  1. Двокрапка+пробіл у незакавичених `description` (`Authorization: Bearer`, `items: []`)
-     ламала YAML-парсинг → взято в лапки.
-  2. `no-identical-paths`: `/{slug}` і `/{id}` — однаковий шаблон для OpenAPI (Symfony
-     розрізняє методом). Об'єднано GET-by-slug і мутації в один path item `/{id}`
-     з path-параметром-рядком (categories, brands).
-- **Покриття endpoints (звірено з контролерами):** user 4+2health, catalog 13+2health,
-  order 4+2health, cart 5+2health. Пропущених/зайвих шляхів немає.
-- **Не увійшло (свідомо):** Payment/Delivery/Notification/Storage/Export — поза обсягом
-  «ключових 4»; жодних змін у коді сервісів.
+**Головне: діагноз першої редакції доку був хибний.** Твердження «7 із 8 воркерів не мають
+мережі в `compose.prod.yaml` → відкладена міна» побудоване на читанні лише overlay-файлів.
+`docker compose -f compose.yaml -f compose.prod.yaml config` (перевірено локально для всіх
+9 сервісів і на дроплеті для delivery) дає **всім 8 воркерам/релеям `default + monolith`** —
+блоки `networks` лежать у базових `compose.yaml`. Правка overlay була б no-op.
+
+Реальна причина — дрейф стану контейнера: три delivery-контейнери створені однією командою
+о `2026-07-25T11:43:40`, двом мережа `task-25_default` дісталася, воркеру ні; ID мережі
+незмінний із 2026-05-17. Найімовірніше — гонка з краш-лупом воркера при створенні.
+
+**Фікс і верифікація (2026-08-05):** `docker stop` → `docker network connect` → `docker start`
+(зберігає env контейнера; `--force-recreate` руками заборонений — обнуляє `${CI_VAR}`).
+Після цього: воркер `running`, `RestartCount=0`, обидві мережі, у логах
+`[OK] Consuming messages from transport "delivery_events"`; `docker ps --filter status=restarting`
+порожній; жодного контейнера без `unless-stopped`; черга `delivery_shipment_events` існує,
+0 повідомлень; сайт `HTTP/2 200`; swap 2 ГБ, вільно ~700 МБ.
+
+**Не увійшло (свідомо, окремими задачами):**
+- `symfony/amazon-mailer` для notification-service — зміни лежать незакоміченими в робочому
+  дереві; без бриджа прод-`MAILER_DSN=ses+api://` ламає воркер сповіщень.
+- Незмерджена гілка `chore/api-platform-config-reference`.
+- 49 системних оновлень на дроплеті (13 безпекових).

@@ -32,6 +32,23 @@
   BOTH "products disappeared" (catalog unreachable → `CatalogClient` returns `[]`)
   AND "payment pending" (order-service unreachable). Don't assume two reports = two bugs.
 
+## Docker Compose audits
+
+- **Аудит compose читати з merged-виводу, не з overlay-файлу.** Розбираючи, чому
+  `delivery-worker` не бачив `rabbitmq`, попередній прохід перечитав усі
+  `services/*/compose.prod.yaml`, не знайшов у воркерів `networks:` і оголосив
+  «7 із 8 воркерів без мережі — відкладена міна». Насправді блоки `networks` лежать
+  у базових `compose.yaml`, а деплой завжди запускає `-f compose.yaml -f compose.prod.yaml`,
+  тож overlay їх успадковує. Правка була б no-op.
+  - Єдине джерело істини — `docker compose -f compose.yaml -f compose.prod.yaml config`
+    (у нашому випадку показав `default + monolith` у всіх 8 воркерів/релеїв).
+  - Ознака, що справа не в конфігу: контейнери, створені **однією** командою, мають
+    різний набір мереж. Тоді це дрейф стану контейнера (гонка при створенні), а не файли.
+- **`docker network connect` не працює для контейнера в стані `restarting`** — саме тому
+  перша спроба «полагодити» delivery-worker нічого не змінила. Лікується
+  `stop` → `network connect` → `start`; env контейнера при цьому зберігається, на відміну
+  від `--force-recreate`, який переінтерполює `${CI_VAR}` у порожнє.
+
 ## Where commands run (prod vs local)
 
 - **Always label WHERE a command block must run, and never hand over a multi-command
