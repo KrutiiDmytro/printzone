@@ -132,9 +132,27 @@ curl -sI https://e-commerce.it.com                           → HTTP/2 200
 > `consumers 0` у `rabbitmqctl list_queues` — норма для Symfony AMQP: транспорт
 > тягне повідомлення через `basic_get`-полінг, постійного консюмера не тримає.
 
-Приєднання руками живе, доки контейнер не перестворять; наступний
-`deploy:delivery-service` створить його з обома мережами за merged-конфігом.
-Якщо дрейф повториться — це вже привід підозрювати гонку в compose, а не файли.
+### Підтверджено повним деплоєм 2026-08-06
+
+Мерж у `develop` (пайплайн #21931, 35 джоб) перестворив контейнери сервісів — тобто
+перевірив рівно те, що перша редакція доку називала міною. Результат: **усі 8 воркерів
+і релеїв піднялися з обома мережами, `RestartCount=0`, без жодного ручного втручання.**
+
+```
+catalog-worker       running restarts=0  catalog-service_default      task-25_default
+order-worker         running restarts=0  order-service_default        task-25_default
+order-relay          running restarts=0  order-service_default        task-25_default
+notification-worker  running restarts=0  notification-service_default task-25_default
+payment-relay        running restarts=0  payment-service_default      task-25_default
+export-worker        running restarts=0  export-service_default       task-25_default
+delivery-worker      running restarts=0  delivery-service_default     task-25_default   ← created 18:51:49
+delivery-relay       running restarts=0  delivery-service_default     task-25_default
+```
+
+`delivery-worker` створено заново під час деплою — ручне приєднання мережі скасувалося,
+і воркер усе одно отримав `task-25_default` з конфігу. Питання закрите: правити
+overlay-файли не треба, поломки в конфігах немає. Якщо дрейф колись повториться —
+підозрювати гонку при створенні контейнера, а не файли.
 
 ---
 
