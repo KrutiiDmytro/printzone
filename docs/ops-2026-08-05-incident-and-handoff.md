@@ -1,12 +1,14 @@
-# Прод-інцидент 2026-08-05 і стан справ
+# Прод: інцидент 2026-08-05 і вікно обслуговування 2026-08-10
 
-Розбір падіння асинхронної гілки на проді, перелік змін і **відкриті питання**.
+Розбір падіння асинхронної гілки на проді, перелік змін і поточний стан.
 Документ писався як передача контексту: усе, що нижче, або перевірено командою,
 або явно позначено як припущення.
 
 - **Хост:** `68.183.67.77` (`ubuntu-s-1vcpu-1gb-fra1-01`), 1 vCPU / 1.9 ГБ, Ubuntu 24.04
 - **Сайт:** https://e-commerce.it.com, тека застосунку `/var/www/app`
 - **Репозиторій:** перейменовано `foxmidedteam/task-25` → **`foxmidedteam/printzone`**
+- **Стан на 2026-08-10:** відкритих питань немає; 33 контейнери живі, 0 безпекових
+  оновлень, ядро `6.8.0-137`. Єдина зовнішня залежність — SES production access (розділ 5).
 
 ---
 
@@ -156,27 +158,107 @@ overlay-файли не треба, поломки в конфігах нема�
 
 ---
 
-## 4. Решта відкритих дрібниць
+## 4. Вікно обслуговування 2026-08-10
 
-- У робочому дереві висять незакомічені зміни: `services/notification-service/composer.json`
-  і `composer.lock` — це доданий `symfony/amazon-mailer`. Без цього бриджа прод-значення
-  `MAILER_DSN=ses+api://…` для notification-worker = «unsupported scheme», тобто листи
-  з чеками покупцям не йдуть. Винести окремою гілкою + MR (в `export-service` бридж уже є).
-- Гілка `chore/api-platform-config-reference` (1 коміт, `config/reference.php`) запушена,
-  але не змерджена в `develop`.
-- Дроплет тісний: після ребуту вільно ~700 МБ на 33 контейнери (з них 9 Postgres).
-  Swap рятує від раптових смертей, але під нові сервіси машину варто розширити.
-- 49 системних оновлень, з них 13 безпекових (`apt list --upgradable`).
+Закриття хвостів з розділу 5 попередньої редакції: системні оновлення. Порядок кроків
+не косметичний — крок 1 був передумовою решти.
 
-## 5. Чого НЕ варто робити
+### Крок 1 — політики рестарту (MR !51), БЕЗ нього ребут клав би магазин
+
+Розділ 2 фіксує, що політики виставили руками через `docker update`. За п'ять днів
+деплої перестворили частину контейнерів, і **`app-nginx-1` та `app-php-1` знову мали
+`restart: no`** — тобто рівно ті два, від яких залежить сайт.
+
+Причина системна: у `compose.yaml` моноліта `restart: unless-stopped` оголошений лише
+для `worker` і `relay`. Ручне значення живе до першого перестворення контейнера, а
+деплой перестворює саме php і nginx. Решта ядра (`database`, `rabbitmq`, `mailer`,
+`certbot`) ще тримала ручне значення й злетіла б так само.
+
+Полагоджено декларативно — `restart: unless-stopped` у `compose.prod.yaml` для всіх семи
+сервісів. Саме в prod-overlay, а не в базовий файл: так зроблено в усіх дев'яти винесених
+сервісах, і локальний dev-стек не починає стартувати разом із Docker Desktop. Перевірка —
+`docker compose config`: prod-мерж дає `unless-stopped` усім дев'яти, dev-мерж і далі лише
+`worker`/`relay`.
+
+> **Урок:** будь-яка правка через `docker update` — тимчасова. Якщо політика має пережити
+> деплой, вона мусить бути у compose-файлі.
+
+### Крок 2 — системні пакети без docker
+
+Docker-пакети тимчасово під `apt-mark hold`, щоб апгрейд не перезапустив демон посеред
+роботи; `NEEDRESTART_MODE=l`, щоб apt не перезапускав служби на льоту; конфіги збережено
+через `--force-confdef --force-confold`.
+
+Оновлено **38 пакетів, усі 11 безпекових (systemd) закрито**. `needrestart` підтвердив
+«No containers need to be restarted», сайт не падав.
+
+### Крок 3 — ребут: перевірка кроку 1
+
+`unattended-upgrades` уже поставив ядро `6.8.0-137`, тоді як працювало `6.8.0-136`,
+тож ребут був потрібен незалежно від нас.
+
+```
+до:  6.8.0-136-generic, uptime 5 днів
+після: 6.8.0-137-generic, SSH повернувся за ~10 с
+магазин піднявся САМ: 33/33 контейнери, diff зі знімком до оновлення порожній
+```
+
+П'ять воркерів побули в `restarting` ~2 хв (чекали на свої БД і брокер) і осіли самі.
+
+### Крок 4 — docker + containerd
+
+```
+Docker      29.3.0 → 29.7.2
+containerd   2.2.1 → 2.3.3
+compose      5.1.0 → 5.4.0   (+ buildx, model-plugin)
+```
+
+Рестарт демона підняв усі 33 контейнери за політиками — та сама поведінка, що на ребуті.
+`apt-mark showhold` порожній: hold знято, docker не лишився замороженим.
+
+### Підсумковий стан
+
+```
+33 running / 0 restarting          diff зі знімком до оновлення порожній
+політики                            усі unless-stopped
+черги RabbitMQ                      6 шт., 0 повідомлень (нічого не втрачено)
+mailer                              SesApiAsyncAwsTransport
+мережі воркерів                     delivery/order/catalog — обидві
+https://e-commerce.it.com           HTTP/2 200
+ядро                                6.8.0-137-generic
+диск                                80% → 66%
+залишилось оновити                  тільки fwupd
+```
+
+`fwupd` тримається через зміну залежностей — потребує `apt full-upgrade`. Це оновлювач
+прошивок, на віртуалці марний і не безпековий; свідомо не чіпали, бо `full-upgrade` на
+проді може доставляти й видаляти пакети.
+
+---
+
+## 5. Решта відкритих дрібниць
+
+- **SES sandbox.** Технічний блокер знято (MR !50 додав `symfony/amazon-mailer`; без
+  бриджа `MAILER_DSN=ses+api://…` = «unsupported scheme» і чеки не відправлялись), але
+  доки SES у sandbox, листи йдуть лише на верифіковані адреси. Перевірка — замовлення на
+  `krutiidmytro@gmail.com` + `docker logs notification-service-notification-worker-1`.
+  Для реальних покупців потрібен запит **SES production access**.
+- Дроплет тісний: ~650 МБ вільно на 33 контейнери (з них 9 Postgres). Swap рятує від
+  раптових смертей, але під нові сервіси машину варто розширити.
+
+## 6. Чого НЕ варто робити
 
 - **`docker volume prune`** не глядячи — під ним лежать бази сервісів.
 - Піднімати важкий CI на цьому ж хості. Саме це й спричинило інцидент; для Task-28
   проблему закрито заморозкою, але правило загальне.
+- **Закріплювати політики рестарту через `docker update`** — переживає рестарт, але не
+  переживає деплой. Тільки compose-файл.
+- Оновлювати docker, не переконавшись, що всі контейнери мають `unless-stopped`: рестарт
+  демона зупиняє їх усі, і назад підніметься лише те, що має політику.
 
 ---
 
-## 6. Корисні команди
+## 7. Корисні команди
 
 ```bash
 ssh -i ~/.ssh/id_ed25519 root@68.183.67.77
@@ -185,9 +267,24 @@ docker ps --filter "status=restarting"        # чи все живе
 free -h                                        # пам'ять і swap
 docker logs --tail 20 <container>
 
-# які контейнери не піднімуться після ребуту
+# які контейнери не піднімуться після ребуту — має бути порожньо ПЕРЕД ребутом
 docker inspect -f '{{.Name}} {{.HostConfig.RestartPolicy.Name}}' $(docker ps -aq) | grep -v unless-stopped
 
 # у яких мережах контейнер
 docker inspect -f '{{.Name}}: {{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' <container>
+
+# знімок перед оновленням, щоб потім звірити склад
+docker ps --format '{{.Names}}' | sort > /root/containers-before-upgrade.txt
+diff /root/containers-before-upgrade.txt <(docker ps --format '{{.Names}}' | sort)
+
+# оновлення системи без рестарту docker-демона
+apt-mark hold docker-ce docker-ce-cli docker-ce-rootless-extras containerd.io \
+  docker-buildx-plugin docker-compose-plugin docker-model-plugin
+DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get upgrade -y \
+  -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+# докрутити docker окремо — і НЕ забути зняти hold, інакше він застрягне на старій версії
+apt-mark unhold ... && apt-get install -y docker-ce docker-ce-cli containerd.io ...
+
+# чи чекає ребут (unattended-upgrades ставить ядро сам)
+cat /var/run/reboot-required.pkgs 2>/dev/null; uname -r
 ```
