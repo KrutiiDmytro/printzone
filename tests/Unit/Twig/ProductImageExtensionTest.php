@@ -12,7 +12,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 final class ProductImageExtensionTest extends TestCase
 {
-    private function makeExtension(): ProductImageExtension
+    private function makeExtension(?string $publicDir = null): ProductImageExtension
     {
         $storage = $this->createMock(FileStorageInterface::class);
         $storage->method('publicUrl')->willReturn(null);
@@ -22,7 +22,9 @@ final class ProductImageExtensionTest extends TestCase
             fn (string $route, array $params) => '/media?key='.($params['key'] ?? '')
         );
 
-        $service = new ProductImageService($storage, $urlGenerator);
+        // Default to a directory with no images: without a file to stat there is
+        // no cache buster, so these assertions stay about the path itself.
+        $service = new ProductImageService($storage, $urlGenerator, $publicDir ?? '/nonexistent');
 
         return new ProductImageExtension($service);
     }
@@ -54,5 +56,33 @@ final class ProductImageExtensionTest extends TestCase
     {
         $result = $this->makeExtension()->productImageUrl('products/test.jpg');
         $this->assertSame('/media?key=products/test.jpg', $result);
+    }
+
+    /**
+     * nginx serves /img as immutable for 30 days, so a seeded image that keeps
+     * its filename across releases would stay stale in the browser. An existing
+     * file must therefore carry its mtime in the query string.
+     */
+    public function testExistingStaticImageCarriesACacheBuster(): void
+    {
+        $dir = sys_get_temp_dir().'/pz-img-'.uniqid();
+        mkdir($dir.'/img', 0o777, true);
+        $file = $dir.'/img/product-1.png';
+        file_put_contents($file, 'x');
+
+        try {
+            $result = $this->makeExtension($dir)->productImageUrl('product-1.png');
+            $this->assertSame('/img/product-1.png?v='.filemtime($file), $result);
+        } finally {
+            unlink($file);
+            rmdir($dir.'/img');
+            rmdir($dir);
+        }
+    }
+
+    public function testMissingStaticImageHasNoCacheBuster(): void
+    {
+        $result = $this->makeExtension(sys_get_temp_dir())->productImageUrl('does-not-exist.png');
+        $this->assertSame('/img/does-not-exist.png', $result);
     }
 }
