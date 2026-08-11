@@ -27,6 +27,11 @@ services:
             $googleClientSecret: '%env(GOOGLE_CLIENT_SECRET)%'
             $googleRedirectUri: '%env(GOOGLE_REDIRECT_URI)%'
 
+    # Needs the public/ path to stat seeded images for the cache buster.
+    App\Service\ProductImageService:
+        arguments:
+            $publicDir: '%kernel.project_dir%/public'
+
     App\Controller\GitHubAuthController:
         arguments:
             $githubClientId: '%env(GITHUB_CLIENT_ID)%'
