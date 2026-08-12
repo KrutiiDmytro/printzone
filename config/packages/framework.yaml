@@ -5,6 +5,12 @@ framework:
     # Note that the session will be started ONLY if you read or write from it.
     session: true
 
+    assets:
+        # nginx serves static files as immutable for 30 days, so a filename that
+        # survives a release would keep serving the old content from the browser
+        # cache. Versioning by mtime busts exactly the files a deploy changed.
+        version_strategy: App\Asset\MtimeVersionStrategy
+
     #esi: true
     #fragments: true
 

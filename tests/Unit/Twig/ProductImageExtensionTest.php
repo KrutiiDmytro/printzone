@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Twig;
 
+use App\Asset\MtimeVersionStrategy;
 use App\Service\ProductImageService;
 use App\Storage\FileStorageInterface;
 use App\Twig\ProductImageExtension;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Asset\Context\NullContext;
+use Symfony\Component\Asset\Packages;
+use Symfony\Component\Asset\PathPackage;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 final class ProductImageExtensionTest extends TestCase
@@ -22,9 +26,17 @@ final class ProductImageExtensionTest extends TestCase
             fn (string $route, array $params) => '/media?key='.($params['key'] ?? '')
         );
 
-        // Default to a directory with no images: without a file to stat there is
-        // no cache buster, so these assertions stay about the path itself.
-        $service = new ProductImageService($storage, $urlGenerator, $publicDir ?? '/nonexistent');
+        // Mirrors the container: a PathPackage rooted at / so URLs come out
+        // absolute, versioned by mtime. The default directory holds no images,
+        // so without a file to stat there is no cache buster and these
+        // assertions stay about the path itself.
+        $packages = new Packages(new PathPackage(
+            '/',
+            new MtimeVersionStrategy($publicDir ?? '/nonexistent'),
+            new NullContext(),
+        ));
+
+        $service = new ProductImageService($storage, $urlGenerator, $packages);
 
         return new ProductImageExtension($service);
     }

@@ -27,8 +27,8 @@ services:
             $googleClientSecret: '%env(GOOGLE_CLIENT_SECRET)%'
             $googleRedirectUri: '%env(GOOGLE_REDIRECT_URI)%'
 
-    # Needs the public/ path to stat seeded images for the cache buster.
-    App\Service\ProductImageService:
+    # Stats files under public/ to version them by mtime.
+    App\Asset\MtimeVersionStrategy:
         arguments:
             $publicDir: '%kernel.project_dir%/public'
 

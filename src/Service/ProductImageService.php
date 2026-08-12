@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Storage\FileStorageInterface;
+use Symfony\Component\Asset\Packages;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
@@ -16,13 +17,10 @@ final class ProductImageService
     private const PREFIX = 'products/';
     private const FALLBACK = 'product-1.png';
 
-    /** @var array<string, string> cache buster per file, memoised for the request */
-    private array $versions = [];
-
     public function __construct(
         private readonly FileStorageInterface $storage,
         private readonly UrlGeneratorInterface $urlGenerator,
-        private readonly string $publicDir,
+        private readonly Packages $packages,
     ) {
     }
 
@@ -56,21 +54,13 @@ final class ProductImageService
     }
 
     /**
-     * Seeded images keep their filename across releases, but nginx serves /img
-     * with `Cache-Control: public, immutable, max-age=30d`. Without something
-     * changing in the URL, a returning visitor keeps the previous release's
-     * picture for a month — the browser is told not to even revalidate. The
-     * file's mtime moves whenever a deploy rsyncs new content, so it is enough
-     * to bust exactly the images that actually changed.
+     * Goes through the asset packages so seeded images pick up the same
+     * mtime cache buster as every other static file — see
+     * {@see \App\Asset\MtimeVersionStrategy} for why that is needed.
      */
     private function staticUrl(string $image): string
     {
-        if (!isset($this->versions[$image])) {
-            $path = $this->publicDir.'/img/'.$image;
-            $this->versions[$image] = is_file($path) ? '?v='.filemtime($path) : '';
-        }
-
-        return '/img/'.$image.$this->versions[$image];
+        return $this->packages->getUrl('img/'.$image);
     }
 
     private function safeDelete(string $key): void
