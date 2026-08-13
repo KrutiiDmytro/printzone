@@ -57,9 +57,14 @@ GitLab-репозиторій **не видаляти**: доки посилаю
 
 ## Phase 0 — Розвідка на дроплеті (без змін)
 
-- [ ] Визначити користувача, від якого працює gitlab-runner, і власника `/var/www/app`
-- [ ] Перевірити наявність `rsync`, `docker`, `docker compose`, вільне місце під `_work`
-- [ ] Зафіксувати, чи є на хості інші проєкти (Task-28 архівний — не має заважати)
+- [x] Визначити користувача, від якого працює gitlab-runner, і власника `/var/www/app`
+- [x] Перевірити наявність `rsync`, `docker`, `docker compose`, вільне місце під `_work`
+- [x] Зафіксувати, чи є на хості інші проєкти (Task-28 архівний — не має заважати)
+
+**Результат:** `/var/www/app` = `gitlab-runner:gitlab-runner` 775, **root-owned файлів немає**.
+`ExecStart` містить `--user gitlab-runner` → джоби виконуються від нього, і він уже в групі
+`docker` (988). rsync 3.2.7, compose v5.4.0, docker 29.7.2. Диск 16 ГБ вільно, RAM 1.9 ГБ
+(available ~876 МБ). `api.github.com` → 200. 33 контейнери, жодного в `restarting`.
 
 > ⚠️ Раннер GitHub **має працювати від того самого користувача**, що володіє `/var/www/app`
 > (або тека переходить до нового). Інакше повторимо задокументований інцидент з `rsync`:
@@ -67,11 +72,18 @@ GitLab-репозиторій **не видаляти**: доки посилаю
 
 ## Phase 1 — Self-hosted runner
 
-- [ ] Створити runner-токен: `gh api -X POST repos/KrutiiDmytro/printzone/actions/runners/registration-token`
-- [ ] Розгорнути раннер у `/opt/actions-runner` з міткою `printzone-prod`
-- [ ] Встановити як systemd-сервіс (`svc.sh install <user>` + `svc.sh start`)
-- [ ] Перевірити: раннер `online` у Settings → Actions → Runners
-- [ ] Smoke-workflow (`hello.yml`): `docker version`, `rsync --version`, `id`, права на `/var/www/app`
+- [x] Створити runner-токен (через UI `settings/actions/runners/new`)
+- [x] Розгорнути раннер v2.336.0 у `/opt/actions-runner` з міткою `printzone-prod`
+- [x] Встановити як systemd-сервіс: **`./svc.sh install gitlab-runner`** (аргумент = користувач!)
+- [x] Перевірити: раннер `online`, мітки `self-hosted, Linux, X64, printzone-prod`
+- [x] Smoke-workflow (`.github/workflows/smoke.yml`) — run 31736030992, **success**
+
+**Доведено smoke-прогоном:** джоба виконується від `uid=999(gitlab-runner)` у групі `docker`,
+запис у `/var/www/app` працює, docker/compose/rsync доступні, секрети долітають з правильними
+довжинами (`POSTGRES_PASSWORD` 9, `JWT_PASSPHRASE` 64, `OAUTH_GITHUB_CLIENT_SECRET` 40),
+прод не зачеплено — 33 контейнери як були.
+
+> `smoke.yml` — тимчасовий, видалити після Phase 4.
 
 ## Phase 2 — Секрети (22 шт.) — ⚡ ВИКОНУЄТЬСЯ ПЕРШОЮ
 
@@ -101,21 +113,50 @@ GitLab-репозиторій **не видаляти**: доки посилаю
 > (`GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}`), щоб `compose.prod.yaml`
 > не чіпати.
 
-## Phase 3 — Workflow: validate + build + test
+## Phase 3 — Workflow: validate + build + test ✅
 
-- [ ] `.github/workflows/ci.yml`: `lint:php`, `audit:composer`, `cs:fixer`, `static:analysis`,
-      `build:image`, `test:unit`, `test:functional`
-- [ ] Guard на форки в кожній джобі
-- [ ] Перенести 9 `build:*-service` + 9 `test:*-service` (матрицею, а не копіпастом)
-- [ ] Прогнати на тестовій гілці через PR, порівняти результат із GitLab-пайплайном
+- [x] `.github/workflows/ci.yml` — джоби `validate`, `monolith`, `microservices`
+- [x] Guard на форки в кожній джобі
+- [x] 9 `build:*-service` + 9 `test:*-service` → одна матриця на 9 елементів
+- [x] Прогін на `ci/github-actions`: **run 31736754761 — усі 11 джоб success**
 
-## Phase 4 — Workflow: deploy
+**Відступи від дослівного порту (свідомі):**
+- три монолітні тест-джоби GitLab об'єднано в одну з єдиним `composer install`
+  замість трьох — на 1 vCPU це втричі менше зайвої роботи. `if: !cancelled()`
+  зберігає поведінку «падіння PHPStan не ховає результати тестів».
+- перед `actions/checkout` додано `busybox chown` workspace: контейнери пишуть
+  туди як root, а checkout чистить теку від імені раннера. У GitLab це лікували
+  через `GIT_CLEAN_FLAGS` + `composer audit --locked`.
+- `actions/checkout@v5` (v4 тягне депрекейтнутий Node 20).
 
-- [ ] `.github/workflows/deploy.yml`: моноліт + 9 сервісів, `needs` на тести
-- [ ] Тільки `on: push: branches: [develop]`, `concurrency` проти паралельних деплоїв
-- [ ] Environment `production` з URL `https://e-commerce.it.com`
-- [ ] Зберегти всі задокументовані обхідні кроки: скидання прав `public/`, `--force-recreate nginx`,
-      `--skip-if-exists` для JWT-ключів, виключення `config/jwt` з rsync
+## Phase 4 — Workflow: deploy (написано, на проді ще НЕ виконувалось)
+
+- [x] `.github/workflows/deploy.yml` + `.github/actions/deploy-service/action.yml`
+- [x] Тільки `on: push: branches: [develop]`, `concurrency: deploy-prod`, без cancel
+- [x] Environment `production` з URL `https://e-commerce.it.com`
+- [x] Збережено обхідні кроки: права `public/`, `--force-recreate nginx`,
+      `--skip-if-exists` для JWT, виключення `config/jwt` з rsync
+- [ ] **Бойовий прогін** — мерж у `develop`
+
+**Граф джоб (повторює `needs` з GitLab, порядок несучий):**
+
+```
+independent (cart, payment, delivery, export, notification, storage)
+     ↓
+order  ──→  monolith  ──→  dependent (catalog, user)
+```
+
+Моноліт дропає таблиці замовлень і кошика, тож ці сервіси мають бути живі до
+його міграцій. Падіння будь-кого з тиру 1 зупиняє ланцюг і DROP не стається —
+та сама властивість, що була в GitLab.
+
+Дев'ять `deploy:*-service` зведено до одного composite action із трьома формами:
+stateless (notification, storage), stateful (cart/payment/delivery/export/order),
+stateful + seed-if-empty (catalog, user).
+
+⚠️ `GITHUB_CLIENT_SECRET` експортується всередині кроку, а не через `env:` —
+Actions резервує префікс `GITHUB_` і для секретів, і для змінних оточення,
+а `compose.prod.yaml` інтерполює саме це ім'я.
 
 ## Phase 5 — Вимкнути деплой у GitLab
 

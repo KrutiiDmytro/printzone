@@ -322,7 +322,12 @@ deploy:
     - deploy:order-service
     - deploy:cart-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 # ─────────────────────────────────────────────────────────────
 # MICROSERVICES (user-service / catalog-service)
@@ -605,7 +610,12 @@ deploy:catalog-service:
     - test:catalog-service
     - deploy
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:user-service:
   stage: deploy
@@ -655,7 +665,12 @@ deploy:user-service:
     - test:user-service
     - deploy
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:order-service:
   stage: deploy
@@ -719,7 +734,12 @@ deploy:order-service:
     - deploy:payment-service
     - deploy:delivery-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:cart-service:
   stage: deploy
@@ -779,7 +799,12 @@ deploy:cart-service:
   needs:
     - test:cart-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:payment-service:
   stage: deploy
@@ -839,7 +864,12 @@ deploy:payment-service:
   needs:
     - test:payment-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:delivery-service:
   stage: deploy
@@ -899,7 +929,12 @@ deploy:delivery-service:
   needs:
     - test:delivery-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:export-service:
   stage: deploy
@@ -956,7 +991,12 @@ deploy:export-service:
   needs:
     - test:export-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:notification-service:
   stage: deploy
@@ -996,7 +1036,12 @@ deploy:notification-service:
   needs:
     - test:notification-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
 
 deploy:storage-service:
   stage: deploy
@@ -1036,4 +1081,9 @@ deploy:storage-service:
   needs:
     - test:storage-service
   rules:
+    # Канонічний деплой переїхав у GitHub Actions (.github/workflows/deploy.yml).
+    # Джоба лишається РУЧНИМ шляхом відкату: два пайплайни не повинні
+    # одночасно rsync'ити в /var/www/app.
     - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+      allow_failure: true
