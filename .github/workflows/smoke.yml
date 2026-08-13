@@ -1,0 +1,56 @@
+# Тимчасовий workflow: доводить, що self-hosted раннер на проді вміє все,
+# на що спиратиметься реальний деплой. Видалити після Phase 4.
+name: smoke
+
+on:
+  push:
+    branches: [ci/github-actions]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    # Код із форку не має потрапляти на прод-раннер. Для push умова тривіально
+    # істинна; сенс з'являється, коли workflow почне слухати pull_request.
+    if: github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, printzone-prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Користувач і робоча тека
+        run: |
+          id
+          pwd
+          df -h / | tail -1
+
+      - name: Інструменти
+        run: |
+          docker version --format 'docker server {{.Server.Version}}'
+          docker compose version
+          rsync --version | head -1
+          git --version
+
+      - name: Запис у деплой-теку
+        run: |
+          test -w /var/www/app || { echo "НЕ ЗАПИСУЄТЬСЯ"; exit 1; }
+          touch /var/www/app/.gh-runner-write-test
+          rm -f /var/www/app/.gh-runner-write-test
+          echo "запис у /var/www/app OK"
+
+      - name: Прод не зачеплено
+        run: |
+          echo "контейнерів running: $(docker ps -q | wc -l)"
+          docker ps --filter status=restarting --format '{{.Names}}'
+
+      - name: Секрети долітають
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_PASSPHRASE: ${{ secrets.JWT_PASSPHRASE }}
+          OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+        run: |
+          # Друкуємо лише довжину — значення в лог не потрапляє.
+          for v in POSTGRES_PASSWORD JWT_PASSPHRASE OAUTH_GITHUB_CLIENT_SECRET; do
+            len=$(eval "printf %s \"\$$v\"" | wc -c)
+            [ "$len" -gt 0 ] || { echo "$v ПОРОЖНІЙ"; exit 1; }
+            echo "$v OK ($len симв.)"
+          done

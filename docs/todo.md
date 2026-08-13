@@ -1,69 +1,146 @@
-# Прод-інцидент 2026-08-05: усунення конфлікту Task-28 ↔ прод
+# Міграція CI/CD: GitLab CI → GitHub Actions
 
-> Активний робочий план. Попередні плани (OpenAPI-специфікації, Export — Phase 7,
+> Активний робочий план. Попередні плани (прод-інцидент 2026-08-05, OpenAPI, Export — Phase 7,
 > Storage — MR !32, Notification та ін.) — у git-історії.
 
 ## Мета
 
-Прибрати конфлікт між CI Task-28 і продом printzone на спільному дроплеті, повернути
-асинхронну гілку в робочий стан і задокументувати розбір так, щоб він не вводив в оману.
+Перевести збірку, тести й деплой продакшену з GitLab CI на GitHub Actions, зберігши
+публічність репозиторію (посилання в CV) і не відкривши прод для коду з форків.
 
-## Чекліст
+## Рішення (зафіксовані)
 
-- [x] RabbitMQ піднято, swap 2 ГБ, `restart: unless-stopped` для 6 контейнерів ядра сайту
-- [x] Пайплайн Task-28 заморожено (`workflow.rules → when: never`), проєкт заархівовано
-- [x] `printzone`: `develop` → `main` (MR !38), remote переведено на нову адресу
-- [x] Розбір записано в `docs/ops-2026-08-05-incident-and-handoff.md`
-- [x] Перевірити merged-конфіг усіх 9 сервісів (`docker compose config`) — мережі воркерів
-- [x] Перевірити на дроплеті `docker ps --filter "status=restarting"` — чи ожив delivery-worker
-- [x] Полагодити delivery-worker: `stop` → `network connect task-25_default` → `start`
-- [x] Переписати розділ 3 доку за фактами (хибний висновок про overlay-файли)
-- [x] Записати урок у `docs/lesson.md`
-- [x] Закомітити док окремою гілкою `docs/ops-incident-2026-08-05` + MR у `develop` (MR !47)
-- [x] Розблокувати пайплайн: `guzzlehttp/guzzle` 7.15.1 → 7.15.2 (CVE-2026-69245/69246)
-- [x] Підтвердити гіпотезу повним деплоєм: усі 8 воркерів/релеїв піднялися з обома мережами
-- [x] SES-бридж для notification-service (MR !50) — `ses+api://` більше не «unsupported scheme»
-- [x] Змерджити `chore/api-platform-config-reference` (MR !46)
-- [x] Вікно обслуговування: політики рестарту (MR !51) → 38 пакетів → ребут → docker 29.7.2
+| Питання | Рішення |
+|---|---|
+| Раннер | **Self-hosted** GitHub Actions runner на тому ж дроплеті |
+| Видимість репо | **Публічне** — потрібне клікабельне посилання в CV |
+| Захист від форків | Джоби не запускаються на `pull_request` із форку + approval для зовнішніх |
+| GitLab CI | Файл лишається, deploy-джоби переводяться в `when: manual` (шлях відкату) |
+| Секрети | Скрипт GitLab API → `gh secret set`, значення не друкуються |
+
+## ⚠️ Контекст, що змінює пріоритет
+
+Навчання завершено, ментора немає. GitLab у Foxminded — **чужа закрита інсталяція**: доступ
+можуть відкликати без попередження, і проєкт там усе одно ніхто ззовні не бачить. Єдине, що
+звідти більше нізвідки не дістати чисто — **значення 22 CI-змінних**.
+
+Тому **Phase 2 (секрети) виконується ПЕРШОЮ**, до раннера і workflow'ів. Решта фаз від
+доступу до GitLab не залежить.
+
+Запасний шлях, якщо доступ уже втрачено: ті самі значення живуть в оточенні контейнерів на
+дроплеті — `docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' <container>`.
+
+GitLab-репозиторій **не видаляти**: доки посилаються на `MR !32/!44/!47/!50/!51`, де записано,
+*чому* прод влаштований саме так. Перевести в archived/read-only.
+
+**Чому self-hosted, а не GitHub-hosted + SSH:** поточний деплой не використовує SSH — він
+`rsync`-ає з робочої теки раннера в `/var/www/app` і піднімає `docker compose` локально,
+а образи (`task-25/php:$SHA`) збираються теж локально й ніде не публікуються. Раннер і прод —
+одна машина. GitHub-hosted раннер вимагав би Docker-реєстру + SSH-деплою, тобто іншої
+архітектури, а не міграції.
+
+## Мапінг GitLab → GitHub
+
+| GitLab CI | GitHub Actions |
+|---|---|
+| `stages` + `needs` | окремі jobs + `needs` |
+| `tags: [Веб-разработка]` | `runs-on: [self-hosted, printzone-prod]` |
+| `$CI_PROJECT_DIR` | `$GITHUB_WORKSPACE` |
+| `$CI_COMMIT_SHA` | `${{ github.sha }}` |
+| `rules: $CI_COMMIT_BRANCH == "develop"` | `on.push.branches: [develop]` |
+| `rules: merge_request_event` | `on.pull_request` + guard на форк |
+| `environment: production` | GitHub Environment `production` |
+| CI/CD Variables | Repository secrets (+ Environment secrets для прод) |
+| один раннер = послідовність | `concurrency: group deploy-prod, cancel-in-progress: false` |
+
+---
+
+## Phase 0 — Розвідка на дроплеті (без змін)
+
+- [ ] Визначити користувача, від якого працює gitlab-runner, і власника `/var/www/app`
+- [ ] Перевірити наявність `rsync`, `docker`, `docker compose`, вільне місце під `_work`
+- [ ] Зафіксувати, чи є на хості інші проєкти (Task-28 архівний — не має заважати)
+
+> ⚠️ Раннер GitHub **має працювати від того самого користувача**, що володіє `/var/www/app`
+> (або тека переходить до нового). Інакше повторимо задокументований інцидент з `rsync`:
+> «Operation not permitted» + «mkstemp Permission denied» (див. `docs/lesson.md`).
+
+## Phase 1 — Self-hosted runner
+
+- [ ] Створити runner-токен: `gh api -X POST repos/KrutiiDmytro/printzone/actions/runners/registration-token`
+- [ ] Розгорнути раннер у `/opt/actions-runner` з міткою `printzone-prod`
+- [ ] Встановити як systemd-сервіс (`svc.sh install <user>` + `svc.sh start`)
+- [ ] Перевірити: раннер `online` у Settings → Actions → Runners
+- [ ] Smoke-workflow (`hello.yml`): `docker version`, `rsync --version`, `id`, права на `/var/www/app`
+
+## Phase 2 — Секрети (22 шт.) — ⚡ ВИКОНУЄТЬСЯ ПЕРШОЮ
+
+- [x] Написати `scripts/migrate-ci-secrets.ps1` (GitLab API → `gh secret set`, без друку значень)
+- [x] Створити GitLab PAT — вистачило scope `read_api` (не `api`)
+- [x] Прогнати з `-DryRun`, потім без нього
+- [x] Звірити **лише імена**: `gh secret list` → 21 секрет ✅
+- [ ] Відкликати GitLab PAT
+- [ ] З'ясувати, що за ключ `nQavPaDX…` лежить у GitLab CI Variables (схоже на вставлений токен)
+
+**Підсумок:** з 25 змінних GitLab перенесено 21. Пропущено як невживані:
+`APP_PASSWORD` (Gmail-бридж покинуто), `DATABASE_URL` / `DATABASE_REPLICA_URL`
+(`compose.prod.yaml:41` збирає URL сам з `${POSTGRES_PASSWORD}`) і ключ-сміття.
+`DELIVERY_PROVIDER` у GitLab і не було — дефолт `fake` зашитий у
+`services/delivery-service/compose.prod.yaml:23`.
+- [ ] Перевірити повноту за списком нижче
+
+`ADMIN_EMAIL`, `APP_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_S3_BUCKET`, `AWS_SECRET_ACCESS_KEY`,
+`CART_DB_PASSWORD`, `CATALOG_DB_PASSWORD`, `DELIVERY_DB_PASSWORD`, `DELIVERY_PROVIDER`,
+`EXPORT_DB_PASSWORD`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, `JWT_PASSPHRASE`,
+`MAILER_DSN`, `NOVA_POSHTA_API_KEY`, `ORDER_DB_PASSWORD`, `PAYMENT_DB_PASSWORD`,
+`POSTGRES_PASSWORD`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`USER_DB_PASSWORD`
+
+> ⚠️ `GITHUB_` — зарезервований префікс у GitHub Actions: секрет `GITHUB_CLIENT_SECRET`
+> створити не вийде. Перейменувати на `OAUTH_GITHUB_CLIENT_SECRET` і додати мапінг у workflow
+> (`GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}`), щоб `compose.prod.yaml`
+> не чіпати.
+
+## Phase 3 — Workflow: validate + build + test
+
+- [ ] `.github/workflows/ci.yml`: `lint:php`, `audit:composer`, `cs:fixer`, `static:analysis`,
+      `build:image`, `test:unit`, `test:functional`
+- [ ] Guard на форки в кожній джобі
+- [ ] Перенести 9 `build:*-service` + 9 `test:*-service` (матрицею, а не копіпастом)
+- [ ] Прогнати на тестовій гілці через PR, порівняти результат із GitLab-пайплайном
+
+## Phase 4 — Workflow: deploy
+
+- [ ] `.github/workflows/deploy.yml`: моноліт + 9 сервісів, `needs` на тести
+- [ ] Тільки `on: push: branches: [develop]`, `concurrency` проти паралельних деплоїв
+- [ ] Environment `production` з URL `https://e-commerce.it.com`
+- [ ] Зберегти всі задокументовані обхідні кроки: скидання прав `public/`, `--force-recreate nginx`,
+      `--skip-if-exists` для JWT-ключів, виключення `config/jwt` з rsync
+
+## Phase 5 — Вимкнути деплой у GitLab
+
+- [ ] Усі 10 `deploy:*` → `when: manual` + `allow_failure: true`
+- [ ] Комент у `.gitlab-ci.yml`, що канонічний деплой тепер у GitHub Actions
+
+## Phase 6 — Перевірка та документація
+
+- [ ] Реальний деплой через GitHub Actions, `curl` головної + `/api`
+- [ ] Перевірити, що секрети долетіли: жодного `WARN ... not set. Defaulting to blank`
+- [ ] Оновити `CLAUDE.md` (розділ про CI) і `docs/lesson.md`
+- [ ] Записати підсумок у розділ Review нижче
+
+---
+
+## Ризики
+
+| Ризик | Пом'якшення |
+|---|---|
+| Раннер від іншого користувача ламає `rsync` у `/var/www/app` | Phase 0 визначає власника; раннер ставимо від нього |
+| Порожні секрети → `fe_sendauth: no password supplied` | Явна перевірка на `WARN ... Defaulting to blank` у Phase 6 |
+| Два пайплайни одночасно пишуть у `/var/www/app` | Phase 5 виконати одразу після першого успішного деплою |
+| Код із форку на проді | Guard на `pull_request` + approval для зовнішніх |
+| Перший деплой зламає прод | GitLab-джоби лишаються як `manual` — швидкий відкат |
 
 ## Review (результати)
 
-**Головне: діагноз першої редакції доку був хибний.** Твердження «7 із 8 воркерів не мають
-мережі в `compose.prod.yaml` → відкладена міна» побудоване на читанні лише overlay-файлів.
-`docker compose -f compose.yaml -f compose.prod.yaml config` (перевірено локально для всіх
-9 сервісів і на дроплеті для delivery) дає **всім 8 воркерам/релеям `default + monolith`** —
-блоки `networks` лежать у базових `compose.yaml`. Правка overlay була б no-op.
-
-Реальна причина — дрейф стану контейнера: три delivery-контейнери створені однією командою
-о `2026-07-25T11:43:40`, двом мережа `task-25_default` дісталася, воркеру ні; ID мережі
-незмінний із 2026-05-17. Найімовірніше — гонка з краш-лупом воркера при створенні.
-
-**Фікс і верифікація (2026-08-05):** `docker stop` → `docker network connect` → `docker start`
-(зберігає env контейнера; `--force-recreate` руками заборонений — обнуляє `${CI_VAR}`).
-Після цього: воркер `running`, `RestartCount=0`, обидві мережі, у логах
-`[OK] Consuming messages from transport "delivery_events"`; `docker ps --filter status=restarting`
-порожній; жодного контейнера без `unless-stopped`; черга `delivery_shipment_events` існує,
-0 повідомлень; сайт `HTTP/2 200`; swap 2 ГБ, вільно ~700 МБ.
-
-**Підтвердження гіпотези (2026-08-06).** Мерж MR !47 запустив деплой-пайплайн #21931, який
-перестворив контейнери сервісів. Усі 8 воркерів/релеїв піднялися з `default + monolith`,
-`RestartCount=0`, включно з `delivery-worker` (створений заново о 18:51:49 — ручне приєднання
-мережі скасувалося, і він усе одно отримав мережу з конфігу). Прогноз став перевіреним фактом:
-конфіги коректні, правка overlay не потрібна. Заодно guzzle 7.15.2 доїхав на прод.
-
-**Побічно:** пайплайн MR блокували два адвайзорі guzzle від 2026-08-03 (`audit:composer` на
-`--locked`). Полагоджено бампом lock-файлів кореня і storage-service до 7.15.2.
-
-**Вікно обслуговування (2026-08-10).** Деталі — розділ 4 доку. Ключове: перед оновленням
-знайшлося, що `app-nginx-1` і `app-php-1` знову мали `restart: no` — ручні `docker update`
-з 05.08 змило деплоями, бо політика була оголошена лише для `worker`/`relay` у `compose.yaml`.
-Ребут (а він уже чекав: ядро `6.8.0-137` проти працюючого `6.8.0-136`) поклав би магазин
-назавжди. Полагоджено декларативно в `compose.prod.yaml` (MR !51), далі 38 пакетів
-(0 безпекових лишилось), ребут — магазин піднявся сам, 33/33 контейнери — і docker
-29.3.0 → 29.7.2 + containerd 2.3.3. Черги цілі, hold знято, лишився тільки `fwupd`.
-
-**Закрито з попереднього списку:** SES-бридж (MR !50), `chore/api-platform-config-reference`
-(MR !46), системні оновлення.
-
-**Лишилось поза кодом:** SES production access — доки sandbox, листи йдуть лише на
-верифіковані адреси.
+_Заповнюється після Phase 6._
