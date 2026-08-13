@@ -38,7 +38,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
             chown -R "$(id -u):$(id -g)" /w
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: PHP syntax check
         run: |
@@ -77,7 +77,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
             chown -R "$(id -u):$(id -g)" /w
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build PHP image
         run: |
@@ -170,7 +170,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
             chown -R "$(id -u):$(id -g)" /w
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build ${{ matrix.service }}
         run: |

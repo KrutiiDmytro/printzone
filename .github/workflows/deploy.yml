@@ -73,7 +73,7 @@ jobs:
           [ -d "$GITHUB_WORKSPACE" ] || exit 0
           docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
             chown -R "$(id -u):$(id -g)" /w
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/deploy-service
         with:
           service: ${{ matrix.service }}
@@ -96,7 +96,7 @@ jobs:
           [ -d "$GITHUB_WORKSPACE" ] || exit 0
           docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
             chown -R "$(id -u):$(id -g)" /w
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/deploy-service
         with:
           service: order-service
@@ -119,7 +119,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
             chown -R "$(id -u):$(id -g)" /w
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Deploy monolith
         run: |
@@ -259,7 +259,7 @@ jobs:
           [ -d "$GITHUB_WORKSPACE" ] || exit 0
           docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
             chown -R "$(id -u):$(id -g)" /w
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/deploy-service
         with:
           service: ${{ matrix.service }}
