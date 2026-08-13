@@ -1,0 +1,190 @@
+name: CI
+
+# Порт .gitlab-ci.yml (stages validate/build/test). Деплой — в deploy.yml.
+#
+# Раннер self-hosted і стоїть на проді, тому:
+#   • код із форку сюди не пускаємо (умова if нижче);
+#   • раннер один, джоби виконуються послідовно — матриця не дає паралелізму,
+#     але прибирає 18 копіпаст-джоб GitLab до однієї.
+
+on:
+  push:
+    branches: [develop, 'ci/**']
+  pull_request:
+  workflow_dispatch:
+
+# 1 vCPU: другий одночасний прогін тієї ж гілки лише заважає.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_IMAGE: php:8.2-cli-alpine
+  LOCAL_IMAGE: task-25/php:latest
+  COMPOSER_VOLUME: composer-cache-task25
+
+jobs:
+  validate:
+    if: github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, printzone-prod]
+    steps:
+      # Контейнери нижче пишуть у workspace як root, а actions/checkout чистить
+      # теку від імені раннера → без цього кроку наступний прогін падає на
+      # правах. Той самий прийом, що деплой застосовує до public/.
+      - name: Повернути права на workspace
+        run: |
+          [ -d "$GITHUB_WORKSPACE" ] || exit 0
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
+            chown -R "$(id -u):$(id -g)" /w
+
+      - uses: actions/checkout@v4
+
+      - name: PHP syntax check
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/app" -w /app "$PHP_IMAGE" \
+            sh -c "find src tests -name '*.php' -print0 | xargs -0 -P4 php -l"
+
+      - name: composer validate
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/app" -w /app composer:2 \
+            sh -c "git config --global --add safe.directory /app && composer validate --no-check-publish"
+
+      # --locked аудитує composer.lock, а НЕ встановлений vendor/. Раннер
+      # перевикористовує теку збірки, де попередні root-джоби лишають застарілий
+      # vendor/; без --locked аудит читав те старе дерево і падав на вже
+      # закритій адвізорі.
+      - name: composer audit
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/app" -w /app composer:2 \
+            sh -c "git config --global --add safe.directory /app && composer audit --locked --format=plain"
+
+      - name: PHP CS Fixer (check, no changes)
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/app" -w /app \
+            -e PHP_CS_FIXER_IGNORE_ENV=1 \
+            ghcr.io/php-cs-fixer/php-cs-fixer:3-php8.3 \
+            check --diff --show-progress=dots
+
+  monolith:
+    if: github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, printzone-prod]
+    steps:
+      - name: Повернути права на workspace
+        run: |
+          [ -d "$GITHUB_WORKSPACE" ] || exit 0
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
+            chown -R "$(id -u):$(id -g)" /w
+
+      - uses: actions/checkout@v4
+
+      - name: Build PHP image
+        run: |
+          docker build -f Dockerfile.php \
+            -t "task-25/php:$GITHUB_SHA" -t task-25/php:latest .
+
+      # У GitLab кожна з трьох джоб гнала composer install заново. На 1 vCPU це
+      # втричі зайва робота, тому підготовка одна на всі перевірки.
+      #
+      # APP_ENV=test потрібен, щоб `importmap:install` піднімав ядро з .env.test
+      # (де визначено JWT_PASSPHRASE=). У dev паспфраза живе лише в .env.local,
+      # якого в CI немає → контейнер не компілюється через маршрути easyadmin.
+      - name: Підготовка (composer install + importmap)
+        run: |
+          docker volume create "$COMPOSER_VOLUME" || true
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/app" -v "$COMPOSER_VOLUME:/composer-cache" \
+            -w /app -e APP_ENV=test -e COMPOSER_HOME=/composer-cache \
+            "$LOCAL_IMAGE" \
+            sh -c "composer install --no-interaction --no-scripts --prefer-dist --optimize-autoloader && php bin/console importmap:install && rm -rf var/cache/test && rm -f var/test.db var/test.db-wal var/test.db-shm"
+
+      # APP_DEBUG=1 обов'язковий: phpstan-symfony читає дамп контейнера
+      # (App_KernelTestDebugContainer.xml), який Symfony пише лише в debug.
+      # З APP_DEBUG=0 жодного *Container.xml немає і аналіз падає.
+      - name: PHPStan (level 6, with baseline)
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/app" -v "$COMPOSER_VOLUME:/composer-cache" \
+            -w /app -e APP_ENV=test -e APP_DEBUG=1 -e COMPOSER_HOME=/composer-cache \
+            "$LOCAL_IMAGE" \
+            sh -c "php bin/console cache:warmup --env=test && vendor/bin/phpstan analyse --no-progress"
+
+      # !cancelled() — щоб падіння PHPStan не ховало результати тестів,
+      # як це було в GitLab, де перевірки жили окремими джобами.
+      - name: Unit tests
+        if: '!cancelled()'
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/reports"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/app" -v "$COMPOSER_VOLUME:/composer-cache" \
+            -w /app -e APP_ENV=test -e APP_DEBUG=0 -e COMPOSER_HOME=/composer-cache \
+            "$LOCAL_IMAGE" \
+            php bin/phpunit --testsuite Unit --colors=never \
+              --log-junit /app/reports/junit-unit.xml
+
+      - name: Functional tests (SQLite)
+        if: '!cancelled()'
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/reports"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/app" -v "$COMPOSER_VOLUME:/composer-cache" \
+            -w /app -e APP_ENV=test -e APP_DEBUG=0 -e COMPOSER_HOME=/composer-cache \
+            "$LOCAL_IMAGE" \
+            php -d memory_limit=-1 bin/phpunit --testsuite Functional --colors=never \
+              --log-junit /app/reports/junit-functional.xml
+
+      - name: JUnit reports
+        if: '!cancelled()'
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-monolith
+          path: reports/*.xml
+          retention-days: 7
+          if-no-files-found: warn
+
+  microservices:
+    if: github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, printzone-prod]
+    strategy:
+      # Раннер один — джоби все одно послідовні; fail-fast лише сховав би
+      # результати решти сервісів.
+      fail-fast: false
+      matrix:
+        service:
+          - catalog-service
+          - user-service
+          - order-service
+          - cart-service
+          - payment-service
+          - delivery-service
+          - notification-service
+          - storage-service
+          - export-service
+    name: ${{ matrix.service }}
+    steps:
+      - name: Повернути права на workspace
+        run: |
+          [ -d "$GITHUB_WORKSPACE" ] || exit 0
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" busybox \
+            chown -R "$(id -u):$(id -g)" /w
+
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          docker build -f "services/${{ matrix.service }}/Dockerfile" \
+            -t "printzone/${{ matrix.service }}:$GITHUB_SHA" \
+            -t "printzone/${{ matrix.service }}:latest" \
+            "services/${{ matrix.service }}"
+
+      - name: Test ${{ matrix.service }}
+        run: |
+          docker volume create "$COMPOSER_VOLUME" || true
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/services/${{ matrix.service }}:/app" \
+            -v "$COMPOSER_VOLUME:/composer-cache" \
+            -w /app -e COMPOSER_HOME=/composer-cache \
+            "printzone/${{ matrix.service }}:latest" \
+            sh -c "composer install --no-interaction --prefer-dist --optimize-autoloader && rm -rf var/cache && vendor/bin/phpunit --colors=never"
