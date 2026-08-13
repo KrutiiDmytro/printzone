@@ -1,0 +1,125 @@
+name: Deploy service
+description: >
+  Розкочує один мікросервіс на проді. Порт дев'яти джоб deploy:*-service
+  з .gitlab-ci.yml — вони відрізнялись лише іменами БД, паролем і сидуванням.
+
+inputs:
+  service:
+    description: Ім'я сервісу = ім'я теки в services/ і сервісу в compose
+    required: true
+  db-service:
+    description: Ім'я контейнера БД у compose; порожнє для stateless-сервісів
+    default: ''
+  db-name:
+    description: Ім'я бази
+    default: ''
+  db-password:
+    description: Пароль; обов'язковий, якщо задано db-service
+    default: ''
+  seed-table:
+    description: Таблиця для перевірки «чи порожньо»; порожнє — не сидувати
+    default: ''
+  self-rsync:
+    description: >
+      Синхронізувати свою піддиректорію самому. Потрібно тим, хто деплоїться
+      ДО моноліту: його rsync ще не створив $DEPLOY_DIR/services/<svc>
+      (на першому деплої теки взагалі немає).
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy ${{ inputs.service }}
+      shell: bash
+      env:
+        SVC: ${{ inputs.service }}
+        DB_SVC: ${{ inputs.db-service }}
+        DB_NAME: ${{ inputs.db-name }}
+        DB_PASSWORD: ${{ inputs.db-password }}
+        SEED_TABLE: ${{ inputs.seed-table }}
+        SELF_RSYNC: ${{ inputs.self-rsync }}
+      run: |
+        DEPLOY_DIR=/var/www/app
+        COMPOSE="docker compose -f compose.yaml -f compose.prod.yaml"
+
+        # Падаємо одразу, якщо пароль порожній. Інакше сервіс підніметься
+        # недосяжним, а для order/cart це ще й означає, що моноліт піде
+        # дропати їхні таблиці, не маючи живого джерела правди.
+        if [ -n "$DB_SVC" ] && [ -z "$DB_PASSWORD" ]; then
+          echo "ERROR: пароль БД для $SVC порожній. Зупиняюсь."
+          exit 1
+        fi
+
+        if [ "$SELF_RSYNC" = "true" ]; then
+          echo "--- Rsync services/$SVC ---"
+          mkdir -p "$DEPLOY_DIR/services/$SVC"
+          rsync -rlpt --delete --no-owner --no-group --omit-dir-times \
+            --exclude='.git' \
+            --exclude='.env.local' \
+            --exclude='vendor' \
+            --exclude='var/' \
+            "$GITHUB_WORKSPACE/services/$SVC/" "$DEPLOY_DIR/services/$SVC/"
+        fi
+
+        cd "$DEPLOY_DIR/services/$SVC"
+
+        if [ -n "$DB_SVC" ]; then
+          echo "--- Starting $DB_SVC ---"
+          $COMPOSE up -d "$DB_SVC"
+          i=0
+          until $COMPOSE exec -T "$DB_SVC" pg_isready -U app -d "$DB_NAME" -q; do
+            i=$((i+1))
+            if [ $i -ge 30 ]; then
+              echo "ERROR: $DB_SVC не піднялась"
+              $COMPOSE logs "$DB_SVC" --tail=20
+              exit 1
+            fi
+            echo "Waiting for $DB_SVC ($i/30)..."
+            sleep 2
+          done
+          $COMPOSE exec -T "$DB_SVC" psql -U app -d "$DB_NAME" \
+            -c "ALTER USER app WITH PASSWORD '${DB_PASSWORD}';"
+        fi
+
+        echo "--- Starting service (pre-built image) ---"
+        $COMPOSE up -d --no-build
+        $COMPOSE exec -T "$SVC" composer install \
+          --no-dev --no-interaction --no-scripts --prefer-dist --optimize-autoloader
+
+        # Прогрів прод-кешу (він переживає рестарт у томі <x>svc_var): щойно
+        # встановлені бандли мають зареєструвати свої console-команди до того,
+        # як ми ними скористаємось. Prod сам застарілий кеш не перебудовує.
+        $COMPOSE exec -T "$SVC" php bin/console cache:clear --env=prod
+
+        if [ -n "$DB_SVC" ]; then
+          echo "--- Migrations ---"
+          $COMPOSE exec -T "$SVC" php bin/console doctrine:migrations:migrate --no-interaction
+        fi
+
+        if [ -n "$SEED_TABLE" ]; then
+          echo "--- Seed only if empty ---"
+          # || true: під set -o pipefail падіння psql (таблиці ще немає)
+          # інакше вбило б крок замість того, щоб дати нам порожній COUNT.
+          COUNT="$($COMPOSE exec -T "$DB_SVC" psql -U app -d "$DB_NAME" \
+            -tAc "SELECT count(*) FROM $SEED_TABLE" 2>/dev/null | tr -d '[:space:]' || true)"
+          if [ -z "$COUNT" ] || [ "$COUNT" = "0" ]; then
+            echo "$SEED_TABLE порожня — вантажу фікстури"
+            $COMPOSE exec -T "$SVC" php bin/console doctrine:fixtures:load --no-interaction
+          else
+            echo "$SEED_TABLE має $COUNT рядків — сидування пропущено"
+          fi
+        fi
+
+        echo "--- Health check ---"
+        i=0
+        until $COMPOSE exec -T "$SVC" php bin/console about > /dev/null 2>&1; do
+          i=$((i+1))
+          if [ $i -ge 15 ]; then
+            echo "ERROR: $SVC health failed"
+            $COMPOSE logs "$SVC" --tail=20
+            exit 1
+          fi
+          echo "Health attempt $i/15..."
+          sleep 2
+        done
+        echo "$SVC healthy"
