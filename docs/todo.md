@@ -91,8 +91,8 @@ GitLab-репозиторій **не видаляти**: доки посилаю
 - [x] Створити GitLab PAT — вистачило scope `read_api` (не `api`)
 - [x] Прогнати з `-DryRun`, потім без нього
 - [x] Звірити **лише імена**: `gh secret list` → 21 секрет ✅
-- [ ] Відкликати GitLab PAT
-- [ ] З'ясувати, що за ключ `nQavPaDX…` лежить у GitLab CI Variables (схоже на вставлений токен)
+- [x] Відкликати GitLab PAT
+- [x] Прибрати ключ `nQavPaDX…` з GitLab CI Variables (був схожий на вставлений токен)
 
 **Підсумок:** з 25 змінних GitLab перенесено 21. Пропущено як невживані:
 `APP_PASSWORD` (Gmail-бридж покинуто), `DATABASE_URL` / `DATABASE_REPLICA_URL`
@@ -215,11 +215,20 @@ Actions резервує префікс `GITHUB_` і для секретів, і
 5. **Вставка довгих рядків у SSH-сесію ламається** — термінал переносить хвіст
    на новий рядок і рве heredoc/URL. Команди для дроплета давати короткими.
 
-### Лишилось (не блокує)
+### Лишилось
 
-- [ ] Відкликати GitLab PAT
-- [ ] З'ясувати ключ `nQavPaDX…` у GitLab CI Variables (схоже на вставлений токен)
-- [ ] Видалити злиту гілку `ci/github-actions`
-- [ ] Оновити README та 4 доки, що посилаються на GitLab-пайплайн
-- [ ] Branch protection на `develop`
-- [ ] Actions → Fork PR workflows → `Require approval for all outside collaborators`
+- [x] Відкликати GitLab PAT
+- [x] Прибрати ключ `nQavPaDX…` з GitLab CI Variables
+- [x] Видалити злиту гілку `ci/github-actions`
+- [x] README очищено від Foxminded-івської рамки «Task 24/25/26»
+- [x] Branch protection на `develop` — заборонено force-push і видалення,
+      `enforce_admins: true`. Обов'язкові checks/рев'ю **свідомо не вмикали**:
+      пуш у `develop` і є деплоєм, а required checks заблокували б сам пуш до
+      того, як джоби на цьому коміті встигнуть пройти — замкнений цикл.
+- [x] Actions → Fork PR → `all_external_contributors` (було `first_time_contributors`)
+- [ ] Оновити 4 доки, що ще посилаються на GitLab-пайплайн (`README.md` уже ні):
+      `docs/lesson.md`, `docs/ops-2026-08-05-incident-and-handoff.md`,
+      `docs/microservices-architecture.md`, `CLAUDE.md`
+
+**Міграцію можна вважати закритою.** Останній пункт — косметика тексту, на
+роботу пайплайну не впливає.
