@@ -14,6 +14,12 @@ name: CI/CD
 on:
   push:
     branches: [develop, 'ci/**']
+    # Прогін коштує 40+ хвилин на 1 vCPU того ж хоста, що обслуговує сайт, і
+    # закінчується повторним деплоєм. Зміна самої лише документації цього не
+    # варта. workflow_dispatch лишається, якщо все ж треба прогнати вручну.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
   workflow_dispatch:
 
