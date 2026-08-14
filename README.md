@@ -3,13 +3,9 @@
 Symfony-додаток електронної комерції (друкарський магазин: картриджі, тонери, drum units, стрічки) з чистою архітектурою, принципами SOLID та Domain-Driven Design.
 Включає **REST API** на базі API Platform із захистом через **JWT-токени**, **OAuth 2.0** (Google, GitHub) та **адмін-панель** EasyAdmin.
 
-**Task 25** — **виконання** мікросервісної архітектури, спроектованої в Task 24: моноліт розділено на незалежні сервіси за межами DDD, кожен зі своєю базою даних, середовищами (dev / test / prod) та власним CI/CD-пайплайном.
-
-> Task 24 (`docs/microservices-architecture.md`) — це *аналіз і планування*. Task 25 — це *реалізація й деплой*: сервіси нижче реально побудовані, протестовані й працюють на проді.
-
 ---
 
-## Task 25: Реалізована мікросервісна архітектура
+## PrintZone: Реалізована мікросервісна архітектура
 
 Застосовано патерн **Strangler Fig** — моноліт поступово «обрізали», виносячи домен за доменом у окремий сервіс, доки кожен обмежений контекст (bounded context) не отримав власний код, БД і пайплайн. Моноліт лишився тонким web/admin-фронтом, що спілкується із сервісами.
 
@@ -44,7 +40,7 @@ OrderPaid → Payment Service (webhook Stripe)
           → Notification Service (email-квитанція)
 ```
 
-> 📄 **Звіт (Task 26)** — синхронна / асинхронна / event-driven / гібридна стратегії комунікації з мапінгом «стратегія → код»: [`docs/task-26-communication-strategies.md`](docs/task-26-communication-strategies.md).
+> 📄 **Звіт (PrintZone)** — синхронна / асинхронна / event-driven / гібридна стратегії комунікації з мапінгом «стратегія → код»: [`docs/task-26-communication-strategies.md`](docs/task-26-communication-strategies.md).
 
 ### API-специфікації (OpenAPI)
 
@@ -70,8 +66,6 @@ OrderPaid → Payment Service (webhook Stripe)
 | **Event Sourcing** | Immutable `tracking_events` у Delivery Service |
 | **Idempotency** | Захист від повторних webhook/подій (at-least-once) |
 | **CQRS-стиль** | Export читає дані через read-only API інших сервісів |
-
-> **BFF-шар** (Backend-for-Frontend для Mobile/Desktop/Public) був частиною *плану* Task 24, але в Task 25 **не реалізований** — фронт обслуговує моноліт.
 
 ---
 
