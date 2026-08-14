@@ -184,4 +184,42 @@ Actions резервує префікс `GITHUB_` і для секретів, і
 
 ## Review (результати)
 
-_Заповнюється після Phase 6._
+**Міграцію завершено 2026-08-14.** Прод розкочується з GitHub Actions.
+
+Бойовий прогін — run `31787206401` (коміт `fc87d85`): **21 джоба, усі success**
+(11 CI + 10 deploy). Перевірено після деплою:
+
+| Перевірка | Результат |
+|---|---|
+| `https://e-commerce.it.com` | HTTP 200, 0.86 с |
+| `/shop` | HTTP 200, 0.68 с |
+| `/api` | HTTP 401 (очікувано — потрібен JWT) |
+| Health-check усіх 9 сервісів + моноліту | `... healthy`, `Application is healthy` |
+| Міграції | `[OK] Already at the latest version` скрізь |
+| Сидування | `users має 2 рядків`, `products має 10` → пропущено ✅ |
+| `Defaulting to blank` у логах | **жодного** — усі 21 секрет долетіли |
+
+### Що виявилось по дорозі
+
+1. **Два окремі workflow не гейтяться тестами.** Спершу deploy жив у власному
+   `deploy.yml`, але в Actions немає `needs` між workflow'ами — прод котився б
+   незалежно від падіння PHPStan чи тестів. У GitLab це було неможливо
+   (`deploy` мав `needs: [test:unit, test:functional]`). Злито в один пайплайн.
+2. **`cancel-in-progress` на `develop` небезпечний** — обрив прогону посеред
+   міграцій лишив би прод у півстані. Вимкнено саме для цієї гілки.
+3. **`busybox chown` перед `checkout` — несучий крок, не косметика.** Доведено
+   падінням: smoke-джоба без нього впала з `EACCES: permission denied, unlink
+   '.phpunit.cache/test-results'`, бо контейнери лишили `vendor/` під root.
+4. **Префікс `GITHUB_` зарезервований** — і для секретів, і для env. Обійдено
+   через `OAUTH_GITHUB_CLIENT_SECRET` + `export` усередині кроку.
+5. **Вставка довгих рядків у SSH-сесію ламається** — термінал переносить хвіст
+   на новий рядок і рве heredoc/URL. Команди для дроплета давати короткими.
+
+### Лишилось (не блокує)
+
+- [ ] Відкликати GitLab PAT
+- [ ] З'ясувати ключ `nQavPaDX…` у GitLab CI Variables (схоже на вставлений токен)
+- [ ] Видалити злиту гілку `ci/github-actions`
+- [ ] Оновити README та 4 доки, що посилаються на GitLab-пайплайн
+- [ ] Branch protection на `develop`
+- [ ] Actions → Fork PR workflows → `Require approval for all outside collaborators`
