@@ -182,17 +182,23 @@ docker compose exec php vendor/bin/phpunit
 
 ---
 
-## Деплой (незалежний CI/CD)
+## Деплой (GitHub Actions)
 
-GitLab CI: кожен сервіс має власні `build` / `test` / `deploy:<service>` джоби — сервіси деплояться **незалежно** один від одного:
+Один пайплайн `.github/workflows/ci.yml`: перевірки та збірка образів, далі деплой. Раннер **self-hosted і стоїть на самому проді**, тож деплой — це `rsync` у `/var/www/app` плюс локальний `docker compose`, без SSH.
+
+Порядок джоб не довільний — моноліт під час міграцій дропає таблиці замовлень і кошика, тому відповідні сервіси мають бути живі раніше:
 
 ```
-deploy:user-service      deploy:catalog-service   deploy:order-service
-deploy:cart-service      deploy:payment-service   deploy:delivery-service
-deploy:notification-service   deploy:storage-service   deploy:export-service
+validate + monolith + microservices (тести)
+        ↓
+deploy: cart, payment, delivery, export, notification, storage
+        ↓
+deploy: order  →  deploy: monolith  →  deploy: catalog, user
 ```
 
-Прод — один DigitalOcean droplet; сервіси живуть під деревом моноліту (`/var/www/app/services/<name>`), спільна мережа `task-25_default`, спільний JWT-keypair. Merge у `develop` → пайплайн збирає, тестує й деплоїть змінені сервіси.
+Якщо падає будь-що ліворуч — ланцюг зупиняється і міграції з `DROP` не виконуються.
+
+Прод — один DigitalOcean droplet; сервіси живуть під деревом моноліту (`/var/www/app/services/<name>`), спільна мережа `task-25_default`, спільний JWT-keypair. **Пуш у `develop` = деплой** (зміни лише в `*.md` і `docs/` пайплайн не запускають).
 
 ---
 
@@ -279,4 +285,4 @@ docs/
 | `aws/aws-sdk-php` ^3.x + `league/flysystem` | S3 / local сховище, presigned URL |
 | `symfony/amazon-mailer` | SES-доставка email (export-service) |
 
-**Інфраструктура:** PHP 8.2+, PostgreSQL 16, RabbitMQ, Docker Compose, GitLab CI/CD, DigitalOcean.
+**Інфраструктура:** PHP 8.2+, PostgreSQL 16, RabbitMQ, Docker Compose, GitHub Actions, DigitalOcean.

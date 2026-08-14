@@ -66,6 +66,31 @@ docker compose exec php php bin/phpunit tests/Functional/Admin/
 
 Test suites are defined in `phpunit.dist.xml`. Use `.env.test` for test environment — it uses an in-memory SQLite DB.
 
+## CI/CD
+
+⚠️ **Pushing to `develop` deploys production.** There is no separate deploy step
+and no confirmation prompt. Pushes that touch only `*.md` or `docs/` are exempt
+(`paths-ignore`); everything else builds, tests and rolls out to the live site.
+
+One pipeline, `.github/workflows/ci.yml`, runs on a **self-hosted runner
+installed on the production droplet** — deployment is `rsync` into `/var/www/app`
+plus a local `docker compose`, never SSH. Job order is load-bearing: the monolith
+drops the order and cart tables during migration, so those services deploy first.
+
+```
+validate + monolith + microservices
+    → cart/payment/delivery/export/notification/storage → order → monolith → catalog/user
+```
+
+Per-service deploy logic lives in the composite action
+`.github/actions/deploy-service`. Secrets are GitHub repository secrets; the
+OAuth one is stored as `OAUTH_GITHUB_CLIENT_SECRET` and re-exported inside the
+step as `GITHUB_CLIENT_SECRET`, because Actions reserves the `GITHUB_` prefix
+while `compose.prod.yaml` interpolates that exact name.
+
+`.gitlab-ci.yml` still exists but its deploy jobs are `when: manual` — kept only
+as a rollback path. Full migration record: `docs/todo.md`.
+
 ## Migrations
 
 ```bash

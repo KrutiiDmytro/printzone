@@ -226,9 +226,17 @@ Actions резервує префікс `GITHUB_` і для секретів, і
       пуш у `develop` і є деплоєм, а required checks заблокували б сам пуш до
       того, як джоби на цьому коміті встигнуть пройти — замкнений цикл.
 - [x] Actions → Fork PR → `all_external_contributors` (було `first_time_contributors`)
-- [ ] Оновити 4 доки, що ще посилаються на GitLab-пайплайн (`README.md` уже ні):
-      `docs/lesson.md`, `docs/ops-2026-08-05-incident-and-handoff.md`,
-      `docs/microservices-architecture.md`, `CLAUDE.md`
+- [x] Причесати доки. Перевіркою виявилось, що список був неточний:
+      `CLAUDE.md` і `docs/microservices-architecture.md` GitLab узагалі не згадували.
+      - `README.md` — розділ «Деплой» переписано під GitHub Actions + граф джоб;
+        у стеку `GitLab CI/CD` → `GitHub Actions`
+      - `CLAUDE.md` — доданий розділ CI/CD; головне там — попередження, що пуш
+        у `develop` деплоїть прод без підтверджень
+      - `docs/ops-2026-08-05-incident-and-handoff.md` — **не переписували**: це
+        історичний запис, його GitLab-згадки правдиві для 2026-08-05. Додано лише
+        датовану примітку вгорі
+      - `docs/lesson.md` — змін не потребував: `.gitlab-ci.yml` там фігурує як
+        приклад dotfile-шляху в уроці про MSYS-мангання, а не як опис пайплайну
 
 **Міграцію можна вважати закритою.** Останній пункт — косметика тексту, на
 роботу пайплайну не впливає.
